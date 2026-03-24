@@ -1,0 +1,24 @@
+<?php
+// config.php.example – Vorlage für die Konfigurationsdatei
+// WICHTIG: config.php liegt im Projektverzeichnis, NICHT in public/
+// Sie wird niemals ins Repository eingecheckt.
+//
+// Verwendung:
+//   cp config.php.example config.php
+//   Dann Werte anpassen.
+//
+// Einbindung in lib/db.php und lib/auth.php:
+//   $config = require dirname(__DIR__) . '/config.php';
+//   (von lib/ aus: eine Ebene hoch zum Projektverzeichnis)
+
+return [
+    // Datenbankverbindung
+    'db_host' => 'localhost',
+    'db_name' => 'marego_kurse',
+    'db_user' => 'marego_user',
+    'db_pass' => 'HIER_PASSWORT_EINTRAGEN',
+
+    // Admin-Passwort als bcrypt-Hash
+    // Erzeugen mit: php -r "echo password_hash('meinPasswort', PASSWORD_BCRYPT);"
+    'admin_hash' => 'HIER_BCRYPT_HASH_EINTRAGEN',
+];

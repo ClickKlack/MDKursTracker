@@ -1,0 +1,16 @@
+# Konfigurationsdatei außerhalb Webroot – niemals ins Repository
+config.php
+
+# Composer-Abhängigkeiten (werden auf dem Server frisch installiert)
+vendor/
+
+# Logs
+logs/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp

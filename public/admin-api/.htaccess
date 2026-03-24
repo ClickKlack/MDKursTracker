@@ -1,0 +1,4 @@
+# admin-api/ darf nur über PHP-Session erreichbar sein.
+# Der eigentliche Schutz erfolgt durch lib/auth.php (Session-Prüfung).
+# Diese .htaccess verhindert zusätzlich Directory-Listing.
+Options -Indexes

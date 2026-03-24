@@ -1,0 +1,43 @@
+# MDKursTracker – Haupt-.htaccess für public/
+# Voraussetzung: mod_rewrite aktiviert
+
+Options -Indexes
+
+# HTTPS erzwingen (auf Produktivserver aktivieren)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Zeichensatz für alle Antworten
+AddDefaultCharset UTF-8
+
+# Security-Header
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Direktzugriff auf PHP-Dateien in api/ und admin-api/ über Rewrite erlauben,
+# aber config.php und lib/ niemals ausliefern (liegen außerhalb public/, aber
+# als Sicherheitsnetz)
+<FilesMatch "^config\.php$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Existierende Dateien/Verzeichnisse direkt ausliefern
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # /api/* → public/api/index.php
+    RewriteRule ^api/(.*)$ api/index.php [L,QSA]
+
+    # /admin-api/* → public/admin-api/index.php
+    RewriteRule ^admin-api/(.*)$ admin-api/index.php [L,QSA]
+
+    # Alles andere → index.html (SPA-Fallback)
+    RewriteRule ^ index.html [L]
+</IfModule>

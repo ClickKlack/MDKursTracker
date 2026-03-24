@@ -1,0 +1,3 @@
+# Logdateien nicht ins Repository
+*.log
+!.gitignore
