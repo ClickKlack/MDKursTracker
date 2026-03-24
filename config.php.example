@@ -13,10 +13,11 @@
 
 return [
     // Datenbankverbindung
-    'db_host' => 'localhost',
-    'db_name' => 'marego_kurse',
-    'db_user' => 'marego_user',
-    'db_pass' => 'HIER_PASSWORT_EINTRAGEN',
+    'db_host'   => 'localhost',
+    'db_socket' => '', // Unix-Socket optional (z.B. '/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock')
+    'db_name'   => 'marego_kurse',
+    'db_user'   => 'marego_user',
+    'db_pass'   => 'HIER_PASSWORT_EINTRAGEN',
 
     // Admin-Passwort als bcrypt-Hash
     // Erzeugen mit: php -r "echo password_hash('meinPasswort', PASSWORD_BCRYPT);"

@@ -1,0 +1,22 @@
+{
+    "name": "clickklack/jskurstracker",
+    "description": "marego Kursnummer-Erfassungs-App",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "monolog/monolog": "^3.0"
+    },
+    "autoload": {
+        "files": [
+            "lib/logger.php",
+            "lib/response.php",
+            "lib/db.php",
+            "lib/auth.php",
+            "lib/calendar.php",
+            "lib/hafas.php"
+        ]
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}
