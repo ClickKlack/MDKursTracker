@@ -47,6 +47,7 @@ function get_public_holidays(int $year): array
     return [
         // Feste Feiertage
         "$year-01-01", // Neujahr
+        "$year-01-06", // Heilige Drei Könige (Sachsen-Anhalt)
         "$year-05-01", // Tag der Arbeit
         "$year-05-08", // Weltfriedenstag (Sachsen-Anhalt, seit 2025)
         "$year-10-03", // Tag der deutschen Einheit

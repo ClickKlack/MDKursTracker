@@ -20,13 +20,8 @@ function get_db(): PDO
     $config = require dirname(__DIR__) . '/config.php';
 
     try {
-        // Unix-Socket bevorzugen (lokale XAMPP-Entwicklung), sonst TCP
-        $dsn = !empty($config['db_socket'])
-            ? sprintf('mysql:unix_socket=%s;dbname=%s;charset=utf8mb4', $config['db_socket'], $config['db_name'])
-            : sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', $config['db_host'], $config['db_name']);
-
         $pdo = new PDO(
-            $dsn,
+            sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', $config['db_host'], $config['db_name']),
             $config['db_user'],
             $config['db_pass'],
             [
