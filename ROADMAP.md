@@ -27,7 +27,8 @@ Anwendungscode geschrieben wird.
       `admin-api/` nur über Session erreichbar
 - [x] INSA HAFAS-API Testabfrage erfolgreich:
       URL `https://reiseauskunft.insa.de/bin/mgate.exe`,
-      AID `hf7mcf9bv3nv8g5f`, client.id `NASA`
+      AID `nasa-apps`, client `{ type: IPH, id: NASA, v: 4000200, name: nasaPROD }`, ver `1.44`
+      (Quelle: hafas-client, verifiziert durch Testabfrage)
 
 **Abnahmekriterium:** `DATABASE.sql` ist eingespielt, HAFAS-Testabfrage
 liefert Daten, Konfigurationsdatei liegt außerhalb Webroot.

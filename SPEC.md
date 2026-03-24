@@ -34,9 +34,9 @@ Erfassungsperiode starten.
 > zugänglich, aber nicht offiziell als Open API dokumentiert. Vor
 > Produktiveinsatz Anfrage bei NASA GmbH empfohlen: service@nasa.de
 >
-> **Ermittelte API-Parameter (Phase 0):**
+> **API-Parameter (aus hafas-client, Phase 0 verifiziert):**
 > URL: `https://reiseauskunft.insa.de/bin/mgate.exe`
-> AID: `hf7mcf9bv3nv8g5f`, client.id: `NASA`, client.type: `WEB`
+> AID: `nasa-apps`, client: `{ type: IPH, id: NASA, v: 4000200, name: nasaPROD }`, ver: `1.44`
 
 ---
 
