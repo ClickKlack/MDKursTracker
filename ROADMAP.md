@@ -40,14 +40,16 @@ liefert Daten, Konfigurationsdatei liegt außerhalb Webroot.
 **Ziel:** Alle Backend-Bibliotheken und die DB-Verbindung stehen.
 Noch kein Frontend.
 
-- [ ] `lib/response.php` – JSON-Ausgabe-Helfer mit korrekten Headern
-- [ ] `lib/db.php` – PDO-Verbindung + Auto-Init der initialen Periode
-- [ ] `lib/hafas.php` – curl-Wrapper für INSA HAFAS
-      (Funktionen: nearby, departures, trip)
-- [ ] `lib/calendar.php` – Wochentagstyp-Berechnung:
-      gesetzliche Feiertage ST (statische Liste) + Schulferien aus DB
-- [ ] `lib/auth.php` – Session-Prüfung, HTTP 401 bei Fehler
-- [ ] `public/api/index.php` – URL-Router (leitet auf Handler-Dateien)
+- [x] `lib/logger.php` – Monolog, RotatingFileHandler, 14 Tage
+- [x] `lib/response.php` – JSON-Ausgabe-Helfer (json_response, json_error)
+- [x] `lib/db.php` – PDO-Verbindung + Auto-Init der initialen Periode;
+      Socket-Unterstützung für XAMPP-Entwicklungsumgebung
+- [x] `lib/hafas.php` – curl-Wrapper für INSA HAFAS
+      (hafas_nearby, hafas_departures, hafas_trip; Tram-Filter, ISO-UTC)
+- [x] `lib/calendar.php` – Wochentagstyp-Berechnung:
+      Gaußsche Osterformel, Feiertage Sachsen-Anhalt, Schulferien aus DB
+- [x] `lib/auth.php` – Session-Prüfung + Login/Logout-Helfer
+- [x] `public/api/index.php` – URL-Router (leitet auf Handler-Dateien)
 
 **Testen:** PHP-Unit-Tests oder manuelle curl-Aufrufe gegen die lib-Funktionen.
 
