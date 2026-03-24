@@ -21,4 +21,10 @@ return [
     // Admin-Passwort als bcrypt-Hash
     // Erzeugen mit: php -r "echo password_hash('meinPasswort', PASSWORD_BCRYPT);"
     'admin_hash' => 'HIER_BCRYPT_HASH_EINTRAGEN',
+
+    // HAFAS-API (INSA/NASA) – nur ändern wenn sich der Endpunkt ändert
+    'hafas_url'    => 'https://reiseauskunft.insa.de/bin/mgate.exe',
+    'hafas_aid'    => 'nasa-apps',
+    'hafas_client' => ['type' => 'IPH', 'id' => 'NASA', 'v' => '4000200', 'name' => 'nasaPROD'],
+    'hafas_ver'    => '1.44',
 ];

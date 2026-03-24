@@ -3,14 +3,20 @@
 // Alle Funktionen geben normalisierte PHP-Arrays zurück.
 // HAFAS-Fehler werden als RuntimeException weitergegeben.
 
-// API-Konstanten (aus hafas-client, Phase-0-verifiziert)
-const HAFAS_URL    = 'https://reiseauskunft.insa.de/bin/mgate.exe';
-const HAFAS_AID    = 'nasa-apps';
-const HAFAS_CLIENT = ['type' => 'IPH', 'id' => 'NASA', 'v' => '4000200', 'name' => 'nasaPROD'];
-const HAFAS_VER    = '1.44';
-
 // Produkt-Bitmask: 64 = Straßenbahn (Tram)
 const HAFAS_TRAM_MASK = 64;
+
+/**
+ * Gibt die HAFAS-Konfiguration aus config.php zurück (gecacht pro Request).
+ */
+function hafas_config(): array
+{
+    static $config = null;
+    if ($config === null) {
+        $config = require dirname(__DIR__) . '/config.php';
+    }
+    return $config;
+}
 
 /**
  * Haltestellen in der Nähe eines GPS-Punkts, gefiltert auf Straßenbahn.
@@ -183,15 +189,16 @@ function hafas_trip(string $tripId): array
  */
 function hafas_request(array $services): array
 {
+    $cfg  = hafas_config();
     $body = json_encode([
-        'ver'      => HAFAS_VER,
-        'lang'     => 'de',
-        'auth'     => ['type' => 'AID', 'aid' => HAFAS_AID],
-        'client'   => HAFAS_CLIENT,
-        'svcReqL'  => $services,
+        'ver'     => $cfg['hafas_ver'],
+        'lang'    => 'de',
+        'auth'    => ['type' => 'AID', 'aid' => $cfg['hafas_aid']],
+        'client'  => $cfg['hafas_client'],
+        'svcReqL' => $services,
     ], JSON_UNESCAPED_UNICODE);
 
-    $ch = curl_init(HAFAS_URL);
+    $ch = curl_init($cfg['hafas_url']);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $body,
