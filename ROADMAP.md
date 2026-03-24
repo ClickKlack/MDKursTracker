@@ -13,19 +13,21 @@ separate Sitzung mit klarem Kontext aus SPEC.md, ARCHITECTURE.md und API.md.
 **Ziel:** Funktionsfähige Basis auf der lokalen Entwicklungsumgebung, bevor eine Zeile
 Anwendungscode geschrieben wird.
 
-- [ ] Code-Verwaltung herstellen, Prüfe Codeberg anstatt git zu nutzen
-- [ ] GIT-Verbindung zu Codeberg herstellen
-- [ ] wichtige Standarddokumente für Codeberg erstellen (README? LIZENZ?)
-- [ ] Umgebung prüfen: PHP ≥ 8.0, curl-Extension, MariaDB-Version
-- [ ] Datenbankbenutzer anlegen (minimale Rechte: SELECT, INSERT, UPDATE,
-      DELETE auf eigene DB)
-- [ ] `DATABASE.sql` einspielen → alle Tabellen anlegen
-- [ ] Konfigurationsdatei `config.php` außerhalb Webroot anlegen
-      (DB-Zugangsdaten + Admin-Passwort-Hash)
-- [ ] Verzeichnisstruktur gemäß `ARCHITECTURE.md` anlegen
-- [ ] `.htaccess` einrichten: API-Routing, Directory-Listing deaktivieren,
+- [x] Code-Verwaltung herstellen: Codeberg (git@codeberg.org:ClickKlack/JSKursTracker.git)
+- [x] GIT-Verbindung zu Codeberg herstellen (ed25519-Schlüssel, SSH-Config)
+- [x] wichtige Standarddokumente für Codeberg erstellen (README.md, LICENSE)
+- [x] Umgebung prüfen: PHP 8.5.4, curl ✓, pdo_mysql ✓, MariaDB 10.4.28 (XAMPP)
+- [x] Datenbankbenutzer anlegen (minimale Rechte: SELECT, INSERT, UPDATE,
+      DELETE auf eigene DB) → `marego_user`@localhost
+- [x] `DATABASE.sql` einspielen → alle 6 Tabellen angelegt
+- [x] Konfigurationsdatei `config.php` außerhalb Webroot anlegen
+      (DB-Zugangsdaten + Admin-Passwort-Hash); `config.php.example` im Repo
+- [x] Verzeichnisstruktur gemäß `ARCHITECTURE.md` anlegen
+- [x] `.htaccess` einrichten: API-Routing, Directory-Listing deaktivieren,
       `admin-api/` nur über Session erreichbar
-- [ ] INSA HAFAS-API kontaktieren: Testabfrage manuell mit curl
+- [x] INSA HAFAS-API Testabfrage erfolgreich:
+      URL `https://reiseauskunft.insa.de/bin/mgate.exe`,
+      AID `hf7mcf9bv3nv8g5f`, client.id `NASA`
 
 **Abnahmekriterium:** `DATABASE.sql` ist eingespielt, HAFAS-Testabfrage
 liefert Daten, Konfigurationsdatei liegt außerhalb Webroot.
