@@ -283,6 +283,43 @@ $logger->error('Database connection failed', ['exception' => $e->getMessage()]);
 
 ---
 
+## 7.3 Unit-Tests mit PHPUnit
+
+Jede PHP-Funktion in `lib/` erhält einen zugehörigen Unit-Test. Tests werden
+**immer zusammen mit dem Code** erstellt – nie nachträglich.
+
+**Framework:** PHPUnit 11 (`composer require --dev phpunit/phpunit`)
+
+**Ausführen:**
+```bash
+vendor/bin/phpunit
+```
+
+**Verzeichnisstruktur:**
+```
+tests/
+└── Unit/
+    ├── CalendarTest.php    ← Tests für lib/calendar.php
+    ├── HafasHelperTest.php ← Tests für reine Hilfsfunktionen in lib/hafas.php
+    └── ...                 ← je lib-Datei eine Testklasse
+```
+
+**Konventionen:**
+
+| Aspekt | Regel |
+|---|---|
+| Testklasse | Gleicher Name wie Lib-Datei + `Test` (z.B. `CalendarTest`) |
+| Externe Abhängigkeiten (PDO, HTTP) | PHPUnit-Mocks oder In-Memory-Ersatz |
+| Reine Hilfsfunktionen | Direkt testen, keine Mocks nötig |
+| Testmethoden | `test_` + beschreibender Name auf Englisch |
+| DataProvider | `#[DataProvider]`-Attribut, Provider-Methode `public static` |
+
+**Abgrenzung:** Unit-Tests prüfen einzelne Funktionen isoliert. API-Endpunkte
+und echte HAFAS-Aufrufe werden manuell mit curl getestet (kein Mocking
+externer HTTP-Dienste in automatisierten Tests).
+
+---
+
 ## 8. Technische Randbedingungen
 
 | Thema | Entscheidung |
@@ -290,7 +327,8 @@ $logger->error('Database connection failed', ['exception' => $e->getMessage()]);
 | PHP-Mindestversion | 8.0 (Konstruktor-Promotion, match, nullsafe) |
 | MariaDB-Mindestversion | 10.4 (CHECK constraints stabil) |
 | curl | Muss als PHP-Extension aktiviert sein |
-| Composer | Erforderlich für Monolog |
+| Composer | Erforderlich für Monolog und PHPUnit |
 | Kein npm / kein Build-Step | Vanilla JS, kein Bundler, direkt deploybar |
 | Kein Framework | Weder Frontend- noch Backend-Framework |
 | Zeitzone | Backend arbeitet in UTC, Frontend zeigt in Europe/Berlin |
+

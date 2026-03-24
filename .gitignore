@@ -10,6 +10,12 @@ logs/
 # macOS
 .DS_Store
 
+# Lokale Skripte (nicht im Repo)
+local_scripts/
+
+# PHPUnit-Cache
+.phpunit.result.cache
+
 # IDE
 .idea/
 .vscode/
