@@ -8,26 +8,45 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: docker
+    container:
+      image: php:8.2-cli
 
     steps:
       - name: Code auschecken
         uses: actions/checkout@v4
 
-      - name: PHP einrichten
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: curl, pdo, pdo_mysql
-          coverage: none
+      - name: System-Abhängigkeiten installieren
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq libpq-dev unzip git
+
+      - name: PHP-Extensions installieren
+        run: docker-php-ext-install pdo pdo_mysql
+
+      - name: Composer installieren
+        run: |
+          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
       - name: Composer-Abhängigkeiten installieren
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: PHP-Syntaxprüfung
+      - name: PHP-Syntaxprüfung (Lint)
         run: |
-          find lib tests public/api public/admin-api -name "*.php" \
-            | xargs -P4 -I{} php -l {}
+          TARGET_DIRS="lib tests public/api public/admin-api"
+          for dir in $TARGET_DIRS; do
+            if [ -d "$dir" ]; then
+              echo "Prüfe PHP-Syntax in $dir..."
+              find "$dir" -name "*.php" -print0 | xargs -0 -n1 -P4 php -l
+            fi
+          done
 
-      - name: Unit-Tests
+      - name: Sicherheitsscan (Dependencies)
+        # Prüft auf bekannte Schwachstellen in deinen Composer-Paketen
+        run: composer audit
+
+      - name: Unit-Tests (PHPUnit)
         run: vendor/bin/phpunit --no-progress
+
+      - name: Build-Status
+        run: echo "CI-Lauf erfolgreich abgeschlossen!"
