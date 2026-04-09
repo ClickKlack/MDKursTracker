@@ -1,0 +1,22 @@
+meta {
+  name: Admin – Schulferien DELETE
+  type: http
+  seq: 16
+}
+
+delete {
+  url: {{baseUrl}}/admin-api/school-holidays/{{schoolHolidayId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 14-Admin-School-Holidays-POST ausführen
+  (setzt schoolHolidayId).
+  Löscht den Schulferien-Eintrag. Zweiter Aufruf mit gleicher ID → 404.
+}

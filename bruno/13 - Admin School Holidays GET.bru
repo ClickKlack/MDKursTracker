@@ -1,0 +1,31 @@
+meta {
+  name: Admin – Schulferien GET
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/admin-api/school-holidays
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Schulferien-Einträge:", res.body.length);
+    if (res.body.length > 0) {
+      bru.setVar("schoolHolidayId", res.body[0].id);
+      console.log("schoolHolidayId gesetzt:", res.body[0].id, "-", res.body[0].name);
+    }
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login ausführen (Session-Cookie).
+  Ohne gültige Session → 401 Unauthorized.
+}

@@ -1,0 +1,43 @@
+meta {
+  name: Admin – Fahrplanschnitt (Periods POST)
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/admin-api/periods
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Testperiode Bruno",
+    "startDate": "2027-12-14"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+  res.body.name: isDefined
+  res.body.startDate: isDefined
+  res.body.createdAt: isDefined
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("newPeriodId", res.body.id);
+    console.log("Neue Periode angelegt:", res.body.id, "-", res.body.name);
+    console.log("Alle folgenden Erfassungen landen in dieser neuen Periode.");
+  }
+}
+
+docs {
+  Fahrplanschnitt: legt eine neue Fahrplanperiode an.
+  Nach diesem Aufruf ist die neue Periode aktiv – alle neuen Erfassungen
+  landen in dieser Periode. Altdaten bleiben vollständig erhalten.
+
+  ACHTUNG: Dieser Test verändert den globalen Zustand der App!
+  Nur ausführen wenn ein echter Fahrplanschnitt gewünscht ist.
+}

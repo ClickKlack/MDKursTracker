@@ -1,0 +1,22 @@
+meta {
+  name: Admin – Override DELETE (Übersteuerung zurücksetzen)
+  type: http
+  seq: 18
+}
+
+delete {
+  url: {{baseUrl}}/admin-api/trips/{{tripId}}/override
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Setzt die manuelle Kursnummer-Übersteuerung zurück (NULL).
+  Nach diesem Request greift wieder die Mehrheitsregel.
+  Idempotent: zweiter Aufruf bei bereits-NULL gibt ebenfalls 200 zurück.
+}

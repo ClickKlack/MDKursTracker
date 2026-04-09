@@ -1,0 +1,22 @@
+meta {
+  name: Admin – Logout
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/admin-api/logout
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Admin-Logout erfolgreich – Session beendet");
+  }
+}

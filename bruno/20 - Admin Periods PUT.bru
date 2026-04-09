@@ -1,0 +1,29 @@
+meta {
+  name: Admin – Periode korrigieren (Periods PUT)
+  type: http
+  seq: 20
+}
+
+put {
+  url: {{baseUrl}}/admin-api/periods/{{newPeriodId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Testperiode Bruno (korrigiert)",
+    "startDate": "2027-12-15"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 19-Admin-Periods-POST ausführen (setzt newPeriodId).
+  Korrigiert Bezeichnung und/oder Startdatum einer bestehenden Periode.
+  Primär für die initiale Periode gedacht.
+}

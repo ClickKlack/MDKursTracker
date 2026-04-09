@@ -1,0 +1,44 @@
+meta {
+  name: Admin – Override PUT (Kursnummer setzen)
+  type: http
+  seq: 17
+}
+
+put {
+  url: {{baseUrl}}/admin-api/trips/{{tripId}}/override
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "courseNumber": "12"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 07-Recordings-POST ausführen (setzt tripId über lastRecordingId).
+  Setzt eine manuelle Kursnummer-Übersteuerung für die angegebene Fahrt.
+
+  Fehlertest – ungültige Kursnummer:
+    "courseNumber": "00" → 400
+    "courseNumber": "100" → 400
+
+  Nach diesem Request zeigt GET /api/departures die manuell gesetzte Kursnummer.
+
+  tripId manuell setzen falls kein vorheriger Recordings-POST ausgeführt wurde.
+}
+
+script:pre-request {
+  // tripId aus Variable holen (wird von 07-Recordings POST nicht direkt gesetzt,
+  // daher ggf. manuell in der Umgebung konfigurieren)
+  const tid = bru.getVar("tripId");
+  if (!tid) {
+    console.warn("tripId nicht gesetzt – bitte manuell in der Umgebung konfigurieren");
+  }
+}

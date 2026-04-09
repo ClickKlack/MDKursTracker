@@ -1,0 +1,22 @@
+meta {
+  name: Fehlerfall – Admin-Endpunkt ohne Session (401)
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/admin-api/school-holidays
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: isDefined
+}
+
+docs {
+  Prüft, dass Admin-Endpunkte ohne gültige Session 401 zurückgeben.
+  Voraussetzung: Vorher 21-Admin-Logout ausführen um sicherzustellen,
+  dass keine aktive Session vorhanden ist.
+}

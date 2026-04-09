@@ -1,0 +1,36 @@
+meta {
+  name: Admin – Login
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/admin-api/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "password": "{{adminPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Admin-Login erfolgreich");
+  }
+}
+
+docs {
+  Meldet den Admin an. Setzt ein PHP-Session-Cookie.
+  Voraussetzung: adminPassword in der Bruno-Umgebung konfiguriert.
+
+  Fehlertest – falsches Passwort:
+    "password": "falsch" → 401 Unauthorized
+}

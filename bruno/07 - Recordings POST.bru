@@ -49,6 +49,7 @@ script:post-response {
     console.log("  tripId:     ", res.body.tripId);
     console.log("  dayType:    ", res.body.dayType);
     bru.setVar("lastRecordingId", res.body.recordingId);
+    bru.setVar("tripId", res.body.tripId);
   }
 }
 

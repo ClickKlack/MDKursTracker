@@ -1,0 +1,30 @@
+meta {
+  name: Admin – Schulferien PUT
+  type: http
+  seq: 15
+}
+
+put {
+  url: {{baseUrl}}/admin-api/school-holidays/{{schoolHolidayId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Testferien Bruno (aktualisiert)",
+    "dateFrom": "2027-06-26",
+    "dateTo": "2027-08-07"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 14-Admin-School-Holidays-POST ausführen
+  (setzt schoolHolidayId).
+  Aktualisiert einen bestehenden Schulferien-Eintrag.
+}

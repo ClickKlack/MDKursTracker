@@ -99,11 +99,11 @@ und GET /api/departures zeigt `activeCourseNumber`.
 
 **Ziel:** Alle Admin-Funktionen sind über die API erreichbar.
 
-- [ ] `POST /admin/login` + `POST /admin/logout` mit PHP-Session
-- [ ] `GET/POST/PUT/DELETE /admin/school-holidays`
-- [ ] `PUT/DELETE /admin/trips/:id/override`
-- [ ] `POST /admin/periods` – Fahrplanschnitt
-- [ ] `PUT /admin/periods/:id` – Periode umbenennen/korrigieren
+- [x] `POST /admin-api/login` + `POST /admin-api/logout` mit PHP-Session
+- [x] `GET/POST/PUT/DELETE /admin-api/school-holidays`
+- [x] `PUT/DELETE /admin-api/trips/:id/override`
+- [x] `POST /admin-api/periods` – Fahrplanschnitt
+- [x] `PUT /admin-api/periods/:id` – Periode umbenennen/korrigieren
 
 **Testen:** Login/Logout-Flow. Ohne Session: 401 prüfen.
 Fahrplanschnitt: neue Periode anlegen, prüfen dass alte Erfassungen
@@ -252,7 +252,9 @@ mitgeben:
 
 ```
 Lies SPEC.md, ARCHITECTURE.md, API.md und DATABASE.sql.
-Wir implementieren jetzt Phase X: [Phasenbeschreibung].
+Wir implementieren jetzt aus (ROADMAP.md) Phase X : [Phasenbeschreibung].
+
+Aktualisiere danach die ROADMAP und die Bruno-Tests.
 ```
 
 Phasen 1–4 (Backend) vollständig abschließen und testen,
