@@ -3,8 +3,8 @@
 // Alle Funktionen geben normalisierte PHP-Arrays zurück.
 // HAFAS-Fehler werden als RuntimeException weitergegeben.
 
-// Produkt-Bitmask: 64 = Straßenbahn (Tram)
-const HAFAS_TRAM_MASK = 64;
+// INSA HAFAS: Straßenbahn-Bitmask – gilt für cls (Produktliste) und pCls (Haltestellen)
+const HAFAS_TRAM_MASK = 32;
 
 /**
  * Gibt die HAFAS-Konfiguration aus config.php zurück (gecacht pro Request).
@@ -45,7 +45,7 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
 
     $result = [];
     foreach ($stops as $stop) {
-        // Nur Haltestellen mit Tram-Betrieb (Bit-6 im pCls-Feld)
+        // Nur Haltestellen mit Tram-Betrieb: Bit 5 (32) im pCls-Feld
         if (!(($stop['pCls'] ?? 0) & HAFAS_TRAM_MASK)) {
             continue;
         }
@@ -80,15 +80,19 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
  */
 function hafas_departures(string $stopId, int $results = 20): array
 {
+    // Aktuelles Datum und Uhrzeit in Berliner Zeit – HAFAS nutzt sonst ggf. den Folgetag als Default
+    $now = new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin'));
+
+    // Mehr Fahrten anfordern als benötigt, da wir in PHP auf Trams filtern
     $res = hafas_request([
         [
             'meth' => 'StationBoard',
             'req'  => [
-                'type'      => 'DEP',
-                'stbLoc'    => ['type' => 'S', 'extId' => $stopId],
-                'maxJny'    => $results,
-                // Nur Tram-Produkte einschließen
-                'jnyFltrL'  => [['type' => 'PROD', 'mode' => 'INC', 'value' => (string) HAFAS_TRAM_MASK]],
+                'type'   => 'DEP',
+                'date'   => $now->format('Ymd'),
+                'time'   => $now->format('His'),
+                'stbLoc' => ['type' => 'S', 'extId' => $stopId],
+                'maxJny' => $results * 4,
             ],
         ],
     ]);
@@ -102,7 +106,7 @@ function hafas_departures(string $stopId, int $results = 20): array
         $prod    = $prodList[$jny['prodX']] ?? [];
         $stbStop = $jny['stbStop'] ?? [];
 
-        // Nur Tram-Fahrten (zur Sicherheit nochmals filtern)
+        // Nur Straßenbahnen: cls-Bitmask (32 = Tram in INSA HAFAS)
         if (!(($prod['cls'] ?? 0) & HAFAS_TRAM_MASK)) {
             continue;
         }
@@ -134,36 +138,51 @@ function hafas_departures(string $stopId, int $results = 20): array
  */
 function hafas_trip(string $tripId): array
 {
-    // Datum aus der tripId extrahieren (letztes Segment: DDMMYYYY)
-    $parts = explode('|', $tripId);
-    $rawDate = end($parts); // z.B. "24032026"
-    $date = strlen($rawDate) === 8
-        ? substr($rawDate, 4) . substr($rawDate, 2, 2) . substr($rawDate, 0, 2) // → YYYYMMDD
-        : date('Ymd');
+    // Altes Format "1|...|DDMMYYYY": Datum aus letztem Segment extrahieren.
+    // Neues Format "2|#VN#...": Datum steckt in der ID selbst – kein date-Parameter nötig.
+    $req = [
+        'jid'         => $tripId,
+        'getPolyline' => false,
+        'getPasslist' => true,
+    ];
 
-    $res = hafas_request([
-        [
-            'meth' => 'JourneyDetails',
-            'req'  => [
-                'jid'        => $tripId,
-                'date'       => $date,
-                'getPolyline' => false,
-                'getPasslist' => true,
-            ],
-        ],
-    ]);
+    if (!str_starts_with($tripId, '2|')) {
+        $parts   = explode('|', $tripId);
+        $rawDate = end($parts); // z.B. "24032026"
+        if (strlen($rawDate) === 8) {
+            $req['date'] = substr($rawDate, 4)
+                         . substr($rawDate, 2, 2)
+                         . substr($rawDate, 0, 2); // → YYYYMMDD
+        }
+    }
+
+    $res = hafas_request([['meth' => 'JourneyDetails', 'req' => $req]]);
 
     $common  = $res[0]['res']['common'] ?? [];
     $locList = $common['locL'] ?? [];
-    $stops   = $res[0]['res']['journey']['stopL'] ?? [];
+    $journey = $res[0]['res']['journey'] ?? [];
+
+    // Basisdatum der Fahrt als Fallback – neuere HAFAS-Versionen lassen dDateS
+    // auf Stop-Ebene weg, wenn es mit dem Fahrtdatum übereinstimmt.
+    $jnyDate = $journey['date'] ?? date('Ymd');
+    $stops   = $journey['stopL'] ?? [];
 
     $result = [];
     foreach ($stops as $i => $stop) {
         $loc = $locList[$stop['locX']] ?? [];
 
-        // Abfahrtszeit bevorzugen; letzter Halt hat keine Abfahrt
-        $dDate = $stop['dDateS'] ?? ($stop['aDateS'] ?? '');
-        $dTime = $stop['dTimeS'] ?? ($stop['aTimeS'] ?? '');
+        // Abfahrtszeit bevorzugen; letzter Halt hat nur Ankunft.
+        // Datum und Zeit werden immer als Paar aus derselben Quelle geholt.
+        if (isset($stop['dTimeS'])) {
+            $dDate = $stop['dDateS'] ?? $jnyDate;
+            $dTime = $stop['dTimeS'];
+        } elseif (isset($stop['aTimeS'])) {
+            $dDate = $stop['aDateS'] ?? $jnyDate;
+            $dTime = $stop['aTimeS'];
+        } else {
+            $dDate = $jnyDate;
+            $dTime = '';
+        }
 
         $result[] = [
             'sequence'         => $i + 1,

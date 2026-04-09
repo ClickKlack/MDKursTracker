@@ -1,0 +1,29 @@
+meta {
+  name: Fehlerfall – Pflichtfeld fehlt (400)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "serviceNr":        "41058",
+    "line":             "6",
+    "courseNumber":     "07"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: isDefined
+}
+
+docs {
+  Testet die Pflichtfeld-Validierung.
+  hafasTripId, direction, stopId, serviceDate, departurePlanned fehlen.
+}

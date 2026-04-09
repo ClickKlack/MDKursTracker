@@ -1,0 +1,66 @@
+meta {
+  name: Recordings POST – Neue Erfassung speichern
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "hafasTripId":      "{{hafasTripId}}",
+    "serviceNr":        "{{serviceNr}}",
+    "line":             "{{line}}",
+    "direction":        "{{direction}}",
+    "stopId":           "{{stopId}}",
+    "serviceDate":      "{{serviceDate}}",
+    "departurePlanned": "{{departurePlanned}}",
+    "departureActual":  "{{departureActual}}",
+    "courseNumber":     "07"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.recordingId: isDefined
+  res.body.tripId: isDefined
+  res.body.periodId: isDefined
+  res.body.dayType: isDefined
+}
+
+script:pre-request {
+  // departurePlanned aus Variable holen (wird von 02-Departures gesetzt)
+  // Falls leer: Platzhalter für manuellen Test
+  const dep = bru.getVar("departurePlanned");
+  if (!dep) {
+    // Beispielwert für manuellen Test ohne vorherigen Departures-Request
+    bru.setVar("departurePlanned", new Date().toISOString().replace(/\.\d+Z$/, "Z"));
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    console.log("Erfassung gespeichert:");
+    console.log("  recordingId:", res.body.recordingId);
+    console.log("  tripId:     ", res.body.tripId);
+    console.log("  dayType:    ", res.body.dayType);
+    bru.setVar("lastRecordingId", res.body.recordingId);
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 01-Nearby, 02-Departures ausführen –
+  dann werden stopId, hafasTripId, serviceNr, line, direction
+  und serviceDate automatisch als Variablen gesetzt.
+
+  courseNumber manuell anpassen (01–99, zweistellig).
+
+  Fehlertest – ungültige Kursnummer:
+    "courseNumber": "00"  → 400 Bad Request
+    "courseNumber": "100" → 400 Bad Request
+    "courseNumber": "7"   → 400 Bad Request (einstellig)
+}

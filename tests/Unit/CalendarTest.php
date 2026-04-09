@@ -187,4 +187,48 @@ class CalendarTest extends TestCase
         $date = new DateTimeImmutable('2026-12-25');
         $this->assertSame('FT', getDayType($date, $this->mockPdoWithSchoolHoliday()));
     }
+
+    // -----------------------------------------------------------------------
+    // get_public_holiday_name
+    // -----------------------------------------------------------------------
+
+    public static function holidayNameProvider(): array
+    {
+        return [
+            ['2026-01-01', 'Neujahr'],
+            ['2026-01-06', 'Heilige Drei Könige'],
+            ['2026-05-01', 'Tag der Arbeit'],
+            ['2026-05-08', 'Weltfriedenstag'],
+            ['2026-10-03', 'Tag der deutschen Einheit'],
+            ['2026-10-31', 'Reformationstag'],
+            ['2026-12-25', '1. Weihnachtstag'],
+            ['2026-12-26', '2. Weihnachtstag'],
+            // Bewegliche Feiertage 2026 (Ostern = 05.04.)
+            ['2026-04-03', 'Karfreitag'],
+            ['2026-04-06', 'Ostermontag'],
+            ['2026-05-14', 'Christi Himmelfahrt'],
+            ['2026-05-25', 'Pfingstmontag'],
+        ];
+    }
+
+    #[DataProvider('holidayNameProvider')]
+    public function test_get_public_holiday_name_returns_correct_name(string $date, string $expectedName): void
+    {
+        $dt = new DateTimeImmutable($date);
+        $this->assertSame($expectedName, get_public_holiday_name($dt));
+    }
+
+    public function test_get_public_holiday_name_returns_null_for_non_holiday(): void
+    {
+        // 24.03.2026 ist Dienstag, kein Feiertag
+        $dt = new DateTimeImmutable('2026-03-24');
+        $this->assertNull(get_public_holiday_name($dt));
+    }
+
+    public function test_get_public_holiday_name_returns_null_for_saturday(): void
+    {
+        // 28.03.2026 ist Samstag, kein Feiertag
+        $dt = new DateTimeImmutable('2026-03-28');
+        $this->assertNull(get_public_holiday_name($dt));
+    }
 }

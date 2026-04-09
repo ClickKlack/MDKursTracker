@@ -1,0 +1,31 @@
+meta {
+  name: Periods – Alle Fahrplanperioden
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/periods
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+  res.body[0].id: isDefined
+  res.body[0].name: isDefined
+  res.body[0].startDate: isDefined
+  res.body[0].createdAt: isDefined
+  res.body[0].recordingCount: isDefined
+  res.body[0].active: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const active = res.body.find(p => p.active);
+    if (active) {
+      console.log("Aktive Periode:", active.id, "-", active.name, "| Erfassungen:", active.recordingCount);
+    }
+  }
+}

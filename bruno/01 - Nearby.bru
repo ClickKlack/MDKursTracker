@@ -1,0 +1,33 @@
+meta {
+  name: Nearby – Tramhaltestellen in der Nähe
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/nearby
+  body: none
+  auth: none
+}
+
+params:query {
+  lat: {{lat}}
+  lon: {{lon}}
+  results: 5
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+  res.body[0].id: isDefined
+  res.body[0].name: isDefined
+  res.body[0].distance: isDefined
+}
+
+script:post-response {
+  // Erste Haltestelle als stopId für folgende Requests speichern
+  if (res.status === 200 && res.body.length > 0) {
+    bru.setVar("stopId", res.body[0].id);
+    console.log("stopId gesetzt:", res.body[0].id, "-", res.body[0].name);
+  }
+}

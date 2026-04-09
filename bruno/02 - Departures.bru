@@ -1,0 +1,48 @@
+meta {
+  name: Departures – Abfahrten an einer Haltestelle
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/departures
+  body: none
+  auth: none
+}
+
+params:query {
+  stopId: {{stopId}}
+  results: 10
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+  res.body[0].hafasTripId: isDefined
+  res.body[0].serviceNr: isDefined
+  res.body[0].line: isDefined
+  res.body[0].direction: isDefined
+  res.body[0].departurePlanned: isDefined
+}
+
+script:post-response {
+  // Erste Abfahrt für folgende Requests (trip, recording) speichern
+  if (res.status === 200 && res.body.length > 0) {
+    const dep = res.body[0];
+    bru.setVar("hafasTripId",        dep.hafasTripId);
+    bru.setVar("hafasTripIdEncoded", encodeURIComponent(dep.hafasTripId));
+    bru.setVar("serviceNr",          dep.serviceNr);
+    bru.setVar("line",               dep.line);
+    bru.setVar("direction",          dep.direction);
+    bru.setVar("departurePlanned",   dep.departurePlanned ?? "");
+    bru.setVar("departureActual",    dep.departureActual ?? "");
+
+    // Betriebsdatum aus departurePlanned ableiten (YYYY-MM-DD)
+    if (dep.departurePlanned) {
+      bru.setVar("serviceDate", dep.departurePlanned.substring(0, 10));
+    }
+
+    console.log("Abfahrt gesetzt:", dep.line, "→", dep.direction, "| TripId:", dep.hafasTripId);
+    console.log("activeCourseNumber:", dep.activeCourseNumber);
+  }
+}

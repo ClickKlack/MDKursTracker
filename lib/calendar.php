@@ -87,6 +87,56 @@ function get_easter(int $year): DateTimeImmutable
 }
 
 /**
+ * Gibt den Namen des gesetzlichen Feiertags zurück, oder null falls kein Feiertag.
+ */
+function get_public_holiday_name(DateTimeInterface $date): ?string
+{
+    $names = get_public_holiday_names((int) $date->format('Y'));
+    return $names[$date->format('Y-m-d')] ?? null;
+}
+
+/**
+ * Gibt ein Mapping von Datum → Feiertagsname für ein Jahr zurück.
+ */
+function get_public_holiday_names(int $year): array
+{
+    $easter = get_easter($year);
+
+    return [
+        "$year-01-01" => 'Neujahr',
+        "$year-01-06" => 'Heilige Drei Könige',
+        "$year-05-01" => 'Tag der Arbeit',
+        "$year-05-08" => 'Weltfriedenstag',
+        "$year-10-03" => 'Tag der deutschen Einheit',
+        "$year-10-31" => 'Reformationstag',
+        "$year-12-25" => '1. Weihnachtstag',
+        "$year-12-26" => '2. Weihnachtstag',
+        $easter->modify('-2 days')->format('Y-m-d')  => 'Karfreitag',
+        $easter->modify('+1 days')->format('Y-m-d')  => 'Ostermontag',
+        $easter->modify('+39 days')->format('Y-m-d') => 'Christi Himmelfahrt',
+        $easter->modify('+50 days')->format('Y-m-d') => 'Pfingstmontag',
+    ];
+}
+
+/**
+ * Gibt den Namen des Schulferienblocks zurück, in dem das Datum liegt, oder null.
+ * Schulferien werden aus der DB gelesen.
+ */
+function get_school_holiday_name(DateTimeInterface $date, PDO $db): ?string
+{
+    $dateStr = $date->format('Y-m-d');
+    $stmt    = $db->prepare(
+        'SELECT name FROM school_holidays
+          WHERE date_from <= ? AND date_to >= ?
+          LIMIT 1'
+    );
+    $stmt->execute([$dateStr, $dateStr]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ? $row['name'] : null;
+}
+
+/**
  * Prüft, ob das Datum innerhalb eines Schulferienintervalls liegt (Mo–Fr).
  * Schulferien werden aus der DB gelesen, Ergebnis wird pro Request gecacht.
  */

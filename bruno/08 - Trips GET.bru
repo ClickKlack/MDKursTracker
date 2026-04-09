@@ -1,0 +1,40 @@
+meta {
+  name: Trips GET – Logische Fahrten mit aktiver Kursnummer
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/trips
+  body: none
+  auth: none
+}
+
+params:query {
+  ~period_id: 1
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Logische Fahrten:", res.body.length);
+    const withCourse = res.body.filter(t => t.activeCourseNumber !== null);
+    console.log("Davon mit Kursnummer:", withCourse.length);
+    if (withCourse.length > 0) {
+      const t = withCourse[0];
+      console.log("Beispiel:", t.line, t.dayType, "→", t.direction, "| Kurs:", t.activeCourseNumber, "| Erfassungen:", t.recordingCount);
+    }
+  }
+}
+
+docs {
+  period_id ist optional (Standard: aktive Periode).
+  Aktiviere den Parameter durch Entfernen der Tilde (~).
+
+  Nach einer Erfassung (07 - Recordings POST) sollte hier
+  die Fahrt mit activeCourseNumber erscheinen.
+}

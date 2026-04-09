@@ -1,0 +1,41 @@
+meta {
+  name: Fehlerfall – Kursnummer ungültig (400)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "hafasTripId":      "1|12345|0|80|09042026",
+    "serviceNr":        "41058",
+    "line":             "6",
+    "direction":        "Lübecker Str.",
+    "stopId":           "de:15003:4000",
+    "serviceDate":      "2026-04-09",
+    "departurePlanned": "2026-04-09T10:00:00Z",
+    "departureActual":  null,
+    "courseNumber":     "00"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: isDefined
+}
+
+docs {
+  Testet die Kursnummer-Validierung.
+  "00" ist ungültig (Bereich: 01–99).
+
+  Weitere ungültige Werte zum Testen (courseNumber anpassen):
+  - "00"  → zu klein
+  - "100" → zu groß (3-stellig)
+  - "7"   → einstellig (fehlendes führendes Null)
+  - ""    → leer
+}

@@ -1,0 +1,20 @@
+meta {
+  name: Fehlerfall – Nearby ohne lat/lon (400)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/nearby
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: isDefined
+}
+
+docs {
+  Kein lat/lon → 400 Bad Request.
+}

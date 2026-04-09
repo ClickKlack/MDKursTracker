@@ -62,10 +62,10 @@ Werktage `MO-FR` zurück. `lib/db.php` legt initiale Periode an wenn DB leer.
 
 **Ziel:** Die drei HAFAS-Proxy-Endpunkte liefern gefilterte Daten.
 
-- [ ] `GET /api/nearby` – Haltestellen in der Nähe (Filter: nur tram)
-- [ ] `GET /api/departures` – Abfahrten inkl. `activeCourseNumber` aus DB
-- [ ] `GET /api/trip` – Laufweg-Halte normalisiert
-- [ ] `GET /api/calendar` – Wochentagstyp für Datum
+- [x] `GET /api/nearby` – Haltestellen in der Nähe (Filter: nur tram)
+- [x] `GET /api/departures` – Abfahrten inkl. `activeCourseNumber` aus DB
+- [x] `GET /api/trip` – Laufweg-Halte normalisiert
+- [x] `GET /api/calendar` – Wochentagstyp für Datum
 
 **Testen:** curl-Aufrufe mit echten Magdeburger Koordinaten und
 Haltestellen-IDs. Prüfen ob Tram-Filter greift.
@@ -79,13 +79,13 @@ Haltestellen-IDs. Prüfen ob Tram-Filter greift.
 
 **Ziel:** Kursnummern können gespeichert und abgerufen werden.
 
-- [ ] `POST /api/recordings` – vollständige Speicherlogik:
+- [x] `POST /api/recordings` – vollständige Speicherlogik:
       day_type berechnen → trip anlegen (INSERT IGNORE) →
       stop anlegen (INSERT IGNORE) → recording anlegen →
       trip abrufen → route_stops anlegen
-- [ ] `GET /api/recordings` – mit allen Filterparametern
-- [ ] `GET /api/trips` – inkl. Mehrheitsregel-Berechnung per SQL
-- [ ] `GET /api/periods` – mit `recordingCount` und `active`-Flag
+- [x] `GET /api/recordings` – mit allen Filterparametern
+- [x] `GET /api/trips` – inkl. Mehrheitsregel-Berechnung per SQL
+- [x] `GET /api/periods` – mit `recordingCount` und `active`-Flag
 
 **Testen:** Vollständiger Erfassungsdurchlauf per curl. Prüfen ob
 Laufweg korrekt gespeichert wird. Mehrheitsregel mit 2+ Erfassungen testen.

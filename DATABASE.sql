@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `recordings` (
     `trip_id`           INT          NOT NULL,
     `recorded_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
                                      COMMENT 'UTC-Zeitstempel',
-    `hafas_trip_id`     VARCHAR(100) NOT NULL COMMENT 'HAFAS tripId (tagesgebunden)',
+    `hafas_trip_id`     VARCHAR(512) NOT NULL COMMENT 'HAFAS tripId (tagesgebunden, neues Format bis ~300 Zeichen)',
     `service_date`      DATE         NOT NULL COMMENT 'Betriebsdatum',
     `stop_id`           VARCHAR(20)  NOT NULL COMMENT 'Beobachtete Haltestelle',
     `departure_planned` DATETIME     NOT NULL,

@@ -70,3 +70,26 @@ function get_active_period_id(PDO $pdo): int
 
     return (int) $row['id'];
 }
+
+/**
+ * Konvertiert einen MySQL-DATETIME-String (UTC, "YYYY-MM-DD HH:MM:SS")
+ * in ISO-8601-UTC ("YYYY-MM-DDTHH:MM:SSZ") – oder null bei null.
+ */
+function mysql_to_iso(?string $dt): ?string
+{
+    if ($dt === null) {
+        return null;
+    }
+    return (new DateTimeImmutable($dt, new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
+}
+
+/**
+ * Konvertiert einen ISO-8601-String in einen MySQL-DATETIME-String (UTC).
+ * Beispiel: "2026-03-24T14:32:00Z" → "2026-03-24 14:32:00"
+ */
+function iso_to_mysql(string $iso): string
+{
+    return (new DateTimeImmutable($iso))
+        ->setTimezone(new DateTimeZone('UTC'))
+        ->format('Y-m-d H:i:s');
+}
