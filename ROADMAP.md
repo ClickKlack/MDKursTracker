@@ -119,13 +119,14 @@ Fahrplanschnitt-Endpunkt legt neue Periode an.
 **Ziel:** Die App ist im Browser aufrufbar und auf dem Android-Homescreen
 installierbar. Noch keine echten Daten.
 
-- [ ] `index.html` – semantisches Grundgerüst, `<main>` als View-Container
-- [ ] `manifest.json` – Name, Icons (mind. 192×192 und 512×512), theme-color,
+- [x] `index.html` – semantisches Grundgerüst, `<main>` als View-Container
+- [x] `manifest.json` – Name, Icons (mind. 192×192 und 512×512), theme-color,
       `display: standalone`, `start_url`
-- [ ] `sw.js` – App-Shell cachen (HTML, CSS, JS, Manifest)
-- [ ] `css/app.css` – Basis-Layout, mobile-first, lesbar auf kleinem Bildschirm
-- [ ] `js/app.js` – Hash-Router, globaler Perioden-State, View-Lifecycle
-- [ ] `js/api.js` – fetch()-Wrapper für alle Backend-Aufrufe
+- [x] `sw.js` – App-Shell cachen (HTML, CSS, JS, Manifest)
+- [x] `css/app.css` – Basis-Layout, mobile-first, lesbar auf kleinem Bildschirm
+- [x] `js/app.js` – Hash-Router, globaler Perioden-State, View-Lifecycle
+- [x] `js/api.js` – fetch()-Wrapper für alle Backend-Aufrufe
+- [x] `icons/icon-192.svg` + `icons/icon-512.svg` – SVG-Icons (Straßenbahn-Motiv)
 
 **Testen:** Chrome DevTools → Application → Manifest prüfen.
 „Zum Homescreen hinzufügen" auf Android testen.
@@ -139,13 +140,15 @@ App-Shell lädt offline.
 
 **Ziel:** Nutzer sieht Haltestellen in der Nähe und Abfahrten.
 
-- [ ] `js/utils/geolocation.js` – GPS-Wrapper mit Fehlerbehandlung
-- [ ] `js/views/nearby.js` – Liste nahegelegener Haltestellen,
+- [x] `js/utils/geolocation.js` – GPS-Wrapper mit Fehlerbehandlung
+      (PERMISSION_DENIED, POSITION_UNAVAILABLE, TIMEOUT; maximumAge 60 s)
+- [x] `js/views/nearby.js` – Liste nahegelegener Haltestellen,
       sortiert nach Entfernung, Tap → Abfahrten
-- [ ] `js/views/departures.js` – Abfahrtstafel mit Soll/Ist,
-      bekannte Kursnummer farblich hervorgehoben
-- [ ] `js/utils/format.js` – Zeitformatierung (Europe/Berlin),
-      zweistellige Kursnummer-Darstellung
+- [x] `js/views/departures.js` – Abfahrtstafel mit Soll/Ist,
+      bekannte Kursnummer farblich hervorgehoben, Auto-Refresh alle 30 s;
+      Tap → sessionStorage → #capture (Phase 7)
+- [x] `js/utils/format.js` – Zeitformatierung (Europe/Berlin),
+      Verspätungsberechnung, Betriebsdatum, zweistellige Kursnummer
 
 **Testen:** Auf mobilem Chrome mit aktivem GPS testen.
 Prüfen ob Tram-Filter greift (keine Busse in der Liste).
@@ -159,11 +162,12 @@ Abfahrten zeigen Soll und Ist korrekt in Berliner Zeit.
 
 **Ziel:** Kernfunktion der App: Kursnummer einer Abfahrt zuordnen.
 
-- [ ] `js/views/capture.js` – Erfassungsview:
+- [x] `js/views/capture.js` – Erfassungsview:
       18 Schnell-Buttons (01–18), Freitextfeld (01–99),
       Validierung, Bestätigungs-Feedback
-- [ ] Nach erfolgreicher Erfassung: Rückkehr zur Abfahrtstafel,
+- [x] Nach erfolgreicher Erfassung: Rückkehr zur Abfahrtstafel,
       `activeCourseNumber` der betreffenden Zeile sofort aktualisieren
+      (durch Neu-Laden der Abfahrten nach Rückkehr zu #departures)
 
 **Testen:** Erfassung mit Schnellbutton + Freitextfeld. Ungültige Eingaben
 abfangen (00, 100, Buchstaben). Prüfen ob Laufweg in DB gespeichert wird.
@@ -177,11 +181,11 @@ farblich hervorgehoben. DB-Tabelle `route_stops` enthält alle Halte.
 
 **Ziel:** Übersicht aller Erfassungen mit Filter und Periodenumschalter.
 
-- [ ] `js/views/history.js` – Liste aller Erfassungen,
+- [x] `js/views/history.js` – Liste aller Erfassungen,
       Filtermöglichkeiten (Linie, Wochentagstyp, Datum),
-      Anzeige ob Kursnummer manuell oder per Mehrheit
-- [ ] Periodenumschalter: Dropdown mit allen Perioden,
-      ältere Perioden als read-only kennzeichnen
+      Anzeige ob Kursnummer manuell übersteuert
+- [x] Periodenumschalter: Dropdown mit allen Perioden,
+      ältere Perioden als read-only kennzeichnen (Banner + keine Erfassung möglich)
 
 **Abnahmekriterium:** Filter funktionieren kombiniert.
 Periodenumschalter zeigt Altdaten korrekt an.

@@ -151,10 +151,11 @@ class CalendarTest extends TestCase
     }
 
     #[DataProvider('holidayOnWeekdayProvider')]
-    public function test_public_holiday_on_weekday_returns_ft(string $date, string $label): void
+    public function test_public_holiday_on_weekday_returns_so(string $date, string $label): void
     {
+        // Feiertage fahren nach Sonntagsfahrplan → 'SO'
         $dt = new DateTimeImmutable($date);
-        $this->assertSame('FT', getDayType($dt, $this->mockPdoNoHolidays()), $label);
+        $this->assertSame('SO', getDayType($dt, $this->mockPdoNoHolidays()), $label);
     }
 
     public function test_holiday_on_saturday_returns_sa(): void
@@ -181,11 +182,11 @@ class CalendarTest extends TestCase
 
     public function test_school_holiday_has_no_effect_on_public_holiday(): void
     {
-        // Schulferien ändern Feiertag nicht → FT bleibt FT
+        // Schulferien ändern Feiertag nicht → SO (Sonntagsfahrplan) hat Vorrang
         // 25.12.2026 ist Freitag + Feiertag, Schulferien würden SF ergeben,
-        // aber FT hat Vorrang
+        // aber Sonntagsfahrplan hat Vorrang
         $date = new DateTimeImmutable('2026-12-25');
-        $this->assertSame('FT', getDayType($date, $this->mockPdoWithSchoolHoliday()));
+        $this->assertSame('SO', getDayType($date, $this->mockPdoWithSchoolHoliday()));
     }
 
     // -----------------------------------------------------------------------

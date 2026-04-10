@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Hintergrund -->
+  <rect width="512" height="512" rx="80" fill="#1a56a0"/>
+  <!-- Straßenbahnwagen-Karosserie -->
+  <rect x="72" y="168" width="368" height="196" rx="26" fill="white"/>
+  <!-- Fensterreihe -->
+  <rect x="100" y="198" width="104" height="82" rx="13" fill="#1a56a0"/>
+  <rect x="224" y="198" width="104" height="82" rx="13" fill="#1a56a0"/>
+  <!-- Türspalt -->
+  <rect x="344" y="198" width="10" height="166" rx="5" fill="#d0dff0"/>
+  <!-- Räder -->
+  <circle cx="156" cy="396" r="36" fill="white"/>
+  <circle cx="156" cy="396" r="20" fill="#1a56a0"/>
+  <circle cx="356" cy="396" r="36" fill="white"/>
+  <circle cx="356" cy="396" r="20" fill="#1a56a0"/>
+  <!-- Stromabnehmer (Pantograph) -->
+  <line x1="256" y1="168" x2="210" y2="98" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <line x1="256" y1="168" x2="302" y2="98" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <line x1="210" y1="98" x2="302" y2="98" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <!-- Kursnummer-Anzeige vorne -->
+  <rect x="100" y="300" width="80" height="50" rx="8" fill="#ffd600"/>
+  <text x="140" y="334" font-family="monospace" font-size="30" font-weight="bold" text-anchor="middle" fill="#1a56a0">07</text>
+</svg>

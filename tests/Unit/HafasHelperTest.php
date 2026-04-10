@@ -60,6 +60,35 @@ class HafasHelperTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // hafas_service_nr – Fahrtennummer-Extraktion
+    // -----------------------------------------------------------------------
+
+    public static function serviceNrProvider(): array
+    {
+        return [
+            // Neues Format: ZI+TA aus jid extrahieren
+            ['2|#VN#1#ST#…#ZI#125364#TA#46#DA#100426#',  [],          '125364_46'],
+            ['2|#VN#1#ST#…#ZI#99#TA#3#DA#100426#',       [],          '99_3'],
+            // Altes Format: number aus prodL
+            ['1|12345|0|80|24032026', ['number' => '41058'],           '41058'],
+            ['1|12345|0|80|24032026', ['num'    => '41058'],           '41058'],
+            ['1|12345|0|80|24032026', ['prodCtx' => ['num' => '42']], '42'],
+            // Altes Format: führende Nullen entfernen
+            ['1|12345|0|80|24032026', ['number' => '00041'],           '41'],
+            // Fallback: jid ohne Datumssegment
+            ['1|12345|0|80|24032026', [],                              '1|12345|0|80'],
+            // Kein erkennbares Format → jid unverändert
+            ['singlepart',            [],                              'singlepart'],
+        ];
+    }
+
+    #[DataProvider('serviceNrProvider')]
+    public function test_hafas_service_nr(string $jid, array $prod, string $expected): void
+    {
+        $this->assertSame($expected, hafas_service_nr($prod, $jid));
+    }
+
+    // -----------------------------------------------------------------------
     // haversine_distance – Entfernungsberechnung
     // -----------------------------------------------------------------------
 

@@ -1,0 +1,219 @@
+/**
+ * capture.js – View: Kursnummer erfassen
+ *
+ * Ablauf:
+ *  1. Erfassungsdaten aus sessionStorage (pendingCapture) lesen
+ *  2. Linie, Richtung, Abfahrtszeit als Kontext anzeigen
+ *  3. Schnellbuttons 01–18 + Freitextfeld (01–99) anbieten
+ *  4. POST /api/recordings → Bestätigungsfeedback
+ *  5. Rückkehr zur Abfahrtstafel (#departures), die frische Daten lädt
+ */
+
+import { postRecording } from '../api.js';
+import { formatTime }    from '../utils/format.js';
+import { lineBadgeHtml } from '../utils/lines.js';
+import { escapeHtml }    from '../app.js';
+
+/** Anzahl Schnellbuttons (01–18 laut Spec) */
+const QUICK_COUNT = 18;
+
+export async function render(container, params, context) {
+    // Daten aus sessionStorage lesen
+    const raw = sessionStorage.getItem('pendingCapture');
+    if (!raw) {
+        window.location.hash = '#nearby';
+        return;
+    }
+
+    let data;
+    try {
+        data = JSON.parse(raw);
+    } catch {
+        sessionStorage.removeItem('pendingCapture');
+        window.location.hash = '#nearby';
+        return;
+    }
+
+    container.innerHTML = buildFormHtml(data);
+    attachListeners(container, data);
+}
+
+export function destroy() {
+    // Keine Timer o.Ä. zu bereinigen – nur DOM-basierte Listener
+}
+
+// --- HTML aufbauen -----------------------------------------------------------
+
+function buildFormHtml(data) {
+    const time = data.departurePlanned ? formatTime(data.departurePlanned) : '–';
+
+    return `
+        <div class="capture-context card">
+            <div class="capture-context-line">
+                ${lineBadgeHtml(data.line)}
+                <span class="capture-direction">${escapeHtml(data.direction)}</span>
+            </div>
+            <div class="text-small text-muted" style="margin-top:4px">
+                ${escapeHtml(data.stopName ?? '')}
+                &nbsp;·&nbsp;
+                Abfahrt ${escapeHtml(time)} Uhr
+            </div>
+        </div>
+
+        <p class="capture-prompt">Welche Kursnummer hat diese Bahn?</p>
+
+        <div class="course-grid" role="group" aria-label="Kursnummer schnell auswählen">
+            ${buildQuickButtons()}
+        </div>
+
+        <div class="capture-divider"></div>
+
+        <div class="form-group">
+            <label for="course-input">Andere Kursnummer (01–99)</label>
+            <input
+                type="number"
+                id="course-input"
+                min="1"
+                max="99"
+                placeholder="z.B. 25"
+                inputmode="numeric"
+                autocomplete="off"
+            >
+        </div>
+        <button class="btn btn-primary btn-full" id="btn-submit" disabled>
+            Erfassen
+        </button>
+
+        <div id="capture-feedback" aria-live="polite"></div>`;
+}
+
+function buildQuickButtons() {
+    const buttons = [];
+    for (let i = 1; i <= QUICK_COUNT; i++) {
+        const nr = String(i).padStart(2, '0');
+        buttons.push(
+            `<button class="course-btn" type="button"
+                     data-course="${nr}"
+                     aria-label="Kursnummer ${nr}">${nr}</button>`
+        );
+    }
+    return buttons.join('');
+}
+
+// --- Event-Handler -----------------------------------------------------------
+
+function attachListeners(container, data) {
+    const input    = container.querySelector('#course-input');
+    const btnSub   = container.querySelector('#btn-submit');
+    const feedback = container.querySelector('#capture-feedback');
+
+    /** Aktuell gewählte Kursnummer (zweistellig, z.B. "07") oder null */
+    let selectedCourse = null;
+
+    /**
+     * Kursnummer setzen, Buttons und Input synchronisieren.
+     * @param {string} nr  zweistellig, z.B. "07"
+     */
+    function selectCourse(nr) {
+        selectedCourse = nr;
+        highlightButton(container, nr);
+        // Input-Wert ohne führende Null darstellen (natürlicher als "07")
+        input.value = String(parseInt(nr, 10));
+        btnSub.disabled = false;
+    }
+
+    // Schnellbuttons (Klick auf Grid via Event Delegation)
+    container.querySelector('.course-grid').addEventListener('click', e => {
+        const btn = e.target.closest('.course-btn');
+        if (!btn) return;
+        selectCourse(btn.dataset.course);
+        input.focus();
+    });
+
+    // Freitext-Input
+    input.addEventListener('input', () => {
+        const val = input.value.trim();
+        const n   = parseInt(val, 10);
+
+        if (val === '' || isNaN(n) || n < 1 || n > 99) {
+            selectedCourse = null;
+            // Hervorhebung entfernen (außer wenn Wert im 1–18-Bereich liegt)
+            const padded = (!isNaN(n) && n >= 1 && n <= 99) ? String(n).padStart(2, '0') : null;
+            highlightButton(container, padded);
+            btnSub.disabled = true;
+        } else {
+            selectedCourse = String(n).padStart(2, '0');
+            highlightButton(container, selectedCourse);
+            btnSub.disabled = false;
+        }
+    });
+
+    // Absenden per Button-Klick
+    btnSub.addEventListener('click', async () => {
+        if (!selectedCourse) return;
+        await submitRecording(container, data, selectedCourse, btnSub, feedback);
+    });
+
+    // Absenden per Enter im Input-Feld
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !btnSub.disabled) {
+            e.preventDefault();
+            btnSub.click();
+        }
+    });
+}
+
+/** Schnellbutton-Hervorhebung setzen. nr = null → alle deselektiert. */
+function highlightButton(container, nr) {
+    container.querySelectorAll('.course-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.course === nr);
+    });
+}
+
+// --- POST /api/recordings ----------------------------------------------------
+
+async function submitRecording(container, data, courseNumber, btnSub, feedback) {
+    btnSub.disabled = true;
+    feedback.innerHTML = `
+        <div class="loading-indicator" style="padding:16px 0">
+            <div class="spinner" aria-hidden="true"></div>
+        </div>`;
+
+    try {
+        await postRecording({
+            hafasTripId:      data.hafasTripId,
+            serviceNr:        data.serviceNr,
+            line:             data.line,
+            direction:        data.direction,
+            stopId:           data.stopId,
+            serviceDate:      data.serviceDate,
+            departurePlanned: data.departurePlanned,
+            departureActual:  data.departureActual ?? null,
+            courseNumber,
+        });
+
+        // Erfolg: sessionStorage leeren, Bestätigungsmeldung zeigen
+        sessionStorage.removeItem('pendingCapture');
+
+        feedback.innerHTML = `
+            <div class="capture-success" role="alert">
+                <span class="capture-success-icon" aria-hidden="true">✓</span>
+                Kurs&nbsp;<strong>${escapeHtml(courseNumber)}</strong> gespeichert!
+            </div>`;
+
+        // Nach kurzer Anzeige zurück zur Abfahrtstafel – die lädt frische Daten
+        setTimeout(() => {
+            const stopId   = data.stopId   ? encodeURIComponent(data.stopId)   : '';
+            const stopName = data.stopName ? encodeURIComponent(data.stopName) : '';
+            window.location.hash = `#departures?stopId=${stopId}&stopName=${stopName}`;
+        }, 1200);
+
+    } catch (err) {
+        feedback.innerHTML = `
+            <div class="error-box" role="alert">
+                Erfassung fehlgeschlagen: ${escapeHtml(err.message)}
+            </div>`;
+        // Button wieder freigeben, damit Nutzer es erneut versuchen kann
+        btnSub.disabled = false;
+    }
+}

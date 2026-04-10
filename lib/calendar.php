@@ -6,7 +6,10 @@
 /**
  * Berechnet den Wochentagstyp für ein gegebenes Datum.
  *
- * Rückgabewerte: 'MO-FR' | 'SA' | 'SO' | 'FT' | 'SF'
+ * Rückgabewerte: 'MO-FR' | 'SA' | 'SO' | 'SF'
+ *
+ * Hinweis: Feiertage fahren nach Sonntagsfahrplan → Rückgabe 'SO'.
+ * 'FT' ist im DB-ENUM noch vorhanden, wird aber nicht mehr neu vergeben.
  */
 function getDayType(DateTimeInterface $date, PDO $db): string
 {
@@ -16,8 +19,8 @@ function getDayType(DateTimeInterface $date, PDO $db): string
     if ($weekday === 6) return 'SA';
     if ($weekday === 7) return 'SO';
 
-    // Werktag: Feiertag prüfen
-    if (is_public_holiday($date)) return 'FT';
+    // Gesetzlicher Feiertag → Sonntagsfahrplan
+    if (is_public_holiday($date)) return 'SO';
 
     // Schulferientag (Mo–Fr, kein Feiertag)
     if (is_school_holiday($date, $db)) return 'SF';

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a56a0">
+    <meta name="description" content="Straßenbahn-Kursnummer-Erfassung für den marego-Verbund (Magdeburg/MVB)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="KursTracker">
+    <title>MDKursTracker</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/css/app.css">
+    <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+</head>
+<body>
+
+    <header id="app-header">
+        <h1 id="view-title">MDKursTracker</h1>
+        <span id="period-badge" class="period-badge" aria-live="polite" aria-label="Aktive Fahrplanperiode"></span>
+    </header>
+
+    <main id="app-main" role="main">
+        <!-- View-Container: wird durch app.js befüllt -->
+        <div id="loading-indicator" class="loading-indicator" aria-label="Lädt…">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Lädt…</p>
+        </div>
+    </main>
+
+    <nav id="app-nav" aria-label="Hauptnavigation">
+        <a href="#nearby" class="nav-item" data-view="nearby" aria-label="Haltestellen in der Nähe">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+            </svg>
+            <span>Nähe</span>
+        </a>
+        <a href="#departures" class="nav-item" data-view="departures" aria-label="Abfahrten">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <path d="m8 21 4-4 4 4"/>
+                <path d="M12 17v4"/>
+            </svg>
+            <span>Abfahrten</span>
+        </a>
+        <a href="#history" class="nav-item" data-view="history" aria-label="Erfassungen">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 8v4l3 3"/>
+                <circle cx="12" cy="12" r="10"/>
+            </svg>
+            <span>Verlauf</span>
+        </a>
+    </nav>
+
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>

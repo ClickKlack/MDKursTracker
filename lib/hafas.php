@@ -118,7 +118,7 @@ function hafas_departures(string $stopId, int $results = 20): array
 
         $result[] = [
             'hafasTripId'      => $jny['jid'],
-            'serviceNr'        => ltrim($prod['number'] ?? $prod['num'] ?? '', '0') ?: '0',
+            'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
             'line'             => hafas_line_name($prod['name'] ?? ''),
             'direction'        => $jny['dirTxt'] ?? '',
             'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
@@ -280,6 +280,52 @@ function hafas_iso(string $date, string $time): ?string
     }
 
     return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+}
+
+/**
+ * Ermittelt die service_nr (Fahrtennummer) für einen HAFAS-Eintrag.
+ *
+ * INSA HAFAS liefert im StationBoard manchmal kein journey-spezifisches
+ * `number`-Feld (oder denselben Wert für alle Fahrten einer Linie).
+ * Fallback-Kaskade:
+ *   1. $prod['number'] / $prod['num']  – fahrtNr aus Produktliste
+ *   2. $prod['prodCtx']['num']         – alternative HAFAS-Variante
+ *   3. Stabiler Teil der jid (ohne Datums-Segment) – eindeutig pro Fahrt,
+ *      konsistent für denselben Umlauf an verschiedenen Tagen
+ *
+ * @param array  $prod  Produkt-Eintrag aus prodL
+ * @param string $jid   Journey-ID (z.B. "1|12345|0|80|24032026")
+ */
+function hafas_service_nr(array $prod, string $jid): string
+{
+    // Neues HAFAS-Format (2|#VN#...):
+    // Die Fahrtennummer steckt nicht im prodL-Feld 'number' (das enthält nur
+    // die Linienbezeichnung, z.B. "6"), sondern in der jid selbst:
+    //   ZI#125364  = Umlaufnummer (welches Fahrzeug / welcher Kurs)
+    //   TA#46      = Fahrtabschnitt (n-te Fahrt dieses Umlaufs im Fahrplan)
+    // Kombination ZI+TA identifiziert eine wiederkehrende Fahrt eindeutig.
+    if (str_starts_with($jid, '2|')
+        && preg_match('/#ZI#(\d+)#TA#(\d+)#/', $jid, $m)) {
+        return $m[1] . '_' . $m[2]; // z.B. "125364_46"
+    }
+
+    // Altes HAFAS-Format (1|...): fahrtNr aus Produktliste
+    $nr = ltrim(
+        (string) ($prod['number'] ?? $prod['num'] ?? $prod['prodCtx']['num'] ?? ''),
+        '0'
+    );
+    if ($nr !== '') {
+        return $nr;
+    }
+
+    // Letzter Fallback: stabiler Teil der jid ohne tagesgebundenes Datumssegment
+    $parts = explode('|', $jid);
+    if (count($parts) >= 2) {
+        array_pop($parts);
+        return implode('|', $parts);
+    }
+
+    return $jid;
 }
 
 /**

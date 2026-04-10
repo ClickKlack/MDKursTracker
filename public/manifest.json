@@ -1,0 +1,26 @@
+{
+    "name": "MDKursTracker",
+    "short_name": "KursTracker",
+    "description": "Straßenbahn-Kursnummer-Erfassung für den marego-Verbund (Magdeburg/MVB)",
+    "lang": "de",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#ffffff",
+    "theme_color": "#1a56a0",
+    "icons": [
+        {
+            "src": "/icons/icon-192.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/icon-512.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ]
+}
