@@ -6,10 +6,11 @@ Options -Indexes
 # =============================================================================
 # HTTPS erzwingen (auf Produktivserver Kommentarzeichen entfernen)
 # =============================================================================
-# <IfModule mod_rewrite.c>
-#     RewriteCond %{HTTPS} off
-#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-# </IfModule>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
 
 # =============================================================================
 # Zeichensatz
