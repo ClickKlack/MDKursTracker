@@ -226,11 +226,11 @@ Ohne Login kein Zugriff auf Admin-Funktionen.
 - [x] `.htaccess`: Security-Header (CSP, X-Content-Type-Options, X-Frame-Options,
       Referrer-Policy), sensible Dateitypen gesperrt (.cache, .log, .sql, .sh, .bru),
       Admin-Bereich mit X-Robots-Tag noindex
-- [x] HTTPS erzwingen: Redirect-Block in `.htaccess` vorbereitet (für Produktivserver aktivieren)
+- [x] HTTPS erzwingen: Redirect-Block in `.htaccess` aktiviert (301-Redirect auf https)
 - [ ] PWA auf verschiedenen Android-Geräten / Chrome-Versionen testen
 - [ ] Ladezeiten prüfen (HAFAS-Proxy-Latenz, DB-Abfragen)
 - [ ] Backup-Konzept für MariaDB klären (Hoster-seitig oder eigenes Skript)
-- [ ] INSA HAFAS Nutzungsrechte abschließend bestätigt
+- [0] INSA HAFAS Nutzungsrechte abschließend bestätigt
 
 **Abnahmekriterium:** App läuft stabil im Produktivbetrieb. HTTPS aktiv.
 Kein öffentlicher Zugriff auf `config.php` möglich.
@@ -241,14 +241,16 @@ Kein öffentlicher Zugriff auf `config.php` möglich.
 
 **Ziel:** Produktivsetzung auf dem Webhosting
 
-- [ ] Webhosting-Umgebung prüfen: PHP ≥ 8.0, curl-Extension, MariaDB-Version
-- [ ] deploy-Skript erstellen (übertragung per SSH, Schritt für Schritt inkl. Schlüsselerzeugung beim Hoster)
-- [ ] Datenbank bereitstellen
-- [ ] initiale Verzeichnisstruktur und nicht kopierte Dateien mit korrekten Paramtern (produktive Server, Passwörter) kopieren
-- [ ] Deplayment ausführen
-- [ ] Testen
-- [ ] Progressive Web-App herstellen
-- [ ] README aktualisieren
+- [x] Webhosting-Umgebung prüfen: PHP ≥ 8.0, curl-Extension, MariaDB-Version
+- [x] deploy-Skript erstellen (`local_scripts/deploy.sh`: Tests → Git-Check → Tag → rsync → composer install remote)
+- [x] Datenbank bereitstellen (`local_scripts/setup_db.sh`: Schema mit db_prefix-Platzhalter, lokal/remote/--print)
+- [x] Tabellen-Prefix (`db_prefix` in config.php) für Multi-Instanz-Betrieb auf einer DB
+- [x] HTTPS erzwingen: Redirect-Block in `.htaccess` aktiviert
+- [x] initiale Verzeichnisstruktur und nicht kopierte Dateien: deploy.sh legt `cache/hafas/`, `logs/` an und erstellt `config.php` beim Erst-Deployment
+- [x] README aktualisieren: Deployment-Abschnitt mit deploy.sh und setup_db.sh
+- [x] Bruno-Tests: Production-Umgebung (`bruno/environments/Production.bru`) ergänzt
+- [x] Deployment ausführen und abschließend testen
+- [ ] Progressive Web-App auf Zielgerät installieren
 
 **Abnahmekriterium:** App läuft stabil im Produktivbetrieb. HTTPS aktiv.
 Kein öffentlicher Zugriff auf `config.php` möglich.

@@ -37,7 +37,8 @@ Erfassungsperiode starten.
    ```
 3. Datenbank anlegen und Schema einspielen:
    ```bash
-   mysql -u root -p < DATABASE.sql
+   # Ohne Tabellen-Prefix (Standardfall lokal)
+   sed 's/%%PREFIX%%//g' DATABASE.sql | mysql -u root -p DATENBANKNAME
    ```
 4. Konfigurationsdatei anlegen (außerhalb des Webroots):
    ```bash
@@ -45,6 +46,63 @@ Erfassungsperiode starten.
    # Dann config.php mit DB-Zugangsdaten, Admin-Passwort-Hash und HAFAS-Parametern befüllen
    ```
 5. Webserver-Document-Root auf `public/` zeigen lassen
+
+## Deployment (Produktion)
+
+### Voraussetzungen
+
+- SSH-Zugang zum Produktivserver
+- Webserver mit `mod_rewrite` und `AllowOverride All`
+- Document Root des Vhosts zeigt auf `public/` innerhalb des Projektverzeichnisses
+- PHP ≥ 8.0 mit `curl`-Extension, Composer auf dem Server verfügbar
+
+### Ersteinrichtung
+
+1. Dateien per rsync auf den Server übertragen (ohne Secrets und Runtime-Daten):
+   ```bash
+   rsync -avz --delete \
+     --exclude='.git/' --exclude='config.php' --exclude='vendor/' \
+     --exclude='cache/' --exclude='logs/' --exclude='local_scripts/' \
+     ./ user@server:/pfad/zum/projekt/
+   ```
+2. Auf dem Server Abhängigkeiten installieren:
+   ```bash
+   ssh user@server "cd /pfad/zum/projekt && composer install --no-dev --optimize-autoloader"
+   ```
+3. Laufzeit-Verzeichnisse anlegen:
+   ```bash
+   ssh user@server "mkdir -p /pfad/zum/projekt/cache/hafas /pfad/zum/projekt/logs"
+   ```
+4. Konfiguration anlegen und befüllen:
+   ```bash
+   ssh user@server "cp /pfad/zum/projekt/config.php.example /pfad/zum/projekt/config.php"
+   # Dann config.php auf dem Server mit Produktionswerten befüllen
+   ```
+5. Datenbankschema einspielen – `%%PREFIX%%` durch den gewünschten Tabellen-Prefix
+   ersetzen (leer lassen für keinen Prefix, z.B. `trammd_` für mehrere Instanzen
+   auf einer Datenbank):
+   ```bash
+   sed 's/%%PREFIX%%/PREFIX_/g' DATABASE.sql | mysql -h HOST -u USER -p DATENBANKNAME
+   # Ohne Prefix:
+   sed 's/%%PREFIX%%//g' DATABASE.sql | mysql -h HOST -u USER -p DATENBANKNAME
+   ```
+
+### Reguläre Updates
+
+Dieselben rsync- und composer-Schritte wie oben wiederholen.
+`config.php`, `cache/` und `logs/` werden dabei nicht überschrieben.
+
+### Tabellen-Prefix
+
+Sollen mehrere Instanzen dieselbe Datenbank teilen, kann in `config.php`
+ein Prefix gesetzt werden:
+
+```php
+'db_prefix' => 'meinprefix_',
+```
+
+Alle Tabellennamen werden dann automatisch mit diesem Prefix versehen.
+Das Schema muss mit demselben Prefix eingespielt worden sein (s.o.).
 
 ## Tests
 
