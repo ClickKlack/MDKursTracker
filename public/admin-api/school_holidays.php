@@ -32,7 +32,7 @@ function handle_get_school_holidays(): never
 {
     $pdo  = get_db();
     $rows = $pdo->query(
-        'SELECT id, name, date_from, date_to FROM school_holidays ORDER BY date_from ASC'
+        'SELECT id, name, date_from, date_to FROM ' . tbl('school_holidays') . ' ORDER BY date_from ASC'
     )->fetchAll();
 
     $result = [];
@@ -78,7 +78,7 @@ function handle_post_school_holiday(): never
 
     $pdo = get_db();
     $pdo->prepare(
-        'INSERT INTO school_holidays (name, date_from, date_to) VALUES (?, ?, ?)'
+        'INSERT INTO ' . tbl('school_holidays') . ' (name, date_from, date_to) VALUES (?, ?, ?)'
     )->execute([$body['name'], $body['dateFrom'], $body['dateTo']]);
 
     $id = (int) $pdo->lastInsertId();
@@ -120,13 +120,13 @@ function handle_put_school_holiday(?int $id): never
 
     $pdo  = get_db();
     $stmt = $pdo->prepare(
-        'UPDATE school_holidays SET name = ?, date_from = ?, date_to = ? WHERE id = ?'
+        'UPDATE ' . tbl('school_holidays') . ' SET name = ?, date_from = ?, date_to = ? WHERE id = ?'
     );
     $stmt->execute([$body['name'], $body['dateFrom'], $body['dateTo'], $id]);
 
     if ($stmt->rowCount() === 0) {
         // Prüfen ob der Datensatz überhaupt existiert
-        $exists = $pdo->prepare('SELECT COUNT(*) FROM school_holidays WHERE id = ?');
+        $exists = $pdo->prepare('SELECT COUNT(*) FROM ' . tbl('school_holidays') . ' WHERE id = ?');
         $exists->execute([$id]);
         if ((int) $exists->fetchColumn() === 0) {
             json_error('Schulferien-Eintrag nicht gefunden', 404);
@@ -148,7 +148,7 @@ function handle_delete_school_holiday(?int $id): never
     }
 
     $pdo  = get_db();
-    $stmt = $pdo->prepare('DELETE FROM school_holidays WHERE id = ?');
+    $stmt = $pdo->prepare('DELETE FROM ' . tbl('school_holidays') . ' WHERE id = ?');
     $stmt->execute([$id]);
 
     if ($stmt->rowCount() === 0) {

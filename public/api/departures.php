@@ -56,13 +56,13 @@ $stmt = $pdo->prepare(
          t.manual_course_number,
          (
              SELECT r.course_number
-             FROM recordings r
+             FROM ' . tbl('recordings') . ' r
              WHERE r.trip_id = t.id
              GROUP BY r.course_number
              ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
              LIMIT 1
          ) AS majority_course_number
-     FROM trips t
+     FROM ' . tbl('trips') . ' t
      WHERE t.period_id = ?'
 );
 $stmt->execute([$periodId]);

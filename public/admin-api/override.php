@@ -40,12 +40,12 @@ function handle_put_override(?int $tripId): never
     }
 
     $pdo  = get_db();
-    $stmt = $pdo->prepare('UPDATE trips SET manual_course_number = ? WHERE id = ?');
+    $stmt = $pdo->prepare('UPDATE ' . tbl('trips') . ' SET manual_course_number = ? WHERE id = ?');
     $stmt->execute([$body['courseNumber'], $tripId]);
 
     if ($stmt->rowCount() === 0) {
         // Prüfen ob die Fahrt existiert (rowCount = 0 auch bei unverändertem Wert)
-        $exists = $pdo->prepare('SELECT COUNT(*) FROM trips WHERE id = ?');
+        $exists = $pdo->prepare('SELECT COUNT(*) FROM ' . tbl('trips') . ' WHERE id = ?');
         $exists->execute([$tripId]);
         if ((int) $exists->fetchColumn() === 0) {
             json_error('Fahrt nicht gefunden', 404);
@@ -71,12 +71,12 @@ function handle_delete_override(?int $tripId): never
     }
 
     $pdo  = get_db();
-    $stmt = $pdo->prepare('UPDATE trips SET manual_course_number = NULL WHERE id = ?');
+    $stmt = $pdo->prepare('UPDATE ' . tbl('trips') . ' SET manual_course_number = NULL WHERE id = ?');
     $stmt->execute([$tripId]);
 
     if ($stmt->rowCount() === 0) {
         // Prüfen ob die Fahrt existiert (NULL setzen auf bereits-NULL zählt rowCount = 0)
-        $exists = $pdo->prepare('SELECT COUNT(*) FROM trips WHERE id = ?');
+        $exists = $pdo->prepare('SELECT COUNT(*) FROM ' . tbl('trips') . ' WHERE id = ?');
         $exists->execute([$tripId]);
         if ((int) $exists->fetchColumn() === 0) {
             json_error('Fahrt nicht gefunden', 404);

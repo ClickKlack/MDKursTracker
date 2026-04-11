@@ -28,6 +28,11 @@ return [
     'hafas_client' => ['type' => 'IPH', 'id' => 'NASA', 'v' => '4000200', 'name' => 'nasaPROD'],
     'hafas_ver'    => '1.44',
 
+    // Tabellen-Prefix (optional; Standard: kein Prefix).
+    // Erlaubt mehrere Instanzen auf einer Datenbank.
+    // Beispiel: 'db_prefix' => 'trammd_'  →  Tabellen: trammd_trips, trammd_recordings, …
+    // 'db_prefix' => '',
+
     // HAFAS-Cache-Verzeichnis (optional; Standard: <projektroot>/cache/hafas/)
     // Muss außerhalb des Webroots liegen und für den Webserver-Prozess schreibbar sein.
     // 'cache_dir' => '/var/cache/mdkurstracker/hafas',

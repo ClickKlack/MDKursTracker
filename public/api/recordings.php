@@ -59,7 +59,7 @@ function handle_get_recordings(): never
     $whereClause = implode(' AND ', $where);
 
     $stmt = $pdo->prepare(
-        "SELECT
+        'SELECT
              r.id,
              r.recorded_at,
              t.line,
@@ -76,18 +76,18 @@ function handle_get_recordings(): never
                  t.manual_course_number,
                  (
                      SELECT r2.course_number
-                     FROM recordings r2
+                     FROM ' . tbl('recordings') . ' r2
                      WHERE r2.trip_id = t.id
                      GROUP BY r2.course_number
                      ORDER BY COUNT(*) DESC, MIN(r2.recorded_at) ASC
                      LIMIT 1
                  )
              ) AS active_course_number
-         FROM recordings r
-         JOIN trips t ON r.trip_id = t.id
-         JOIN stops s ON r.stop_id = s.hafas_id
-         WHERE $whereClause
-         ORDER BY r.recorded_at DESC"
+         FROM ' . tbl('recordings') . ' r
+         JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
+         JOIN ' . tbl('stops') . ' s ON r.stop_id = s.hafas_id
+         WHERE ' . $whereClause . '
+         ORDER BY r.recorded_at DESC'
     );
     $stmt->execute($params);
 
@@ -179,13 +179,13 @@ function handle_post_recording(): never
 
     // Logische Fahrt anlegen (IGNORE = kein Fehler bei Duplikat)
     $pdo->prepare(
-        'INSERT IGNORE INTO trips (period_id, service_nr, line, day_type, direction)
+        'INSERT IGNORE INTO ' . tbl('trips') . ' (period_id, service_nr, line, day_type, direction)
          VALUES (?, ?, ?, ?, ?)'
     )->execute([$periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction']]);
 
     // Trip-ID für FK ermitteln
     $tripStmt = $pdo->prepare(
-        'SELECT id FROM trips
+        'SELECT id FROM ' . tbl('trips') . '
          WHERE period_id = ? AND service_nr = ? AND line = ? AND day_type = ?'
     );
     $tripStmt->execute([$periodId, $body['serviceNr'], $body['line'], $dayType]);
@@ -242,13 +242,13 @@ function handle_post_recording(): never
     $pdo->beginTransaction();
     try {
         // Erfassungs-Haltestelle sicherstellen (mit kanonischer Lang-ID)
-        $pdo->prepare('INSERT IGNORE INTO stops (hafas_id, name) VALUES (?, ?)')
+        $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)')
             ->execute([$recordingStopId, $recordingStopName]);
 
         // Erfassung anlegen
         $now = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
         $recStmt = $pdo->prepare(
-            'INSERT INTO recordings
+            'INSERT INTO ' . tbl('recordings') . '
                  (trip_id, recorded_at, hafas_trip_id, service_date, stop_id,
                   departure_planned, departure_actual, course_number)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -269,9 +269,9 @@ function handle_post_recording(): never
 
         // Alle Laufweg-Haltestellen anlegen und route_stops befüllen
         if (!empty($tripStops)) {
-            $stopInsert  = $pdo->prepare('INSERT IGNORE INTO stops (hafas_id, name) VALUES (?, ?)');
+            $stopInsert  = $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)');
             $routeInsert = $pdo->prepare(
-                'INSERT INTO route_stops (recording_id, sequence, stop_id, departure_planned)
+                'INSERT INTO ' . tbl('route_stops') . ' (recording_id, sequence, stop_id, departure_planned)
                  VALUES (?, ?, ?, ?)'
             );
             foreach ($tripStops as $ts) {

@@ -29,15 +29,15 @@ $stmt = $pdo->prepare(
              t.manual_course_number,
              (
                  SELECT r2.course_number
-                 FROM recordings r2
+                 FROM ' . tbl('recordings') . ' r2
                  WHERE r2.trip_id = t.id
                  GROUP BY r2.course_number
                  ORDER BY COUNT(*) DESC, MIN(r2.recorded_at) ASC
                  LIMIT 1
              )
          ) AS active_course_number
-     FROM trips t
-     LEFT JOIN recordings r ON r.trip_id = t.id
+     FROM ' . tbl('trips') . ' t
+     LEFT JOIN ' . tbl('recordings') . ' r ON r.trip_id = t.id
      WHERE t.period_id = ?
      GROUP BY t.id
      ORDER BY t.line, t.day_type, t.service_nr'

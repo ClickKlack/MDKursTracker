@@ -129,7 +129,7 @@ function get_school_holiday_name(DateTimeInterface $date, PDO $db): ?string
 {
     $dateStr = $date->format('Y-m-d');
     $stmt    = $db->prepare(
-        'SELECT name FROM school_holidays
+        'SELECT name FROM ' . tbl('school_holidays') . '
           WHERE date_from <= ? AND date_to >= ?
           LIMIT 1'
     );
@@ -151,7 +151,7 @@ function is_school_holiday(DateTimeInterface $date, PDO $db): bool
 
     if (!array_key_exists($dateStr, $cache)) {
         $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM school_holidays
+            'SELECT COUNT(*) FROM ' . tbl('school_holidays') . '
               WHERE date_from <= ? AND date_to >= ?'
         );
         $stmt->execute([$dateStr, $dateStr]);

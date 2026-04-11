@@ -21,9 +21,9 @@ $stmt = $pdo->query(
          p.start_date,
          p.created_at,
          COUNT(r.id) AS recording_count
-     FROM schedule_periods p
-     LEFT JOIN trips t ON t.period_id = p.id
-     LEFT JOIN recordings r ON r.trip_id = t.id
+     FROM ' . tbl('schedule_periods') . ' p
+     LEFT JOIN ' . tbl('trips') . ' t ON t.period_id = p.id
+     LEFT JOIN ' . tbl('recordings') . ' r ON r.trip_id = t.id
      GROUP BY p.id
      ORDER BY p.id DESC'
 );

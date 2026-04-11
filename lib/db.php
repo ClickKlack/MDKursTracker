@@ -7,6 +7,20 @@ require_once __DIR__ . '/logger.php';
 require_once __DIR__ . '/response.php';
 
 /**
+ * Gibt den Tabellennamen mit konfiguriertem Prefix zurück.
+ * Beispiel: tbl('trips') → 'trammd_trips' bei db_prefix = 'trammd_'
+ */
+function tbl(string $name): string
+{
+    static $prefix = null;
+    if ($prefix === null) {
+        $config = require dirname(__DIR__) . '/config.php';
+        $prefix = $config['db_prefix'] ?? '';
+    }
+    return $prefix . $name;
+}
+
+/**
  * Gibt die gemeinsame PDO-Instanz zurück (Singleton pro Request).
  */
 function get_db(): PDO
@@ -48,11 +62,11 @@ function get_db(): PDO
  */
 function init_period(PDO $pdo): void
 {
-    $count = (int) $pdo->query('SELECT COUNT(*) FROM schedule_periods')->fetchColumn();
+    $count = (int) $pdo->query('SELECT COUNT(*) FROM ' . tbl('schedule_periods'))->fetchColumn();
 
     if ($count === 0) {
         $pdo->prepare(
-            'INSERT INTO schedule_periods (name, start_date) VALUES (?, CURDATE())'
+            'INSERT INTO ' . tbl('schedule_periods') . ' (name, start_date) VALUES (?, CURDATE())'
         )->execute(['Fahrplan (initial)']);
 
         get_logger()->info('Initiale Fahrplanperiode automatisch angelegt');
@@ -65,7 +79,7 @@ function init_period(PDO $pdo): void
 function get_active_period_id(PDO $pdo): int
 {
     $row = $pdo->query(
-        'SELECT id FROM schedule_periods ORDER BY id DESC LIMIT 1'
+        'SELECT id FROM ' . tbl('schedule_periods') . ' ORDER BY id DESC LIMIT 1'
     )->fetch();
 
     return (int) $row['id'];

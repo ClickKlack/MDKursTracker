@@ -42,11 +42,11 @@ function handle_post_period(): never
 
     $pdo = get_db();
     $pdo->prepare(
-        'INSERT INTO schedule_periods (name, start_date) VALUES (?, ?)'
+        'INSERT INTO ' . tbl('schedule_periods') . ' (name, start_date) VALUES (?, ?)'
     )->execute([$body['name'], $body['startDate']]);
 
     $id     = (int) $pdo->lastInsertId();
-    $stmt   = $pdo->prepare('SELECT id, name, start_date, created_at FROM schedule_periods WHERE id = ?');
+    $stmt   = $pdo->prepare('SELECT id, name, start_date, created_at FROM ' . tbl('schedule_periods') . ' WHERE id = ?');
     $stmt->execute([$id]);
     $period = $stmt->fetch();
 
@@ -102,13 +102,13 @@ function handle_put_period(?int $id): never
     $params[] = $id;
     $pdo      = get_db();
     $stmt     = $pdo->prepare(
-        'UPDATE schedule_periods SET ' . implode(', ', $updates) . ' WHERE id = ?'
+        'UPDATE ' . tbl('schedule_periods') . ' SET ' . implode(', ', $updates) . ' WHERE id = ?'
     );
     $stmt->execute($params);
 
     if ($stmt->rowCount() === 0) {
         // Prüfen ob die Periode existiert (rowCount = 0 auch bei unverändertem Wert)
-        $exists = $pdo->prepare('SELECT COUNT(*) FROM schedule_periods WHERE id = ?');
+        $exists = $pdo->prepare('SELECT COUNT(*) FROM ' . tbl('schedule_periods') . ' WHERE id = ?');
         $exists->execute([$id]);
         if ((int) $exists->fetchColumn() === 0) {
             json_error('Fahrplanperiode nicht gefunden', 404);
