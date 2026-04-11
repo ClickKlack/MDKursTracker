@@ -1,5 +1,5 @@
 # Konfigurationsdatei außerhalb Webroot – niemals ins Repository
-config.php
+/config.php
 
 # Composer-Abhängigkeiten (werden auf dem Server frisch installiert)
 vendor/
