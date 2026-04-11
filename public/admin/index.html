@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>MDKursTracker – Admin</title>
+    <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+    <!-- Login-Formular (initial sichtbar, wird nach Login ausgeblendet) -->
+    <div id="login-view" class="login-wrap" hidden>
+        <div class="login-card">
+            <h1 class="login-title">MDKursTracker<br><span>Administration</span></h1>
+            <form id="login-form" novalidate>
+                <div class="form-group">
+                    <label for="login-password">Passwort</label>
+                    <input type="password" id="login-password" required
+                           autocomplete="current-password" placeholder="Admin-Passwort">
+                </div>
+                <div id="login-error" class="error-box" hidden></div>
+                <button type="submit" class="btn btn-primary btn-full" id="btn-login">
+                    Anmelden
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard (nach Login) -->
+    <div id="dashboard-view" hidden>
+        <header class="admin-header">
+            <span class="admin-header-title">MDKursTracker Admin</span>
+            <button class="btn btn-logout" id="btn-logout" type="button">Abmelden</button>
+        </header>
+
+        <nav class="admin-tabs" role="tablist" aria-label="Admin-Bereiche">
+            <button class="tab-btn active" role="tab" data-tab="school-holidays"
+                    aria-selected="true" aria-controls="tab-panel">
+                Schulferien
+            </button>
+            <button class="tab-btn" role="tab" data-tab="periods"
+                    aria-selected="false" aria-controls="tab-panel">
+                Perioden
+            </button>
+            <button class="tab-btn" role="tab" data-tab="override"
+                    aria-selected="false" aria-controls="tab-panel">
+                Übersteuerung
+            </button>
+        </nav>
+
+        <main id="tab-panel" class="admin-main" role="tabpanel" aria-live="polite">
+            <!-- wird durch admin.js befüllt -->
+        </main>
+    </div>
+
+    <!-- Globales Ladeoverlay -->
+    <div id="global-loader" class="global-loader" hidden>
+        <div class="spinner"></div>
+    </div>
+
+    <script type="module" src="/admin/js/admin.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@
             "lib/db.php",
             "lib/auth.php",
             "lib/calendar.php",
+            "lib/hafas_cache.php",
             "lib/hafas.php"
         ]
     },

@@ -25,7 +25,7 @@ const LINE_CONFIG = {
     '8':  { color: '#f89c2c', variant: 'outline' },
     '9':  { color: '#0e7563', variant: 'inline'  },
     '10': { color: '#008ac0', variant: 'inline'  },
-    '10': { color: '#363932', variant: 'inline'  },
+    '13': { color: '#363932', variant: 'inline'  },
 };
 
 /**

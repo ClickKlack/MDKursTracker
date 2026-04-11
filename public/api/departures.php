@@ -14,16 +14,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Methode nicht erlaubt', 405);
 }
 
-$stopId  = trim($_GET['stopId'] ?? '');
-$results = max(1, min(100, (int) ($_GET['results'] ?? 20)));
+$stopId     = trim($_GET['stopId'] ?? '');
+$results    = max(1, min(100, (int) ($_GET['results'] ?? 20)));
+$maxMinutes = max(1, min(120, (int) ($_GET['maxMinutes'] ?? 59)));
 
 if ($stopId === '') {
     json_error('Parameter stopId ist erforderlich');
 }
 
-// HAFAS-Abfahrten laden
+// HAFAS-Abfahrten laden (nur Abfahrten innerhalb des Zeitfensters)
 try {
-    $departures = hafas_departures($stopId, $results);
+    $departures = hafas_departures($stopId, $results, $maxMinutes);
 } catch (RuntimeException $e) {
     get_logger()->error('departures: HAFAS-Fehler', ['stopId' => $stopId, 'exception' => $e->getMessage()]);
     json_error('HAFAS nicht verfügbar: ' . $e->getMessage(), 500);

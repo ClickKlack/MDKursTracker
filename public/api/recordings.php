@@ -135,9 +135,39 @@ function handle_post_recording(): never
         }
     }
 
+    // Feldlängen gegen DB-Schema prüfen (verhindert stille Trunkierungen)
+    $maxLengths = [
+        'hafasTripId' => 512,
+        'serviceNr'   => 20,
+        'line'        => 10,
+        'direction'   => 100,
+        'stopId'      => 20,
+    ];
+    foreach ($maxLengths as $field => $max) {
+        if (mb_strlen((string) $body[$field]) > $max) {
+            json_error("$field darf maximal $max Zeichen lang sein");
+        }
+    }
+
     // Kursnummer validieren: zweistellig, 01–99
     if (!preg_match('/^(0[1-9]|[1-9][0-9])$/', $body['courseNumber'])) {
         json_error('Kursnummer muss zweistellig im Format 01–99 sein');
+    }
+
+    // serviceDate-Format validieren: YYYY-MM-DD und echtes Datum
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $body['serviceDate'])) {
+        json_error('serviceDate muss das Format YYYY-MM-DD haben');
+    }
+
+    // departurePlanned: muss ISO-8601-String sein
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $body['departurePlanned'])) {
+        json_error('departurePlanned muss ISO-8601-UTC sein (YYYY-MM-DDTHH:MM:SSZ)');
+    }
+
+    // departureActual: optional, aber wenn gesetzt, muss es valides Format haben
+    if (isset($body['departureActual']) && $body['departureActual'] !== null
+        && !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $body['departureActual'])) {
+        json_error('departureActual muss ISO-8601-UTC sein (YYYY-MM-DDTHH:MM:SSZ)');
     }
 
     $pdo      = get_db();
@@ -145,9 +175,6 @@ function handle_post_recording(): never
 
     // Wochentagstyp aus Betriebsdatum berechnen
     $serviceDate = DateTimeImmutable::createFromFormat('Y-m-d', $body['serviceDate']);
-    if ($serviceDate === false) {
-        json_error('Ungültiges serviceDate-Format (erwartet YYYY-MM-DD)');
-    }
     $dayType = getDayType($serviceDate, $pdo);
 
     // Logische Fahrt anlegen (IGNORE = kein Fehler bei Duplikat)

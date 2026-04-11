@@ -1,0 +1,531 @@
+/* =============================================================================
+   admin.css – MDKursTracker Admin-Frontend
+   Desktop-first (Admin arbeitet i.d.R. am PC), funktioniert aber auch mobil.
+   ============================================================================= */
+
+:root {
+    --color-primary:       #1a56a0;
+    --color-primary-dark:  #133d78;
+    --color-primary-light: #d0dff0;
+    --color-accent:        #ffd600;
+    --color-bg:            #f0f2f5;
+    --color-surface:       #ffffff;
+    --color-border:        #dce3ed;
+    --color-text:          #1a1a2e;
+    --color-text-muted:    #5a6a80;
+    --color-success:       #2e7d32;
+    --color-success-bg:    #e8f5e9;
+    --color-error:         #c62828;
+    --color-error-bg:      #fff3f3;
+    --color-warning-bg:    #fff8e1;
+    --color-warning-border:#ffe082;
+
+    --header-height: 52px;
+    --tab-height:    44px;
+    --max-width:     860px;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.10);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.13);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* display:flex/grid auf bestimmten Elementen würde das HTML-hidden-Attribut überschreiben */
+[hidden] { display: none !important; }
+
+html { font-size: 16px; }
+
+body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+/* --- Login ----------------------------------------------------------------- */
+
+.login-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.login-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 380px;
+}
+
+.login-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 28px;
+    line-height: 1.3;
+}
+
+.login-title span {
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: var(--color-text-muted);
+}
+
+/* --- Header ---------------------------------------------------------------- */
+
+.admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--header-height);
+    background: var(--color-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-shadow: var(--shadow-md);
+}
+
+.admin-header-title {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.btn-logout {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: var(--radius-sm);
+    padding: 5px 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-logout:hover { background: rgba(255,255,255,0.25); }
+
+/* --- Tab-Navigation -------------------------------------------------------- */
+
+.admin-tabs {
+    display: flex;
+    background: var(--color-surface);
+    border-bottom: 2px solid var(--color-border);
+    padding: 0 20px;
+    gap: 0;
+    overflow-x: auto;
+}
+
+.tab-btn {
+    flex-shrink: 0;
+    height: var(--tab-height);
+    padding: 0 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn.active,
+.tab-btn[aria-selected="true"] {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+}
+
+.tab-btn:hover:not(.active) { color: var(--color-text); }
+
+/* --- Haupt-Content-Area ---------------------------------------------------- */
+
+.admin-main {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 24px 20px;
+}
+
+/* --- Formular-Elemente ----------------------------------------------------- */
+
+.form-group {
+    margin-bottom: 14px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 5px;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    font-size: 0.95rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+    border-color: var(--color-primary);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 14px;
+}
+
+@media (max-width: 520px) {
+    .form-row { grid-template-columns: 1fr; }
+}
+
+/* --- Buttons --------------------------------------------------------------- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 18px;
+    cursor: pointer;
+    transition: opacity 0.15s, background 0.15s;
+    white-space: nowrap;
+}
+
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-primary  { background: var(--color-primary);      color: #fff; }
+.btn-danger   { background: var(--color-error);         color: #fff; }
+.btn-secondary{ background: var(--color-primary-light); color: var(--color-primary); }
+.btn-ghost    { background: transparent; color: var(--color-primary); border: 1px solid var(--color-primary-light); }
+.btn-full     { width: 100%; }
+.btn-sm       { padding: 4px 12px; font-size: 0.82rem; }
+
+/* --- Karten / Abschnitte --------------------------------------------------- */
+
+.section-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 20px 22px;
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--color-text);
+}
+
+/* --- Tabellen -------------------------------------------------------------- */
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.data-table th {
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-text-muted);
+    border-bottom: 2px solid var(--color-border);
+    padding: 6px 10px;
+}
+
+.data-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+    background: #f7f9fc;
+}
+
+.table-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+/* Inline-Edit-Zeile in der Tabelle */
+.edit-row td {
+    background: #f0f5fb;
+    padding: 10px;
+}
+
+.edit-row input {
+    font-size: 0.9rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    width: 100%;
+    background: var(--color-surface);
+}
+
+.edit-row input:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.edit-inline-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* --- Fehlermeldung / Erfolg ------------------------------------------------ */
+
+.error-box {
+    background: var(--color-error-bg);
+    border: 1px solid #f5c0c0;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--color-error);
+    font-size: 0.88rem;
+    margin-bottom: 14px;
+}
+
+.error-box::before { content: "⚠ "; }
+
+.success-box {
+    background: var(--color-success-bg);
+    border: 1px solid #a5d6a7;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--color-success);
+    font-size: 0.88rem;
+    margin-bottom: 14px;
+}
+
+.success-box::before { content: "✓ "; }
+
+/* --- Leerer Zustand -------------------------------------------------------- */
+
+.empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--color-text-muted);
+    font-size: 0.92rem;
+}
+
+/* --- Ladeindikator --------------------------------------------------------- */
+
+.loading-row td {
+    text-align: center;
+    padding: 24px;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--color-primary-light);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.global-loader {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+/* --- Perioden -------------------------------------------------------------- */
+
+.period-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--color-surface);
+}
+
+.period-card.is-active {
+    border-color: var(--color-primary);
+    background: #f5f9ff;
+}
+
+.period-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.period-card-name {
+    font-weight: 600;
+    font-size: 0.98rem;
+}
+
+.period-card-meta {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.badge-active {
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--color-primary);
+    color: #fff;
+    border-radius: 20px;
+    padding: 2px 9px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* --- Override-Tabelle ------------------------------------------------------ */
+
+.override-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 14px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 480px) {
+    .override-filters { grid-template-columns: 1fr; }
+}
+
+.course-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.88rem;
+    font-family: 'Courier New', monospace;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-radius: var(--radius-sm);
+    min-width: 2em;
+    padding: 2px 6px;
+}
+
+.course-badge.is-manual {
+    background: var(--color-accent);
+    color: var(--color-text);
+}
+
+.override-input {
+    font-size: 0.9rem;
+    font-family: 'Courier New', monospace;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    width: 4em;
+    text-align: center;
+}
+
+.override-input:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+/* --- Bestätigungsdialog ---------------------------------------------------- */
+
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.confirm-dialog {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 28px 28px 22px;
+    max-width: 440px;
+    width: 100%;
+}
+
+.confirm-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.confirm-body {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+.confirm-warning {
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 0.88rem;
+    color: #795548;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* --- Responsive ------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+    .admin-main { padding: 16px 12px; }
+    .section-card { padding: 14px 14px; }
+    .data-table th, .data-table td { padding: 7px 6px; }
+    .tab-btn { padding: 0 14px; font-size: 0.85rem; }
+}

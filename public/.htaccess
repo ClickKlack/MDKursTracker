@@ -3,27 +3,62 @@
 
 Options -Indexes
 
-# HTTPS erzwingen (auf Produktivserver aktivieren)
-# RewriteCond %{HTTPS} off
-# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# =============================================================================
+# HTTPS erzwingen (auf Produktivserver Kommentarzeichen entfernen)
+# =============================================================================
+# <IfModule mod_rewrite.c>
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
 
-# Zeichensatz für alle Antworten
+# =============================================================================
+# Zeichensatz
+# =============================================================================
 AddDefaultCharset UTF-8
 
+# =============================================================================
 # Security-Header
+# =============================================================================
 <IfModule mod_headers.c>
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "SAMEORIGIN"
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-Content-Type-Options   "nosniff"
+    Header always set X-Frame-Options          "SAMEORIGIN"
+    Header always set Referrer-Policy          "strict-origin-when-cross-origin"
+
+    # Content-Security-Policy:
+    # - default-src 'self'      → alles nur von derselben Origin
+    # - script-src 'self'       → kein inline-JS (ES-Module über <script type=module> sind 'self')
+    # - style-src 'self' 'unsafe-inline'  → inline style="..." für Linienfarben nötig
+    # - img-src 'self' data:    → SVG-Inline-Icons via data: URI
+    # - connect-src 'self'      → fetch() nur zur eigenen Origin
+    # - worker-src 'self'       → Service Worker
+    # - frame-ancestors 'none'  → kein Einbetten in iframes (stärker als X-Frame-Options)
+    Header always set Content-Security-Policy \
+        "default-src 'self'; \
+         script-src 'self'; \
+         style-src 'self' 'unsafe-inline'; \
+         img-src 'self' data:; \
+         connect-src 'self'; \
+         worker-src 'self'; \
+         frame-ancestors 'none'"
+
+    # Admin-Bereich nicht indexieren
+    Header always set X-Robots-Tag "noindex, nofollow" "expr=%{REQUEST_URI} =~ m#^/admin/#"
 </IfModule>
 
-# Direktzugriff auf PHP-Dateien in api/ und admin-api/ über Rewrite erlauben,
-# aber config.php und lib/ niemals ausliefern (liegen außerhalb public/, aber
-# als Sicherheitsnetz)
+# =============================================================================
+# Sperren sensibler Dateitypen
+# =============================================================================
+<FilesMatch "\.(cache|log|sql|sh|bru)$">
+    Require all denied
+</FilesMatch>
+
 <FilesMatch "^config\.php$">
     Require all denied
 </FilesMatch>
 
+# =============================================================================
+# URL-Routing
+# =============================================================================
 <IfModule mod_rewrite.c>
     RewriteEngine On
 

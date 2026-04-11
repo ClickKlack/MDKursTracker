@@ -13,7 +13,8 @@ import { getCurrentPosition } from '../utils/geolocation.js';
 import { escapeHtml }         from '../app.js';
 
 export async function render(container, params, context) {
-    showLoading(container, 'GPS-Position wird ermittelt…');
+    showLoading(container, 'GPS-Position wird ermittelt…',
+        'Bitte die Standortabfrage im Browser bestätigen.');
 
     // GPS-Position holen
     let position;
@@ -109,11 +110,12 @@ function formatDistance(meters) {
     return `${meters} m`;
 }
 
-function showLoading(container, message) {
+function showLoading(container, message, hint = '') {
     container.innerHTML = `
         <div class="loading-indicator" aria-live="polite" aria-label="${escapeHtml(message)}">
             <div class="spinner" aria-hidden="true"></div>
             <p>${escapeHtml(message)}</p>
+            ${hint ? `<p class="text-small text-muted">${escapeHtml(hint)}</p>` : ''}
         </div>`;
 }
 

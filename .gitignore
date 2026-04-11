@@ -13,6 +13,9 @@ logs/
 # Lokale Skripte (nicht im Repo)
 local_scripts/
 
+# HAFAS-Cache (Dateisystem-Cache, kein Repo-Inhalt)
+cache/hafas/
+
 # PHPUnit-Cache
 .phpunit.result.cache
 

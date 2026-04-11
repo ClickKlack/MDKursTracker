@@ -27,4 +27,8 @@ return [
     'hafas_aid'    => 'nasa-apps',
     'hafas_client' => ['type' => 'IPH', 'id' => 'NASA', 'v' => '4000200', 'name' => 'nasaPROD'],
     'hafas_ver'    => '1.44',
+
+    // HAFAS-Cache-Verzeichnis (optional; Standard: <projektroot>/cache/hafas/)
+    // Muss außerhalb des Webroots liegen und für den Webserver-Prozess schreibbar sein.
+    // 'cache_dir' => '/var/cache/mdkurstracker/hafas',
 ];

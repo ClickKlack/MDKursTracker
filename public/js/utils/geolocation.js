@@ -9,19 +9,23 @@
  * @returns {Promise<GeolocationPosition>}
  * @throws {Error}  Mit deutschsprachiger Fehlermeldung bei Ablehnung/Timeout
  */
+const GPS_TIMEOUT_MS  = 10_000;
+const GPS_WATCHDOG_MS = 12_000; // Watchdog: greift wenn der Browser-Timeout nicht feuert
+
 export function getCurrentPosition(options = {}) {
-    return new Promise((resolve, reject) => {
-        if (!('geolocation' in navigator)) {
-            reject(new Error('Geolocation wird von diesem Browser nicht unterstützt.'));
-            return;
-        }
+    if (!('geolocation' in navigator)) {
+        return Promise.reject(new Error(
+            'Geolocation wird von diesem Browser nicht unterstützt.'
+        ));
+    }
 
-        const defaults = {
-            enableHighAccuracy: true,
-            timeout:            10_000,
-            maximumAge:         60_000, // Gecachte Position bis zu 1 Minute akzeptieren
-        };
+    const defaults = {
+        enableHighAccuracy: true,
+        timeout:            GPS_TIMEOUT_MS,
+        maximumAge:         60_000, // Gecachte Position bis zu 1 Minute akzeptieren
+    };
 
+    const geoPromise = new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
             resolve,
             (err) => {
@@ -50,4 +54,15 @@ export function getCurrentPosition(options = {}) {
             { ...defaults, ...options }
         );
     });
+
+    // Watchdog: manche Browser ignorieren das timeout-Flag bei enableHighAccuracy.
+    // Nach GPS_WATCHDOG_MS wird das Promise zwangsweise rejected.
+    const watchdog = new Promise((_, reject) =>
+        setTimeout(
+            () => reject(new Error('GPS-Abfrage hat zu lange gedauert. Bitte erneut versuchen.')),
+            GPS_WATCHDOG_MS
+        )
+    );
+
+    return Promise.race([geoPromise, watchdog]);
 }

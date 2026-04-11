@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -77,7 +77,11 @@ self.addEventListener('fetch', event => {
     }
 
     // Navigationsanfragen (HTML): App-Shell aus Cache ausliefern (SPA-Fallback)
+    // Ausnahme: /admin/ und Unterpfade → immer vom Netzwerk laden (eigene HTML-Shell)
     if (request.mode === 'navigate') {
+        if (url.pathname.startsWith('/admin/') || url.pathname === '/admin') {
+            return; // SW nicht einmischen → Browser fragt direkt den Server
+        }
         event.respondWith(
             caches.match('/')
                 .then(cached => cached ?? fetch(request))

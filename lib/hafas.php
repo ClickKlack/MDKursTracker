@@ -3,6 +3,8 @@
 // Alle Funktionen geben normalisierte PHP-Arrays zurück.
 // HAFAS-Fehler werden als RuntimeException weitergegeben.
 
+require_once __DIR__ . '/hafas_cache.php';
+
 // INSA HAFAS: Straßenbahn-Bitmask – gilt für cls (Produktliste) und pCls (Haltestellen)
 const HAFAS_TRAM_MASK = 32;
 
@@ -25,6 +27,14 @@ function hafas_config(): array
  */
 function hafas_nearby(float $lat, float $lon, int $results = 10): array
 {
+    // Cache-Schlüssel: Koordinaten auf 3 Dezimalstellen gerundet (≈ 111 m Raster).
+    // Innerhalb dieses Rasters sind die nächsten Tramhaltestellen identisch.
+    $cacheKey = hafas_cache_key('nearby', round($lat, 3), round($lon, 3), $results);
+    $cached   = hafas_cache_get($cacheKey);
+    if ($cached !== null) {
+        return $cached;
+    }
+
     // HAFAS erwartet Koordinaten als Ganzzahl (Grad × 1.000.000)
     $x = (int) round($lon * 1_000_000);
     $y = (int) round($lat * 1_000_000);
@@ -67,35 +77,47 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
     // Nach Entfernung sortieren
     usort($result, fn($a, $b) => $a['distance'] <=> $b['distance']);
 
+    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_NEARBY);
+
     return $result;
 }
 
 /**
  * Nächste Straßenbahn-Abfahrten an einer Haltestelle.
  *
+ * @param  int $maxMinutes Zeitfenster in Minuten (Standard 59); 0 = kein Limit
  * @return array<array{
  *   hafasTripId: string, serviceNr: string, line: string,
  *   direction: string, departurePlanned: string, departureActual: string|null
  * }>
  */
-function hafas_departures(string $stopId, int $results = 20): array
+function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 59): array
 {
+    // Kurzer Cache (30 s): Echtzeit-Verspätungen sollen zügig aktualisiert werden,
+    // aber identische Anfragen im selben Intervall treffen HAFAS nur einmal.
+    $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes);
+    $cached   = hafas_cache_get($cacheKey);
+    if ($cached !== null) {
+        return $cached;
+    }
+
     // Aktuelles Datum und Uhrzeit in Berliner Zeit – HAFAS nutzt sonst ggf. den Folgetag als Default
     $now = new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin'));
 
-    // Mehr Fahrten anfordern als benötigt, da wir in PHP auf Trams filtern
-    $res = hafas_request([
-        [
-            'meth' => 'StationBoard',
-            'req'  => [
-                'type'   => 'DEP',
-                'date'   => $now->format('Ymd'),
-                'time'   => $now->format('His'),
-                'stbLoc' => ['type' => 'S', 'extId' => $stopId],
-                'maxJny' => $results * 4,
-            ],
-        ],
-    ]);
+    // Mehr Fahrten anfordern als benötigt, da wir in PHP auf Trams filtern.
+    // dur = Zeitfenster in Minuten; begrenzt die Abfrage auf kommende maxMinutes Minuten.
+    $req = [
+        'type'   => 'DEP',
+        'date'   => $now->format('Ymd'),
+        'time'   => $now->format('His'),
+        'stbLoc' => ['type' => 'S', 'extId' => $stopId],
+        'maxJny' => $results * 4,
+    ];
+    if ($maxMinutes > 0) {
+        $req['dur'] = $maxMinutes;
+    }
+
+    $res = hafas_request([['meth' => 'StationBoard', 'req' => $req]]);
 
     $common   = $res[0]['res']['common'] ?? [];
     $prodList = $common['prodL'] ?? [];
@@ -128,6 +150,8 @@ function hafas_departures(string $stopId, int $results = 20): array
         ];
     }
 
+    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_DEPARTURES);
+
     return $result;
 }
 
@@ -138,6 +162,14 @@ function hafas_departures(string $stopId, int $results = 20): array
  */
 function hafas_trip(string $tripId): array
 {
+    // Laufweg ist fahrplanstabil → 1 Tag cachen.
+    // Der tripId enthält das Datum, daher ist der Schlüssel tagesgebunden.
+    $cacheKey = hafas_cache_key('trip', $tripId);
+    $cached   = hafas_cache_get($cacheKey);
+    if ($cached !== null) {
+        return $cached;
+    }
+
     // Altes Format "1|...|DDMMYYYY": Datum aus letztem Segment extrahieren.
     // Neues Format "2|#VN#...": Datum steckt in der ID selbst – kein date-Parameter nötig.
     $req = [
@@ -191,6 +223,8 @@ function hafas_trip(string $tripId): array
             'departurePlanned' => ($dTime !== '') ? hafas_iso($dDate, $dTime) : null,
         ];
     }
+
+    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_TRIP);
 
     return $result;
 }

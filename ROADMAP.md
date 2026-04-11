@@ -196,14 +196,15 @@ Periodenumschalter zeigt Altdaten korrekt an.
 
 **Ziel:** Vollständiges Admin-Interface für Betreiber.
 
-- [ ] `admin/index.html` – Login-Formular + Dashboard-Shell
-- [ ] `admin/js/admin.js` – Login/Logout-Flow, Session-State
-- [ ] `admin/js/school_holidays.js` – Tabelle mit CRUD (anlegen, bearbeiten,
+- [x] `admin/index.html` – Login-Formular + Dashboard-Shell mit Tab-Navigation
+- [x] `admin/css/admin.css` – Desktop-first Styling, responsive
+- [x] `admin/js/admin.js` – Login/Logout-Flow, Session-Check, Tab-Router
+- [x] `admin/js/school_holidays.js` – Tabelle mit CRUD (anlegen, inline bearbeiten,
       löschen), Datumsvalidierung
-- [ ] `admin/js/periods.js` – Perioden-Übersicht, Fahrplanschnitt-Button
-      mit Bestätigungsdialog und Warntext, initiale Periode umbenennen
-- [ ] `admin/js/override.js` – Suche nach Fahrt, Kursnummer manuell
-      setzen oder zurücksetzen
+- [x] `admin/js/periods.js` – Perioden-Übersicht, Fahrplanschnitt-Button
+      mit Bestätigungsdialog und Warntext, Periode inline umbenennen/Datum korrigieren
+- [x] `admin/js/override.js` – Fahrten nach Linie/Typ filtern, Kursnummer manuell
+      setzen oder zurücksetzen; aktive Periode wählbar
 
 **Testen:** Fahrplanschnitt durchführen, prüfen dass Erfassungen in
 alter Periode bleiben. Override setzen und in Abfahrtstafel prüfen.
@@ -217,10 +218,15 @@ Ohne Login kein Zugriff auf Admin-Funktionen.
 
 **Ziel:** Produktionsreife.
 
-- [ ] Eingabevalidierung nochmals durchgehen (alle POST/PUT-Endpunkte)
-- [ ] Rate-Limiting prüfen (HAFAS-API: max. 100 req/min beachten)
-- [ ] `.htaccess`: `admin-api/` für Direktzugriff ohne PHP sperren
-- [ ] HTTPS erzwingen (Redirect HTTP → HTTPS)
+- [x] Eingabevalidierung nochmals durchgehen (alle POST/PUT-Endpunkte):
+      Feldlängen (hafasTripId≤512, serviceNr≤20, line≤10, direction≤100, stopId≤20),
+      ISO-8601-Format für departurePlanned/departureActual, Kursnummer-Regex 01–99
+- [x] Rate-Limiting: Filesystem-Cache für HAFAS-Antworten implementiert
+      (nearby 1 Tag, departures 30 s, trip 1 Tag) → weit unter 100 req/min
+- [x] `.htaccess`: Security-Header (CSP, X-Content-Type-Options, X-Frame-Options,
+      Referrer-Policy), sensible Dateitypen gesperrt (.cache, .log, .sql, .sh, .bru),
+      Admin-Bereich mit X-Robots-Tag noindex
+- [x] HTTPS erzwingen: Redirect-Block in `.htaccess` vorbereitet (für Produktivserver aktivieren)
 - [ ] PWA auf verschiedenen Android-Geräten / Chrome-Versionen testen
 - [ ] Ladezeiten prüfen (HAFAS-Proxy-Latenz, DB-Abfragen)
 - [ ] Backup-Konzept für MariaDB klären (Hoster-seitig oder eigenes Skript)
