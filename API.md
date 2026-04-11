@@ -20,7 +20,25 @@ HTTP-Statuscodes: `200 OK`, `201 Created`, `400 Bad Request`,
 
 ---
 
-## 1. HAFAS-Proxy-Endpunkte
+## 1. Frontend-Konfiguration
+
+### GET `/api/config`
+
+Öffentliche Frontend-Konfiguration (keine Authentifizierung erforderlich).
+
+**Erfolg (200):**
+```json
+{
+  "stopNamePrefix": "Magdeburg, "
+}
+```
+
+`stopNamePrefix` ist leer (`""`), wenn in `config.php` kein `stop_name_prefix` gesetzt ist.
+Das Frontend entfernt diesen Präfix vor der Anzeige von Haltestellennamen.
+
+---
+
+## 2. HAFAS-Proxy-Endpunkte
 
 ### GET `/api/nearby`
 
@@ -162,14 +180,14 @@ GET /api/calendar?date=2026-12-25
 ```json
 {
   "date": "2026-12-25",
-  "dayType": "FT",
+  "dayType": "SO",
   "name": "1. Weihnachtstag"
 }
 ```
 
 ---
 
-## 2. Erfassungs-Endpunkte
+## 3. Erfassungs-Endpunkte
 
 ### POST `/api/recordings`
 
@@ -219,7 +237,7 @@ Alle Erfassungen abrufen, optional gefiltert.
 |---|---|---|---|
 | `period_id` | int | nein | Standard: aktive Periode |
 | `line` | string | nein | Filter auf Linie |
-| `day_type` | string | nein | Filter: MO-FR / SA / SO / FT / SF |
+| `day_type` | string | nein | Filter: MO-FR / SA / SO / SF (FT nur in Altdaten) |
 | `date_from` | string | nein | Datumsfilter von (YYYY-MM-DD) |
 | `date_to` | string | nein | Datumsfilter bis (YYYY-MM-DD) |
 
@@ -239,6 +257,7 @@ GET /api/recordings?line=6&day_type=MO-FR
     "serviceNr": "41058",
     "dayType": "MO-FR",
     "serviceDate": "2026-03-24",
+    "stopId": "de:15003:4000",
     "stop": "Magdeburg, Hauptbahnhof",
     "departurePlanned": "2026-03-24T14:32:00Z",
     "departureActual":  "2026-03-24T14:33:00Z",
@@ -248,6 +267,25 @@ GET /api/recordings?line=6&day_type=MO-FR
   }
 ]
 ```
+
+---
+
+### GET `/api/recordings/{id}/route`
+
+Laufweg einer gespeicherten Erfassung (aus `route_stops`-Tabelle).
+Gibt 404 zurück wenn kein Laufweg gespeichert ist (ältere Erfassungen
+ohne HAFAS-Abfrage) oder die Erfassung nicht existiert.
+
+**Beispiel-Response:**
+```json
+[
+  { "sequence": 1,  "stopId": "de:15003:1000", "name": "Magdeburg, Alte Neustadt",    "departurePlanned": "2026-03-24T14:10:00Z", "isRecordingStop": false },
+  { "sequence": 2,  "stopId": "de:15003:4000", "name": "Magdeburg, Hauptbahnhof",     "departurePlanned": "2026-03-24T14:32:00Z", "isRecordingStop": true  },
+  { "sequence": 3,  "stopId": "de:15003:5000", "name": "Magdeburg, Universitätsplatz","departurePlanned": "2026-03-24T14:38:00Z", "isRecordingStop": false }
+]
+```
+
+`departurePlanned` ist `null` beim letzten Halt (nur Ankunft).
 
 ---
 
@@ -308,7 +346,7 @@ Alle Fahrplanperioden auflisten.
 
 ---
 
-## 3. Admin-Endpunkte
+## 4. Admin-Endpunkte
 
 Alle Admin-Endpunkte erfordern eine aktive PHP-Session (Login).
 Ohne gültige Session: HTTP `401 Unauthorized`.

@@ -12,7 +12,7 @@
 import { postRecording } from '../api.js';
 import { formatTime }    from '../utils/format.js';
 import { lineBadgeHtml } from '../utils/lines.js';
-import { escapeHtml }    from '../app.js';
+import { escapeHtml, stripStopPrefix } from '../app.js';
 
 /** Anzahl Schnellbuttons (01–18 laut Spec) */
 const QUICK_COUNT = 18;
@@ -54,7 +54,7 @@ function buildFormHtml(data) {
                 <span class="capture-direction">${escapeHtml(data.direction)}</span>
             </div>
             <div class="text-small text-muted" style="margin-top:4px">
-                ${escapeHtml(data.stopName ?? '')}
+                ${escapeHtml(stripStopPrefix(data.stopName ?? ''))}
                 &nbsp;·&nbsp;
                 Abfahrt ${escapeHtml(time)} Uhr
             </div>

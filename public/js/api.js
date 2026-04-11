@@ -137,6 +137,15 @@ export async function postRecording(data) {
 }
 
 /**
+ * Laufweg einer gespeicherten Erfassung abrufen (aus route_stops).
+ * @param {number} recordingId
+ * @returns {Promise<Array<{sequence:number, stopId:string, name:string, departurePlanned:string|null, isRecordingStop:boolean}>>}
+ */
+export async function getRecordingRoute(recordingId) {
+    return apiFetch(`/api/recordings/${recordingId}/route`);
+}
+
+/**
  * Erfassungen abrufen, optional gefiltert.
  * @param {{
  *   period_id?: number,
@@ -173,6 +182,14 @@ export async function getTrips(periodId) {
  */
 export async function getPeriods() {
     return apiFetch('/api/periods');
+}
+
+/**
+ * Öffentliche Frontend-Konfiguration vom Backend laden.
+ * @returns {Promise<{stopNamePrefix:string}>}
+ */
+export async function getConfig() {
+    return apiFetch('/api/config');
 }
 
 // =============================================================================

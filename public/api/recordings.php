@@ -11,6 +11,15 @@ require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Sub-Pfad erkennen: /api/recordings/{id}/route
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+if (preg_match('#/api/recordings/(\d+)/route$#', $uri, $m)) {
+    if ($method !== 'GET') {
+        json_error('Methode nicht erlaubt', 405);
+    }
+    handle_get_route((int) $m[1]);
+}
+
 if ($method === 'GET') {
     handle_get_recordings();
 } elseif ($method === 'POST') {
@@ -38,7 +47,7 @@ function handle_get_recordings(): never
     }
 
     if (!empty($_GET['day_type'])) {
-        $allowed = ['MO-FR', 'SA', 'SO', 'FT', 'SF'];
+        $allowed = ['MO-FR', 'SA', 'SO', 'SF'];
         if (!in_array($_GET['day_type'], $allowed, true)) {
             json_error('Ungültiger day_type');
         }
@@ -67,6 +76,7 @@ function handle_get_recordings(): never
              t.service_nr,
              t.day_type,
              r.service_date,
+             r.stop_id,
              s.name         AS stop,
              r.departure_planned,
              r.departure_actual,
@@ -102,6 +112,7 @@ function handle_get_recordings(): never
             'serviceNr'          => $row['service_nr'],
             'dayType'            => $row['day_type'],
             'serviceDate'        => $row['service_date'],
+            'stopId'             => $row['stop_id'],
             'stop'               => $row['stop'],
             'departurePlanned'   => mysql_to_iso($row['departure_planned']),
             'departureActual'    => mysql_to_iso($row['departure_actual']),
@@ -310,4 +321,57 @@ function handle_post_recording(): never
         'periodId'    => $periodId,
         'dayType'     => $dayType,
     ], 201);
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/recordings/{id}/route
+// ---------------------------------------------------------------------------
+
+function handle_get_route(int $recordingId): never
+{
+    $pdo = get_db();
+
+    // Prüfen ob Erfassung existiert und stop_id holen
+    $recStmt = $pdo->prepare(
+        'SELECT stop_id FROM ' . tbl('recordings') . ' WHERE id = ?'
+    );
+    $recStmt->execute([$recordingId]);
+    $rec = $recStmt->fetch();
+
+    if (!$rec) {
+        json_error('Erfassung nicht gefunden', 404);
+    }
+
+    $recordingStopId = $rec['stop_id'];
+
+    $stmt = $pdo->prepare(
+        'SELECT
+             rs.sequence,
+             rs.stop_id,
+             st.name              AS stop_name,
+             rs.departure_planned
+         FROM ' . tbl('route_stops') . ' rs
+         JOIN ' . tbl('stops') . ' st ON rs.stop_id = st.hafas_id
+         WHERE rs.recording_id = ?
+         ORDER BY rs.sequence ASC'
+    );
+    $stmt->execute([$recordingId]);
+    $rows = $stmt->fetchAll();
+
+    if (empty($rows)) {
+        json_error('Kein Laufweg gespeichert', 404);
+    }
+
+    $result = [];
+    foreach ($rows as $row) {
+        $result[] = [
+            'sequence'         => (int) $row['sequence'],
+            'stopId'           => $row['stop_id'],
+            'name'             => $row['stop_name'],
+            'departurePlanned' => mysql_to_iso($row['departure_planned']),
+            'isRecordingStop'  => $row['stop_id'] === $recordingStopId,
+        ];
+    }
+
+    json_response($result);
 }

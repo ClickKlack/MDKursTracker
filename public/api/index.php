@@ -11,7 +11,7 @@ $path = preg_replace('#^.*?/api/#', '', $uri);
 $path = strtok(trim($path, '/'), '/'); // erstes Segment, Subpfade ignorieren
 
 // Erlaubte Endpunkte
-$routes = ['nearby', 'departures', 'trip', 'calendar', 'recordings', 'trips', 'periods'];
+$routes = ['nearby', 'departures', 'trip', 'calendar', 'recordings', 'trips', 'periods', 'config'];
 
 if ($path !== false && in_array($path, $routes, true)) {
     require __DIR__ . '/' . $path . '.php';

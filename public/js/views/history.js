@@ -8,10 +8,10 @@
  *  4. Kennzeichnung ob Kursnummer manuell übersteuert
  */
 
-import { getRecordings, getPeriods } from '../api.js';
+import { getRecordings, getPeriods, getRecordingRoute } from '../api.js';
 import { formatTime }                from '../utils/format.js';
 import { lineBadgeHtml }             from '../utils/lines.js';
-import { escapeHtml }                from '../app.js';
+import { escapeHtml, stripStopPrefix } from '../app.js';
 
 const DAY_TYPE_LABELS = {
     'MO-FR': 'Mo–Fr',
@@ -174,6 +174,11 @@ async function loadAndRender(container) {
         <ul class="card-list" role="list" aria-label="Erfassungen">
             ${recordings.map(renderRecordingItem).join('')}
         </ul>`;
+
+    listEl.querySelector('ul').addEventListener('click',   handleRouteToggle);
+    listEl.querySelector('ul').addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRouteToggle(e); }
+    });
 }
 
 // --- Einzelne Erfassung rendern ----------------------------------------------
@@ -207,12 +212,18 @@ function renderRecordingItem(rec) {
         `nach ${rec.direction}`,
         `Kurs ${displayCourse}`,
         isManual ? 'manuell übersteuert' : '',
-        `${dayLabel}, ${date}, Haltestelle ${rec.stop}`,
+        `${dayLabel}, ${date}, Haltestelle ${stripStopPrefix(rec.stop)}`,
         `erfasst ${time} Uhr`,
     ].filter(Boolean).join(', ');
 
     return `
-        <li class="card recording-item" aria-label="${escapeHtml(ariaLabel)}">
+        <li class="card recording-item"
+            role="button"
+            tabindex="0"
+            data-recording-id="${rec.id}"
+            data-stop-id="${escapeHtml(rec.stopId)}"
+            aria-expanded="false"
+            aria-label="${escapeHtml(ariaLabel)}">
             <div class="recording-top">
                 <span class="recording-line">${lineBadgeHtml(rec.line)}</span>
                 <span class="recording-direction">${escapeHtml(rec.direction)}</span>
@@ -222,12 +233,13 @@ function renderRecordingItem(rec) {
                 </span>
             </div>
             <div class="recording-meta text-small text-muted">
-                ${escapeHtml(rec.stop)}
+                ${escapeHtml(stripStopPrefix(rec.stop))}
                 &nbsp;·&nbsp;${escapeHtml(dayLabel)}
                 &nbsp;·&nbsp;${escapeHtml(date)}
                 &nbsp;·&nbsp;${escapeHtml(time)}&nbsp;Uhr
                 ${differsHtml}
             </div>
+            <div class="recording-route" hidden></div>
         </li>`;
 }
 
@@ -250,6 +262,62 @@ function attachListeners(container) {
     container.querySelector('#filter-line')?.addEventListener('input',  debouncedLoad);
     container.querySelector('#filter-daytype')?.addEventListener('change', debouncedLoad);
     container.querySelector('#filter-date')?.addEventListener('change',  debouncedLoad);
+}
+
+// --- Laufweg-Klapp-Logik -----------------------------------------------------
+
+async function handleRouteToggle(e) {
+    const item = e.target.closest('[data-recording-id]');
+    if (!item) return;
+
+    const routeEl     = item.querySelector('.recording-route');
+    const isExpanded  = item.getAttribute('aria-expanded') === 'true';
+
+    if (isExpanded) {
+        // Zuklappen
+        item.setAttribute('aria-expanded', 'false');
+        routeEl.hidden = true;
+        return;
+    }
+
+    // Anderen offenen Laufweg schließen
+    const openItem = item.closest('ul')?.querySelector('[aria-expanded="true"]');
+    if (openItem && openItem !== item) {
+        openItem.setAttribute('aria-expanded', 'false');
+        openItem.querySelector('.recording-route').hidden = true;
+    }
+
+    // Aufklappen
+    item.setAttribute('aria-expanded', 'true');
+    routeEl.hidden   = false;
+    routeEl.innerHTML = `<div class="route-loading"><span class="spinner-small" aria-hidden="true"></span> Laufweg wird geladen…</div>`;
+
+    const recordingId = parseInt(item.dataset.recordingId, 10);
+
+    let stops;
+    try {
+        stops = await getRecordingRoute(recordingId);
+    } catch (err) {
+        routeEl.innerHTML = `<p class="route-error">${escapeHtml(err.message)}</p>`;
+        return;
+    }
+
+    routeEl.innerHTML = renderRouteList(stops);
+}
+
+function renderRouteList(stops) {
+    const rows = stops.map(s => {
+        const time = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
+        const cls  = s.isRecordingStop ? ' route-stop--recording' : '';
+        return `
+            <li class="route-stop${cls}">
+                <span class="route-stop-time">${escapeHtml(time)}</span>
+                <span class="route-stop-name">${escapeHtml(stripStopPrefix(s.name))}</span>
+                ${s.isRecordingStop ? '<span class="route-stop-marker" aria-label="Erfassungshaltestelle">●</span>' : ''}
+            </li>`;
+    }).join('');
+
+    return `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
 }
 
 // --- Hilfsfunktionen ---------------------------------------------------------

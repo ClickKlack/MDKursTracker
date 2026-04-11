@@ -13,7 +13,7 @@ import { apiFetch, escHtml, showMessage } from './admin.js';
 const DAY_LABELS = {
     'MO-FR': 'Mo–Fr',
     'SA':    'Sa',
-    'SO':    'So/FT',
+    'SO':    'So/Feiertag',
     'SF':    'SF',
 };
 

@@ -1,0 +1,23 @@
+meta {
+  name: Config – Frontend-Konfiguration
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{baseUrl}}/api/config
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.stopNamePrefix: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const prefix = res.body.stopNamePrefix;
+    console.log("stopNamePrefix:", prefix ? `"${prefix}"` : "(leer)");
+  }
+}

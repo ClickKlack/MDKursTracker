@@ -8,9 +8,9 @@
  *  4. Tap auf Haltestelle → #departures?stopId=…&stopName=…
  */
 
-import { getNearby }          from '../api.js';
-import { getCurrentPosition } from '../utils/geolocation.js';
-import { escapeHtml }         from '../app.js';
+import { getNearby }             from '../api.js';
+import { getCurrentPosition }    from '../utils/geolocation.js';
+import { escapeHtml, stripStopPrefix } from '../app.js';
 
 export async function render(container, params, context) {
     showLoading(container, 'GPS-Position wird ermittelt…',
@@ -63,8 +63,8 @@ export async function render(container, params, context) {
                     tabindex="0"
                     data-stop-id="${escapeHtml(stop.id)}"
                     data-stop-name="${escapeHtml(stop.name)}"
-                    aria-label="${escapeHtml(stop.name)}, ${formatDistance(stop.distance)}">
-                    <span class="stop-name">${escapeHtml(stop.name)}</span>
+                    aria-label="${escapeHtml(stripStopPrefix(stop.name))}, ${formatDistance(stop.distance)}">
+                    <span class="stop-name">${escapeHtml(stripStopPrefix(stop.name))}</span>
                     <span class="stop-distance">${formatDistance(stop.distance)}</span>
                 </li>`
             ).join('')}

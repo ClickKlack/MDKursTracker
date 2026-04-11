@@ -8,8 +8,8 @@
  *
  * Rückgabewerte: 'MO-FR' | 'SA' | 'SO' | 'SF'
  *
- * Hinweis: Feiertage fahren nach Sonntagsfahrplan → Rückgabe 'SO'.
- * 'FT' ist im DB-ENUM noch vorhanden, wird aber nicht mehr neu vergeben.
+ * Feiertage (Sachsen-Anhalt) werden als 'SO' behandelt, da sie nach
+ * Sonntagsfahrplan fahren und gemeinsam mit Sonntagen ausgewertet werden.
  */
 function getDayType(DateTimeInterface $date, PDO $db): string
 {

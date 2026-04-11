@@ -8,7 +8,7 @@
  *  - View-Lifecycle verwalten (render / destroy)
  */
 
-import { getPeriods } from './api.js';
+import { getPeriods, getConfig } from './api.js';
 
 // =============================================================================
 // Globaler State
@@ -19,6 +19,22 @@ export let activePeriod = null;
 
 /** Aktuell geladene Haltestelle für den Übergang Nearby → Departures */
 export let activeStop = null;
+
+/** Haltestellenpräfix, der in der Anzeige entfernt wird (z.B. "Magdeburg, ") */
+let stopNamePrefix = '';
+
+/**
+ * Entfernt den konfigurierten Präfix aus einem Haltestellennamen.
+ * Beispiel: "Magdeburg, ZOB/Adelheidring" → "ZOB/Adelheidring"
+ * @param {string} name
+ * @returns {string}
+ */
+export function stripStopPrefix(name) {
+    if (stopNamePrefix && String(name).startsWith(stopNamePrefix)) {
+        return name.slice(stopNamePrefix.length);
+    }
+    return name;
+}
 
 // =============================================================================
 // View-Definitionen
@@ -191,12 +207,20 @@ export function escapeHtml(str) {
 // Einstiegspunkt
 // =============================================================================
 
+async function loadConfig() {
+    try {
+        const cfg = await getConfig();
+        stopNamePrefix = cfg.stopNamePrefix ?? '';
+    } catch (err) {
+        console.warn('Frontend-Config konnte nicht geladen werden:', err);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     registerServiceWorker();
 
-    // Aktive Periode laden (parallel zum ersten Route-Render möglich,
-    // aber Views benötigen sie – daher await)
-    await loadActivePeriod();
+    // Config und Periode parallel laden – beide werden vor dem ersten Render benötigt
+    await Promise.all([loadConfig(), loadActivePeriod()]);
 
     // Router-Events
     window.addEventListener('hashchange', handleRouteChange);

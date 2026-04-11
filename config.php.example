@@ -33,6 +33,10 @@ return [
     // Beispiel: 'db_prefix' => 'trammd_'  →  Tabellen: trammd_trips, trammd_recordings, …
     // 'db_prefix' => '',
 
+    // Haltestellenpräfix, der in der Anzeige entfernt wird (optional; Standard: kein Präfix).
+    // Beispiel: 'stop_name_prefix' => 'Magdeburg, '  →  "Magdeburg, ZOB/Adelheidring" → "ZOB/Adelheidring"
+    // 'stop_name_prefix' => 'Magdeburg, ',
+
     // HAFAS-Cache-Verzeichnis (optional; Standard: <projektroot>/cache/hafas/)
     // Muss außerhalb des Webroots liegen und für den Webserver-Prozess schreibbar sein.
     // 'cache_dir' => '/var/cache/mdkurstracker/hafas',

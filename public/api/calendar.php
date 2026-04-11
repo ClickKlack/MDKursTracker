@@ -2,7 +2,7 @@
 // GET /api/calendar – Wochentagstyp für ein konkretes Datum.
 // Parameter: date (string YYYY-MM-DD, Pflicht)
 // Antwort: { date, dayType, name }
-//   name = Feiertagsname (FT), Schulferienname (SF) oder null
+//   name = Feiertagsname (SO bei Feiertag), Schulferienname (SF) oder null
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/lib/response.php';
@@ -29,8 +29,9 @@ $pdo     = get_db();
 $dayType = getDayType($date, $pdo);
 
 // Bezeichnung je nach Typ ermitteln
+// Bei SO: Feiertagsname wenn es ein Feiertag ist, sonst null
 $name = match ($dayType) {
-    'FT' => get_public_holiday_name($date),
+    'SO' => get_public_holiday_name($date),
     'SF' => get_school_holiday_name($date, $pdo),
     default => null,
 };

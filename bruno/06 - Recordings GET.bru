@@ -29,6 +29,8 @@ script:post-response {
     if (res.body.length > 0) {
       const r = res.body[0];
       console.log("Neueste:", r.line, "→", r.direction, "| Kurs:", r.courseNumber, "| Aktiv:", r.activeCourseNumber);
+      console.log("stopId vorhanden:", r.stopId !== undefined);
+      bru.setVar("lastRecordingId", r.id);
     }
   }
 }

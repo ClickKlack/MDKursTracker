@@ -1,0 +1,38 @@
+meta {
+  name: Recordings Route GET – Laufweg einer Erfassung
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/recordings/{{lastRecordingId}}/route
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+  res.body[0].sequence: isDefined
+  res.body[0].stopId: isDefined
+  res.body[0].name: isDefined
+  res.body[0].departurePlanned: isDefined
+  res.body[0].isRecordingStop: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const total    = res.body.length;
+    const recStop  = res.body.find(s => s.isRecordingStop);
+    console.log(`Laufweg: ${total} Halte`);
+    if (recStop) {
+      console.log(`Erfassungshalt: [${recStop.sequence}] ${recStop.name} – ${recStop.departurePlanned}`);
+    }
+  }
+}
+
+docs {
+  Benötigt lastRecordingId aus "06 - Recordings GET" (wird dort per bru.setVar gesetzt).
+  Gibt die gespeicherten route_stops einer Erfassung zurück.
+  404 wenn kein Laufweg gespeichert oder Erfassung nicht gefunden.
+}

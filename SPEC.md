@@ -104,9 +104,12 @@ Jede logische Fahrt gehört zu einem Wochentagstyp:
 |---|---|
 | `MO-FR` | Montag–Freitag, kein Feiertag, kein Schulferientag |
 | `SA` | Samstag |
-| `SO` | Sonntag |
-| `FT` | Gesetzlicher Feiertag Sachsen-Anhalt |
+| `SO` | Sonntag **und gesetzliche Feiertage** (Sachsen-Anhalt) |
 | `SF` | Schulferientag Sachsen-Anhalt (Mo–Fr, kein Feiertag) |
+
+Feiertage werden als `SO` behandelt, da sie nach Sonntagsfahrplan fahren
+und gemeinsam mit Sonntagen ausgewertet werden. Der Typ `FT` existiert noch
+im DB-ENUM (für Altdaten), wird aber nicht mehr neu vergeben.
 
 **Feiertage Sachsen-Anhalt** sind im PHP-Backend fest hinterlegt (inkl.
 Reformationstag 31.10., Weltfriedenstag 08.05.).
@@ -220,7 +223,7 @@ Die aktive Periode ist immer diejenige mit dem höchsten `id`-Wert.
 | `period_id` | INT NOT NULL FK | → `schedule_periods.id` |
 | `service_nr` | VARCHAR(20) NOT NULL | HAFAS fahrtNr |
 | `line` | VARCHAR(10) NOT NULL | Linienbezeichnung (z.B. „6") |
-| `day_type` | ENUM('MO-FR','SA','SO','FT','SF') NOT NULL | Kalendertyp |
+| `day_type` | ENUM('MO-FR','SA','SO','FT','SF') NOT NULL | Kalendertyp (FT nur in Altdaten, neu immer SO) |
 | `direction` | VARCHAR(100) NOT NULL | Zielhaltestellenname |
 | `manual_course_number` | CHAR(2) NULL | Manuelle Übersteuerung (NULL = keine) |
 

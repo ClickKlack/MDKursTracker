@@ -12,7 +12,7 @@
 import { getDepartures }                          from '../api.js';
 import { formatTime, calcDelay, getServiceDate }  from '../utils/format.js';
 import { lineBadgeHtml }                          from '../utils/lines.js';
-import { escapeHtml }                             from '../app.js';
+import { escapeHtml, stripStopPrefix }            from '../app.js';
 
 /** Laufender Auto-Refresh-Timer */
 let refreshTimer = null;
@@ -34,10 +34,10 @@ export async function render(container, params, context) {
         return;
     }
 
-    // Stop-Name als View-Titel im Header anzeigen
+    // Stop-Name als View-Titel im Header anzeigen (Präfix entfernen)
     const titleEl = document.getElementById('view-title');
     if (titleEl && currentStopName) {
-        titleEl.textContent = currentStopName;
+        titleEl.textContent = stripStopPrefix(currentStopName);
     }
 
     await loadAndRender(container, /* quiet= */ false);
