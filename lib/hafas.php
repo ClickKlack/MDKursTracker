@@ -155,10 +155,10 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
             continue;
         }
 
-        // Linienname: ZB#-Feld aus der jid ist zuverlässiger als prodX
-        // (HAFAS-Datenfehler: prodX zeigt manchmal auf falsche Linie, z.B. Str 13 → prodX von Str 2)
-        $lineFromJid = hafas_line_from_jid($jny['jid']);
-        $lineName    = $lineFromJid !== '' ? $lineFromJid : hafas_line_name($prod['name'] ?? '');
+        // Linienname aus prodX – dieser beschreibt das Produkt ab diesem Halt.
+        // Bei durchgebundenen Fahrten (Linienübergang mid-route) weicht ZB# in der jid
+        // davon ab (zeigt die Linie beim Startpunkt der Fahrt) → prodX ist maßgeblich.
+        $lineName = hafas_line_name($prod['name'] ?? '');
 
         $plannedDate  = $stbStop['dDateS'] ?? ($jny['date'] ?? '');
         $plannedTime  = $stbStop['dTimeS'] ?? '';
@@ -523,8 +523,10 @@ function hafas_line_name(string $name): string
  * Extrahiert die Linienbezeichnung aus dem ZB#-Feld einer HAFAS-jid (neues Format 2|#VN#...).
  * Gibt '' zurück wenn das Feld fehlt (z.B. altes jid-Format 1|...).
  *
- * Hintergrund: Im StationBoard kann jny.prodX auf einen falschen Produkt-Eintrag zeigen
- * (bekannter HAFAS-Datenfehler bei MVB), während ZB# in der jid stets korrekt ist.
+ * Hinweis: Bei durchgebundenen Fahrten (Linienübergang mid-route) zeigt ZB# die Linie
+ * beim Startpunkt der Gesamtfahrt, nicht die ab dem abgefragten Halt aktive Linie.
+ * Für die Abfahrtstafel ist prodX zuverlässiger; diese Funktion eignet sich für Kontexte,
+ * in denen die ursprüngliche Fahrtbezeichnung benötigt wird.
  * Beispiel: "...#ZB#Str   13#..." → "13"
  */
 function hafas_line_from_jid(string $jid): string
