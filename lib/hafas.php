@@ -15,7 +15,10 @@ function hafas_config(): array
 {
     static $config = null;
     if ($config === null) {
-        $config = require dirname(__DIR__) . '/config.php';
+        $file   = getenv('APP_ENV') === 'test'
+            ? dirname(__DIR__) . '/config.test.php'
+            : dirname(__DIR__) . '/config.php';
+        $config = require $file;
     }
     return $config;
 }
@@ -294,7 +297,7 @@ function hafas_trip(string $tripId): array
     foreach ($stops as $i => $stop) {
         $loc = $locList[$stop['locX']] ?? [];
 
-        // Abfahrtszeit bevorzugen; letzter Halt hat nur Ankunft.
+        // Planzeit bevorzugen; letzter Halt hat nur Ankunft.
         // Datum und Zeit werden immer als Paar aus derselben Quelle geholt.
         if (isset($stop['dTimeS'])) {
             $dDate = $stop['dDateS'] ?? $jnyDate;
@@ -307,11 +310,24 @@ function hafas_trip(string $tripId): array
             $dTime = '';
         }
 
+        // Echtzeit-Abfahrtszeit (dTimeR) bzw. Echtzeit-Ankunft (aTimeR) am letzten Halt
+        if (isset($stop['dTimeR'])) {
+            $rDate = $stop['dDateR'] ?? $jnyDate;
+            $rTime = $stop['dTimeR'];
+        } elseif (isset($stop['aTimeR'])) {
+            $rDate = $stop['aDateR'] ?? $jnyDate;
+            $rTime = $stop['aTimeR'];
+        } else {
+            $rDate = $jnyDate;
+            $rTime = '';
+        }
+
         $result[] = [
             'sequence'         => $i + 1,
             'stopId'           => $loc['extId'] ?? '',
             'stop'             => $loc['name'] ?? '',
             'departurePlanned' => ($dTime !== '') ? hafas_iso($dDate, $dTime) : null,
+            'departureActual'  => ($rTime !== '') ? hafas_iso($rDate, $rTime) : null,
             'line'             => $lineForIdx($i, $stop),
         ];
     }

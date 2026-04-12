@@ -184,10 +184,11 @@ async function loadAndRender(container) {
 // --- Einzelne Erfassung rendern ----------------------------------------------
 
 function renderRecordingItem(rec) {
-    const isManual = rec.manualCourseNumber !== null;
-    const time     = rec.recordedAt  ? formatTime(rec.recordedAt)    : '–';
-    const date     = rec.serviceDate ? formatDateShort(rec.serviceDate) : '–';
-    const dayLabel = DAY_TYPE_LABELS[rec.dayType] ?? rec.dayType;
+    const isManual  = rec.manualCourseNumber !== null;
+    const planTime  = rec.departurePlanned ? formatTime(rec.departurePlanned) : '–';
+    const time      = rec.recordedAt  ? formatTime(rec.recordedAt)    : '–';
+    const date      = rec.serviceDate ? formatDateShort(rec.serviceDate) : '–';
+    const dayLabel  = DAY_TYPE_LABELS[rec.dayType] ?? rec.dayType;
 
     // Anzuzeigende Kursnummer: manuelle Übersteuerung hat Vorrang
     const displayCourse = rec.manualCourseNumber ?? rec.courseNumber;
@@ -212,7 +213,7 @@ function renderRecordingItem(rec) {
         `nach ${rec.direction}`,
         `Kurs ${displayCourse}`,
         isManual ? 'manuell übersteuert' : '',
-        `${dayLabel}, ${date}, Haltestelle ${stripStopPrefix(rec.stop)}`,
+        `${dayLabel}, ${date}, Planabfahrt ${planTime} Uhr, Haltestelle ${stripStopPrefix(rec.stop)}`,
         `erfasst ${time} Uhr`,
     ].filter(Boolean).join(', ');
 
@@ -235,8 +236,8 @@ function renderRecordingItem(rec) {
             <div class="recording-meta text-small text-muted">
                 ${escapeHtml(stripStopPrefix(rec.stop))}
                 &nbsp;·&nbsp;${escapeHtml(dayLabel)}
-                &nbsp;·&nbsp;${escapeHtml(date)}
-                &nbsp;·&nbsp;${escapeHtml(time)}&nbsp;Uhr
+                &nbsp;·&nbsp;${escapeHtml(planTime)}&nbsp;Uhr
+                <br>erfasst:&nbsp;${escapeHtml(date)}&nbsp;·&nbsp;${escapeHtml(time)}&nbsp;Uhr
                 ${differsHtml}
             </div>
             <div class="recording-route" hidden></div>
@@ -306,16 +307,21 @@ async function handleRouteToggle(e) {
 }
 
 function renderRouteList(stops) {
+    // Prüfen ob der Laufweg überhaupt einen Linienwechsel enthält
+    const knownLines = stops.map(s => s.line).filter(l => l != null);
+    const hasLineChange = new Set(knownLines).size > 1;
+
     let prevLine = null;
     const rows = stops.map(s => {
         const time = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
         const cls  = s.isRecordingStop ? ' route-stop--recording' : '';
 
-        // Linienwechsel-Trenner: nur wenn beide Linien bekannt und verschieden
+        // Linienwechsel-Trenner: bei jedem Linienwechsel inkl. erstem Abschnitt,
+        // aber nur wenn der Laufweg tatsächlich mehrere Linien enthält
         let lineChangeSep = '';
-        if (s.line != null && prevLine != null && s.line !== prevLine) {
+        if (hasLineChange && s.line != null && s.line !== prevLine) {
             lineChangeSep = `
-            <li class="route-line-change" aria-label="Linienwechsel zu Linie ${escapeHtml(s.line)}">
+            <li class="route-line-change" aria-label="Linie ${escapeHtml(s.line)} ab hier">
                 <span class="route-line-change-label">Linie</span>
                 ${lineBadgeHtml(s.line)}
                 <span class="route-line-change-label">ab hier</span>

@@ -310,17 +310,17 @@ body {
     width: 100%;
 }
 
-/* --- Kurs-Schnellbuttons (Phase 7) ---------------------------------------- */
+/* --- Kurs-Schnellbuttons --------------------------------------------------- */
 .course-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
 }
 
 .course-btn {
     aspect-ratio: 1;
     font-family: var(--font-mono);
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     border: 2px solid var(--color-primary-light);
     border-radius: var(--radius-sm);
@@ -448,6 +448,11 @@ body {
 
 .time-ontime {
     color: var(--color-success);
+}
+
+.time-early {
+    color: var(--color-known-course); /* dunkelgrün */
+    font-weight: 600;
 }
 
 /* --- Hilfsklassen --------------------------------------------------------- */
@@ -722,8 +727,15 @@ body {
 .route-stop-time {
     flex-shrink: 0;
     width: 3.6em;
-    text-align: right;
+    text-align: left;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.route-stop-delay {
+    flex-shrink: 0;
+    width: 2.8em;
+    white-space: nowrap;
 }
 
 .route-stop-name {

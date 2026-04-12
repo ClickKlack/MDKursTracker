@@ -40,12 +40,12 @@ export function formatDate(isoString) {
  * Verspätung in Minuten berechnen.
  * @param {string} planned   ISO UTC (planmäßige Abfahrt)
  * @param {string|null} actual  ISO UTC (Echtzeit-Abfahrt)
- * @returns {number|null}  Positive Zahl = Verspätung in Minuten; null = pünktlich oder kein Istwert
+ * @returns {number|null}  Positive Zahl = Verspätung, negative Zahl = zu früh; null = pünktlich oder kein Istwert
  */
 export function calcDelay(planned, actual) {
     if (!actual || !planned) return null;
     const diff = Math.round((new Date(actual) - new Date(planned)) / 60_000);
-    return diff > 0 ? diff : null;
+    return diff !== 0 ? diff : null;
 }
 
 /**

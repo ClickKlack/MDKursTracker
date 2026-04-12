@@ -332,9 +332,9 @@ function handle_get_route(int $recordingId): never
 {
     $pdo = get_db();
 
-    // Prüfen ob Erfassung existiert und stop_id holen
+    // Prüfen ob Erfassung existiert, stop_id und departure_planned holen
     $recStmt = $pdo->prepare(
-        'SELECT stop_id FROM ' . tbl('recordings') . ' WHERE id = ?'
+        'SELECT stop_id, departure_planned FROM ' . tbl('recordings') . ' WHERE id = ?'
     );
     $recStmt->execute([$recordingId]);
     $rec = $recStmt->fetch();
@@ -343,7 +343,8 @@ function handle_get_route(int $recordingId): never
         json_error('Erfassung nicht gefunden', 404);
     }
 
-    $recordingStopId = $rec['stop_id'];
+    $recordingStopId          = $rec['stop_id'];
+    $recordingDeparturePlanned = $rec['departure_planned']; // MySQL-Datetime-String
 
     $stmt = $pdo->prepare(
         'SELECT
@@ -371,7 +372,10 @@ function handle_get_route(int $recordingId): never
             'stopId'           => $row['stop_id'],
             'name'             => $row['stop_name'],
             'departurePlanned' => mysql_to_iso($row['departure_planned']),
-            'isRecordingStop'  => $row['stop_id'] === $recordingStopId,
+            // Bei doppelt durchfahrenen Haltestellen (Linienwechsel) auch
+            // departure_planned abgleichen um den richtigen Halt zu markieren.
+            'isRecordingStop'  => $row['stop_id'] === $recordingStopId
+                && $row['departure_planned'] === $recordingDeparturePlanned,
             'line'             => $row['line'],
         ];
     }

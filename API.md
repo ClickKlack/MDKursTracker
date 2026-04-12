@@ -149,7 +149,9 @@ GET /api/trip?tripId=1|12345|0|80|24032026
     "sequence": 1,
     "stopId": "de:15003:3900",
     "stop": "Magdeburg, Westerhüsen",
-    "departurePlanned": "2026-03-24T14:10:00Z"
+    "departurePlanned": "2026-03-24T14:10:00Z",
+    "departureActual": "2026-03-24T14:11:00Z",
+    "line": "1"
   },
   {
     "sequence": 2,

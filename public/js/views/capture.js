@@ -9,13 +9,13 @@
  *  5. Rückkehr zur Abfahrtstafel (#departures), die frische Daten lädt
  */
 
-import { postRecording } from '../api.js';
-import { formatTime }    from '../utils/format.js';
-import { lineBadgeHtml } from '../utils/lines.js';
+import { postRecording, getTrip } from '../api.js';
+import { formatTime, calcDelay }   from '../utils/format.js';
+import { lineBadgeHtml }           from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix } from '../app.js';
 
-/** Anzahl Schnellbuttons (01–18 laut Spec) */
-const QUICK_COUNT = 18;
+/** Anzahl Schnellbuttons (01–40, 5 Zeilen à 8) */
+const QUICK_COUNT = 40;
 
 export async function render(container, params, context) {
     // Daten aus sessionStorage lesen
@@ -36,6 +36,9 @@ export async function render(container, params, context) {
 
     container.innerHTML = buildFormHtml(data);
     attachListeners(container, data);
+
+    // Fahrtverlauf asynchron nachladen
+    loadTripRoute(container, data);
 }
 
 export function destroy() {
@@ -84,7 +87,15 @@ function buildFormHtml(data) {
             Erfassen
         </button>
 
-        <div id="capture-feedback" aria-live="polite"></div>`;
+        <div id="capture-feedback" aria-live="polite"></div>
+
+        <div class="capture-divider"></div>
+
+        <div id="capture-route">
+            <div class="route-loading">
+                <span class="spinner-small" aria-hidden="true"></span> Laufweg wird geladen…
+            </div>
+        </div>`;
 }
 
 function buildQuickButtons() {
@@ -161,6 +172,82 @@ function attachListeners(container, data) {
             btnSub.click();
         }
     });
+}
+
+// --- Fahrtverlauf laden & rendern --------------------------------------------
+
+async function loadTripRoute(container, data) {
+    const routeEl = container.querySelector('#capture-route');
+    if (!routeEl) return;
+
+    let stops;
+    try {
+        stops = await getTrip(data.hafasTripId);
+    } catch (err) {
+        routeEl.innerHTML = `<p class="route-error">${escapeHtml(err.message)}</p>`;
+        return;
+    }
+
+    if (!stops || stops.length === 0) {
+        routeEl.innerHTML = '';
+        return;
+    }
+
+    // Erfassungshaltestelle ermitteln: ID + Planzeit
+    const planTime = data.departurePlanned ? data.departurePlanned.slice(11, 16) : null; // "HH:MM"
+    const recordingStopIdx = stops.findIndex(s => {
+        if (s.stopId === data.stopId) return true;
+        // Zeitabgleich als Fallback (unterschiedliche ID-Formate)
+        if (planTime && s.departurePlanned) {
+            return s.departurePlanned.slice(11, 16) === planTime;
+        }
+        return false;
+    });
+
+    const knownLines = stops.map(s => s.line).filter(l => l != null);
+    const hasLineChange = new Set(knownLines).size > 1;
+
+    let prevLine = null;
+    const rows = stops.map((s, idx) => {
+        const time     = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
+        const isStop   = idx === recordingStopIdx;
+        const cls      = isStop ? ' route-stop--recording' : '';
+
+        const delay    = calcDelay(s.departurePlanned, s.departureActual);
+        const isLate   = delay !== null && delay > 0;
+        const isEarly  = delay !== null && delay < 0;
+        let delayHtml  = '';
+        if (isLate) {
+            delayHtml = ` <span class="dep-delay time-delayed">+${delay}</span>`;
+        } else if (isEarly) {
+            delayHtml = ` <span class="dep-delay time-early">−${Math.abs(delay)}</span>`;
+        }
+
+        let lineChangeSep = '';
+        if (hasLineChange && s.line != null && s.line !== prevLine) {
+            lineChangeSep = `
+            <li class="route-line-change" aria-label="Linie ${escapeHtml(s.line)} ab hier">
+                <span class="route-line-change-label">Linie</span>
+                ${lineBadgeHtml(s.line)}
+                <span class="route-line-change-label">ab hier</span>
+            </li>`;
+        }
+        if (s.line != null) prevLine = s.line;
+
+        return lineChangeSep + `
+            <li class="route-stop${cls}">
+                <span class="route-stop-time">${escapeHtml(time)}</span>
+                <span class="route-stop-delay">${delayHtml}</span>
+                <span class="route-stop-name">${escapeHtml(stripStopPrefix(s.stop))}</span>
+                ${isStop ? '<span class="route-stop-marker" aria-label="Erfassungshaltestelle">●</span>' : ''}
+            </li>`;
+    }).join('');
+
+    routeEl.innerHTML = `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
+
+    // Erfassungshaltestelle in den sichtbaren Bereich scrollen
+    const marker = routeEl.querySelector('.route-stop--recording');
+    if (marker) marker.scrollIntoView({ block: 'nearest' });
 }
 
 /** Schnellbutton-Hervorhebung setzen. nr = null → alle deselektiert. */

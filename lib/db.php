@@ -14,7 +14,10 @@ function tbl(string $name): string
 {
     static $prefix = null;
     if ($prefix === null) {
-        $config = require dirname(__DIR__) . '/config.php';
+        $file   = getenv('APP_ENV') === 'test'
+            ? dirname(__DIR__) . '/config.test.php'
+            : dirname(__DIR__) . '/config.php';
+        $config = require $file;
         $prefix = $config['db_prefix'] ?? '';
     }
     return $prefix . $name;

@@ -145,16 +145,26 @@ async function loadAndRender(container, quiet) {
 
 function renderDepartureItem(dep, idx) {
     const planned  = formatTime(dep.departurePlanned);
-    const delay    = calcDelay(dep.departurePlanned, dep.departureActual);
+    const delay     = calcDelay(dep.departurePlanned, dep.departureActual);
     const isDelayed = delay !== null && delay > 0;
+    const isEarly   = delay !== null && delay < 0;
 
-    // Zeitanzeige: Sollzeit + ggf. Verspätung
-    const timeHtml = isDelayed
-        ? `<span class="dep-time">${escapeHtml(planned)}</span>
+    // Zeitanzeige: Sollzeit + ggf. Verspätung oder Frühfahrt
+    let timeHtml;
+    if (isDelayed) {
+        timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
            <span class="dep-delay time-delayed" aria-label="Verspätung ${delay} Minute${delay !== 1 ? 'n' : ''}">
                +${delay}
-           </span>`
-        : `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
+           </span>`;
+    } else if (isEarly) {
+        const absDelay = Math.abs(delay);
+        timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
+           <span class="dep-delay time-early" aria-label="${absDelay} Minute${absDelay !== 1 ? 'n' : ''} zu früh">
+               −${absDelay}
+           </span>`;
+    } else {
+        timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
+    }
 
     // Kursnummer-Badge
     let courseHtml;
@@ -176,7 +186,7 @@ function renderDepartureItem(dep, idx) {
         `Linie ${dep.line}`,
         `nach ${dep.direction}`,
         `ab ${planned}`,
-        isDelayed ? `+${delay} Min. Verspätung` : 'pünktlich',
+        isDelayed ? `+${delay} Min. Verspätung` : isEarly ? `${Math.abs(delay)} Min. zu früh` : 'pünktlich',
         dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt',
     ].join(', ');
 
