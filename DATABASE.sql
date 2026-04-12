@@ -139,6 +139,26 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%hafas_log
+-- Protokolliert echte HAFAS-API-Aufrufe (keine Cache-Hits).
+-- Aktivierung: 'hafas_logging' => true in config.php
+-- Bereinigung: rollierende 7 Tage, lazy mit 2 % Wahrscheinlichkeit.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%hafas_log` (
+    `id`          BIGINT      NOT NULL AUTO_INCREMENT,
+    `logged_at`   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
+    `endpoint`    ENUM('nearby','departures','trip') NOT NULL,
+    `http_status` SMALLINT    NOT NULL,
+    `duration_ms` SMALLINT    UNSIGNED NOT NULL,
+    `cache_hit`   TINYINT(1)  NOT NULL DEFAULT 0,
+    `retry_after` SMALLINT    UNSIGNED NULL COMMENT 'Sekunden aus Retry-After-Header, falls vorhanden',
+    `params`      JSON                 NULL COMMENT 'Fachliche Anfrageparameter (lat/lon, stopId, tripId)',
+    PRIMARY KEY (`id`),
+    KEY `idx_%%PREFIX%%hafas_log_logged_at` (`logged_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================

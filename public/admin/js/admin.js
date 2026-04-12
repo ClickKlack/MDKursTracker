@@ -11,6 +11,7 @@
 import { renderSchoolHolidays } from './school_holidays.js';
 import { renderPeriods }        from './periods.js';
 import { renderOverride }       from './override.js';
+import { renderHafasLog }       from './hafas_log.js';
 
 // =============================================================================
 // API-Helfer (Admin-Kontext; nutzt dieselben Fetch-Konventionen wie api.js)
@@ -91,6 +92,7 @@ const TABS = {
     'school-holidays': renderSchoolHolidays,
     'periods':         renderPeriods,
     'override':        renderOverride,
+    'hafas-log':       renderHafasLog,
 };
 
 let activeTab = 'school-holidays';

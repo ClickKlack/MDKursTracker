@@ -34,6 +34,7 @@ $routes = [
     'logout'          => 'logout.php',
     'school-holidays' => 'school_holidays.php',
     'periods'         => 'periods.php',
+    'hafas-log'       => 'hafas_log.php',
 ];
 
 if ($resource !== '' && isset($routes[$resource])) {

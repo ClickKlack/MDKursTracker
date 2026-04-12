@@ -31,7 +31,9 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
     // Innerhalb dieses Rasters sind die nächsten Tramhaltestellen identisch.
     $cacheKey = hafas_cache_key('nearby', round($lat, 3), round($lon, 3), $results);
     $cached   = hafas_cache_get($cacheKey);
+    $logParams = ['lat' => round($lat, 3), 'lon' => round($lon, 3), 'results' => $results];
     if ($cached !== null) {
+        hafas_log_write([['meth' => 'LocGeoPos']], 200, 0, [], true, $logParams);
         return $cached;
     }
 
@@ -49,7 +51,7 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
                 'maxLoc'   => $results * 3, // mehr anfordern, da wir filtern
             ],
         ],
-    ]);
+    ], $logParams);
 
     $stops = $res[0]['res']['common']['locL'] ?? [];
 
@@ -97,7 +99,9 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
     // aber identische Anfragen im selben Intervall treffen HAFAS nur einmal.
     $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes);
     $cached   = hafas_cache_get($cacheKey);
+    $logParams = ['stopId' => $stopId, 'results' => $results];
     if ($cached !== null) {
+        hafas_log_write([['meth' => 'StationBoard']], 200, 0, [], true, $logParams);
         return $cached;
     }
 
@@ -117,7 +121,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         $req['dur'] = $maxMinutes;
     }
 
-    $res = hafas_request([['meth' => 'StationBoard', 'req' => $req]]);
+    $res = hafas_request([['meth' => 'StationBoard', 'req' => $req]], $logParams);
 
     $common   = $res[0]['res']['common'] ?? [];
     $prodList = $common['prodL'] ?? [];
@@ -166,7 +170,9 @@ function hafas_trip(string $tripId): array
     // Der tripId enthält das Datum, daher ist der Schlüssel tagesgebunden.
     $cacheKey = hafas_cache_key('trip', $tripId);
     $cached   = hafas_cache_get($cacheKey);
+    $logParams = ['tripId' => $tripId];
     if ($cached !== null) {
+        hafas_log_write([['meth' => 'JourneyDetails']], 200, 0, [], true, $logParams);
         return $cached;
     }
 
@@ -188,7 +194,7 @@ function hafas_trip(string $tripId): array
         }
     }
 
-    $res = hafas_request([['meth' => 'JourneyDetails', 'req' => $req]]);
+    $res = hafas_request([['meth' => 'JourneyDetails', 'req' => $req]], $logParams);
 
     $common  = $res[0]['res']['common'] ?? [];
     $locList = $common['locL'] ?? [];
@@ -237,10 +243,11 @@ function hafas_trip(string $tripId): array
  * Sendet einen HAFAS-mgate-Request und gibt die normalisierten Ergebnisse zurück.
  *
  * @param  array<mixed> $services  Array von svcReqL-Einträgen
+ * @param  array        $params    Fachliche Parameter für das Log (lat/lon, stopId, tripId)
  * @return array<mixed>            Array von svcResL-Einträgen
  * @throws RuntimeException        Bei HTTP- oder HAFAS-Fehler
  */
-function hafas_request(array $services): array
+function hafas_request(array $services, array $params = []): array
 {
     $cfg  = hafas_config();
     $body = json_encode([
@@ -258,14 +265,28 @@ function hafas_request(array $services): array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 10,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_USERAGENT      => 'MDKursTracker/1.0 (https://codeberg.org/ClickKlack/JSKursTracker)',
     ]);
 
-    $raw   = curl_exec($ch);
-    $errno = curl_errno($ch);
-    $error = curl_error($ch);
+    $responseHeaders = [];
+    if ($cfg['hafas_logging'] ?? false) {
+        // Response-Header für Retry-After sammeln
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $header) use (&$responseHeaders) {
+            $responseHeaders[] = rtrim($header);
+            return strlen($header);
+        });
+    }
+
+    $tStart      = hrtime(true);
+    $raw         = curl_exec($ch);
+    $durationMs  = (int) round((hrtime(true) - $tStart) / 1_000_000);
+    $httpStatus  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $errno       = curl_errno($ch);
+    $error       = curl_error($ch);
 
     if ($errno !== 0) {
         get_logger()->error('HAFAS curl-Fehler', ['errno' => $errno, 'error' => $error]);
+        hafas_log_write($services, 0, $durationMs, [], false, $params);
         throw new RuntimeException("HAFAS nicht erreichbar: $error");
     }
 
@@ -273,6 +294,7 @@ function hafas_request(array $services): array
 
     if (($data['err'] ?? 'OK') !== 'OK') {
         get_logger()->warning('HAFAS API-Fehler', ['err' => $data['err'], 'txt' => $data['errTxt'] ?? '']);
+        hafas_log_write($services, $httpStatus, $durationMs, $responseHeaders, false, $params);
         throw new RuntimeException('HAFAS API-Fehler: ' . ($data['errTxt'] ?? $data['err']));
     }
 
@@ -280,11 +302,82 @@ function hafas_request(array $services): array
     foreach ($data['svcResL'] ?? [] as $svcRes) {
         if (($svcRes['err'] ?? 'OK') !== 'OK') {
             get_logger()->warning('HAFAS Service-Fehler', ['err' => $svcRes['err']]);
+            hafas_log_write($services, $httpStatus, $durationMs, $responseHeaders, false, $params);
             throw new RuntimeException('HAFAS Service-Fehler: ' . $svcRes['err']);
         }
     }
 
+    hafas_log_write($services, $httpStatus, $durationMs, $responseHeaders, false, $params);
+
     return $data['svcResL'] ?? [];
+}
+
+/**
+ * Schreibt einen HAFAS-Log-Eintrag in die DB (nur wenn hafas_logging aktiv).
+ * Lazy-Cleanup: mit 2 % Wahrscheinlichkeit werden Einträge älter als 7 Tage gelöscht.
+ *
+ * @param array  $services        svcReqL (zum Endpoint-Typ ermitteln)
+ * @param int    $httpStatus      HTTP-Statuscode (0 = curl-Fehler)
+ * @param int    $durationMs      Antwortzeit in Millisekunden
+ * @param array  $responseHeaders Response-Header (für Retry-After)
+ * @param bool   $cacheHit        true wenn Ergebnis aus Cache kam (wird von Callee gesetzt)
+ * @param array  $params          Fachliche Anfrageparameter (lat/lon, stopId, tripId)
+ */
+function hafas_log_write(
+    array $services,
+    int   $httpStatus,
+    int   $durationMs,
+    array $responseHeaders,
+    bool  $cacheHit,
+    array $params = []
+): void {
+    $cfg = hafas_config();
+    if (!($cfg['hafas_logging'] ?? false)) {
+        return;
+    }
+
+    // Endpoint-Typ aus der ersten Service-Methode ableiten
+    $meth     = $services[0]['meth'] ?? '';
+    $endpoint = match ($meth) {
+        'LocGeoPos'      => 'nearby',
+        'StationBoard'   => 'departures',
+        'JourneyDetails' => 'trip',
+        default          => 'nearby',
+    };
+
+    // Retry-After-Header auslesen (falls Rate-Limit signalisiert)
+    $retryAfter = null;
+    foreach ($responseHeaders as $h) {
+        if (stripos($h, 'retry-after:') === 0) {
+            $val = trim(substr($h, strlen('retry-after:')));
+            if (is_numeric($val)) {
+                $retryAfter = (int) $val;
+            }
+        }
+    }
+
+    try {
+        $pdo = get_db();
+
+        $paramsJson = !empty($params) ? json_encode($params, JSON_UNESCAPED_UNICODE) : null;
+
+        $pdo->prepare(
+            'INSERT INTO ' . tbl('hafas_log') .
+            ' (logged_at, endpoint, http_status, duration_ms, cache_hit, retry_after, params)
+              VALUES (UTC_TIMESTAMP(), ?, ?, ?, ?, ?, ?)'
+        )->execute([$endpoint, $httpStatus, min($durationMs, 32767), $cacheHit ? 1 : 0, $retryAfter, $paramsJson]);
+
+        // Lazy-Cleanup mit 2 % Wahrscheinlichkeit
+        if (mt_rand(1, 100) <= 2) {
+            $pdo->exec(
+                'DELETE FROM ' . tbl('hafas_log') .
+                " WHERE logged_at < UTC_TIMESTAMP() - INTERVAL 7 DAY"
+            );
+        }
+    } catch (Throwable $e) {
+        // Logging-Fehler dürfen nie den normalen Betrieb stören
+        get_logger()->warning('hafas_log_write fehlgeschlagen', ['exception' => $e->getMessage()]);
+    }
 }
 
 /**

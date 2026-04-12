@@ -33,6 +33,10 @@ return [
     // Beispiel: 'db_prefix' => 'trammd_'  →  Tabellen: trammd_trips, trammd_recordings, …
     // 'db_prefix' => '',
 
+    // HAFAS-Logging: echte API-Aufrufe in hafas_log-Tabelle protokollieren (optional; Standard: aus).
+    // Tabelle muss via DATABASE.sql angelegt sein. Lazy-Cleanup alle 7 Tage, 2 % Wahrscheinlichkeit.
+    // 'hafas_logging' => true,
+
     // Haltestellenpräfix, der in der Anzeige entfernt wird (optional; Standard: kein Präfix).
     // Beispiel: 'stop_name_prefix' => 'Magdeburg, '  →  "Magdeburg, ZOB/Adelheidring" → "ZOB/Adelheidring"
     // 'stop_name_prefix' => 'Magdeburg, ',
