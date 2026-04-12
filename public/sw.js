@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -55,6 +55,13 @@ self.addEventListener('activate', event => {
                     .map(key => caches.delete(key))
             ))
             .then(() => self.clients.claim())  // Sofort alle Tabs übernehmen
+            // Alle offenen Fenster zur aktuellen URL navigieren → erzwingt
+            // Reload mit neuem Cache, ohne Kooperation von app.js.
+            // Löst das Bootstrap-Problem bei bereits installierten PWAs.
+            .then(() => self.clients.matchAll({ type: 'window' }))
+            .then(clients => Promise.all(
+                clients.map(client => client.navigate(client.url))
+            ))
     );
 });
 
