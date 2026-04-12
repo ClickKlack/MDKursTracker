@@ -95,28 +95,34 @@ GET /api/departures?stopId=de:15003:4000
 ```json
 [
   {
-    "hafasTripId": "1|12345|0|80|24032026",
-    "serviceNr": "41058",
-    "line": "6",
-    "direction": "Lübecker Str.",
-    "departurePlanned": "2026-03-24T14:32:00Z",
-    "departureActual":  "2026-03-24T14:33:00Z",
+    "hafasTripId": "2|#VN#1#…#ZI#120882#TA#10#…",
+    "serviceNr": "120882_10",
+    "line": "2",
+    "direction": "Westerhüsen",
+    "departurePlanned": "2026-04-12T12:48:00Z",
+    "departureActual":  "2026-04-12T12:48:00Z",
+    "journeyStart":     "Magdeburg, City Carré",
+    "journeyStartTime": "2026-04-12T12:44:00Z",
+    "journeyEnd":       "Magdeburg, Westerhüsen (Betriebshof)",
+    "journeyEndTime":   "2026-04-12T13:13:00Z",
     "activeCourseNumber": "07"
-  },
-  {
-    "hafasTripId": "1|12346|0|80|24032026",
-    "serviceNr": "41062",
-    "line": "1",
-    "direction": "Industriehafen",
-    "departurePlanned": "2026-03-24T14:35:00Z",
-    "departureActual": null,
-    "activeCourseNumber": null
   }
 ]
 ```
 
-> `activeCourseNumber` wird vom Backend aus der eigenen DB ergänzt
-> (manuell oder Mehrheitsregel). `null` = noch keine Erfassung vorhanden.
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `hafasTripId` | string | HAFAS-Journey-ID |
+| `serviceNr` | string | Fahrtennummer (ZI_TA im neuen Format) |
+| `line` | string | Linienbezeichnung (aus jid-ZB#, zuverlässiger als prodL) |
+| `direction` | string | Richtungstext (Endhaltestellenname, Marketing-Name) |
+| `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
+| `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit |
+| `journeyStart` | string\|null | Name der Starthaltestelle; `null` = nicht im Response verfügbar |
+| `journeyStartTime` | string\|null | Abfahrtszeit an der Starthaltestelle (ISO 8601 UTC) |
+| `journeyEnd` | string\|null | Name der Endhaltestelle |
+| `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
+| `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
 
 ---
 

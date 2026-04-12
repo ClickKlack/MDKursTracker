@@ -110,4 +110,31 @@ class HafasHelperTest extends TestCase
         $dist = haversine_distance(52.0, 11.0, 52.1, 11.1);
         $this->assertIsInt($dist);
     }
+
+    // -----------------------------------------------------------------------
+    // hafas_line_from_jid – Linienname aus jid-ZB#-Feld
+    // -----------------------------------------------------------------------
+
+    public static function lineFromJidProvider(): array
+    {
+        return [
+            // Neues Format: ZB# vorhanden → Linie korrekt extrahieren
+            ['2|#VN#1#ST#…#ZI#141135#TA#10#DA#120426#1S#300730801#1T#1424#LS#300754003#LT#1513#PU#80#RT#1#CA#StN#ZE#13#ZB#Str   13#PC#5#', '13'],
+            ['2|#VN#1#ST#…#ZI#120882#TA#10#DA#120426#1S#300384601#1T#1444#LS#300754003#LT#1513#PU#80#RT#1#CA#StN#ZE#2#ZB#Str    2#PC#5#',  '2'],
+            ['2|#VN#1#ST#…#ZI#141061#TA#10#DA#120426#1S#300730801#1T#1418#LS#300730902#LT#1513#PU#80#RT#1#CA#StN#ZE#1#ZB#Str    1#PC#5#',  '1'],
+            ['2|#VN#1#ST#…#ZI#121157#TA#11#DA#120426#1S#300366601#1T#1430#LS#300734901#LT#1526#PU#80#RT#1#CA#StN#ZE#9#ZB#Str    9#PC#5#',  '9'],
+            // Nachtnetz
+            ['2|#VN#1#ST#…#ZE#N1#ZB#Str N1#PC#5#', 'N1'],
+            // Altes Format ohne ZB#: '' zurückgeben
+            ['1|12345|0|80|24032026', ''],
+            // Leerer String
+            ['', ''],
+        ];
+    }
+
+    #[DataProvider('lineFromJidProvider')]
+    public function test_hafas_line_from_jid(string $jid, string $expected): void
+    {
+        $this->assertSame($expected, hafas_line_from_jid($jid));
+    }
 }

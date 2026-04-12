@@ -180,6 +180,14 @@ function renderDepartureItem(dep, idx) {
         dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt',
     ].join(', ');
 
+    // Kompakte Laufweg-Info: "ab HH:MM · bis HH:MM"
+    const journeyParts = [];
+    if (dep.journeyStartTime) journeyParts.push(`ab\u00a0${formatTime(dep.journeyStartTime)}`);
+    if (dep.journeyEndTime)   journeyParts.push(`bis\u00a0${formatTime(dep.journeyEndTime)}`);
+    const journeyMetaHtml = journeyParts.length > 0
+        ? `<span class="departure-journey-meta">${escapeHtml(journeyParts.join(' · '))}</span>`
+        : '';
+
     return `
         <li class="card departure-item"
             role="button"
@@ -191,6 +199,7 @@ function renderDepartureItem(dep, idx) {
             </span>
             <span class="departure-info">
                 <span class="departure-direction">${escapeHtml(dep.direction)}</span>
+                ${journeyMetaHtml}
                 <span class="departure-times">${timeHtml}</span>
             </span>
             <span class="departure-course">${courseHtml}</span>

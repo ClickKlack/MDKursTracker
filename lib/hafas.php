@@ -115,7 +115,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         'date'   => $now->format('Ymd'),
         'time'   => $now->format('His'),
         'stbLoc' => ['type' => 'S', 'extId' => $stopId],
-        'maxJny' => $results * 4,
+        'maxJny' => $results * 5,
     ];
     if ($maxMinutes > 0) {
         $req['dur'] = $maxMinutes;
@@ -127,29 +127,82 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
     $prodList = $common['prodL'] ?? [];
     $journeys = $res[0]['res']['jnyL'] ?? [];
 
+    // Lookup-Map extId → Name für Starth.-Auflösung (locL ist oft klein, daher vertretbar)
+    $locByExtId = [];
+    foreach ($common['locL'] as $l) {
+        if (isset($l['extId'], $l['name'])) {
+            $locByExtId[$l['extId']] = $l['name'];
+        }
+    }
+
     $result = [];
+    $seen   = [];  // Duplikat-Filter: "line|dirTxt|dTimeS|locX"
+
     foreach ($journeys as $jny) {
         $prod    = $prodList[$jny['prodX']] ?? [];
         $stbStop = $jny['stbStop'] ?? [];
+        $loc     = $common['locL'][$stbStop['locX']] ?? [];
+        $foundId = $loc['extId'] ?? '';
+
+        // Filter-Logik: Prüfen, ob die Kurz-ID in der langen extId vorkommt.
+        // Annahme, die letzten beiden Ziffern sind der Bahnsteig, der Rest ist die Haltestelle – z.B. "8000003" für "800000301" und "800000302".
+        if (!str_ends_with(substr($foundId, 0, -2), $stopId)) {
+            continue;
+        }
 
         // Nur Straßenbahnen: cls-Bitmask (32 = Tram in INSA HAFAS)
         if (!(($prod['cls'] ?? 0) & HAFAS_TRAM_MASK)) {
             continue;
         }
 
-        $plannedDate   = $stbStop['dDateS'] ?? ($jny['date'] ?? '');
-        $plannedTime   = $stbStop['dTimeS'] ?? '';
-        $realtimeDate  = $stbStop['dDateR'] ?? '';
-        $realtimeTime  = $stbStop['dTimeR'] ?? '';
+        // Linienname: ZB#-Feld aus der jid ist zuverlässiger als prodX
+        // (HAFAS-Datenfehler: prodX zeigt manchmal auf falsche Linie, z.B. Str 13 → prodX von Str 2)
+        $lineFromJid = hafas_line_from_jid($jny['jid']);
+        $lineName    = $lineFromJid !== '' ? $lineFromJid : hafas_line_name($prod['name'] ?? '');
+
+        $plannedDate  = $stbStop['dDateS'] ?? ($jny['date'] ?? '');
+        $plannedTime  = $stbStop['dTimeS'] ?? '';
+        $realtimeDate = $stbStop['dDateR'] ?? '';
+        $realtimeTime = $stbStop['dTimeR'] ?? '';
+        $dirTxt       = $jny['dirTxt'] ?? '';
+        $jnyDate      = $jny['date'] ?? '';
+
+        // Typ-B-Deduplizierung: gleiche Linie, Richtung, Soll-Zeit und Haltestelle → nur einmal ausgeben
+        // (tritt auf bei Kurspaaren / Verstärkerfahrten die gleichzeitig vom selben Halt abfahren)
+        $dedupeKey = $lineName . '|' . $dirTxt . '|' . $plannedTime . '|' . ($stbStop['locX'] ?? '');
+        if (isset($seen[$dedupeKey])) {
+            continue;
+        }
+        $seen[$dedupeKey] = true;
+
+        // Starth.: extId aus jid-Feld 1S#, Zeit aus 1T#; Name aus locL falls vorhanden
+        preg_match('/#1S#([^#]+)#1T#(\d{4,6})#/', $jny['jid'], $startM);
+        $startLocName  = isset($startM[1]) ? ($locByExtId[$startM[1]] ?? null) : null;
+        $startTimeRaw  = isset($startM[2]) ? str_pad($startM[2], 6, '0') : '';
+
+        // Zielhalt.: Name aus prodL[0].tLocX (zeigt zuverlässig auf Endhalt in locL), Zeit aus LT#
+        $jnyProdEntry = $jny['prodL'][0] ?? [];
+        $endLoc       = $common['locL'][$jnyProdEntry['tLocX'] ?? -1] ?? [];
+        $endLocName   = ($endLoc['name'] ?? '') !== '' ? $endLoc['name'] : null;
+        preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
+        $endTimeRaw   = isset($endM[1]) ? str_pad($endM[1], 6, '0') : '';
 
         $result[] = [
             'hafasTripId'      => $jny['jid'],
             'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
-            'line'             => hafas_line_name($prod['name'] ?? ''),
-            'direction'        => $jny['dirTxt'] ?? '',
+            'line'             => $lineName,
+            'direction'        => $dirTxt,
             'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
             'departureActual'  => ($realtimeTime !== '')
                 ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)
+                : null,
+            'journeyStart'     => $startLocName,
+            'journeyStartTime' => ($startTimeRaw !== '' && $jnyDate !== '')
+                ? hafas_iso($jnyDate, $startTimeRaw)
+                : null,
+            'journeyEnd'       => $endLocName,
+            'journeyEndTime'   => ($endTimeRaw !== '' && $jnyDate !== '')
+                ? hafas_iso($jnyDate, $endTimeRaw)
                 : null,
         ];
     }
@@ -464,6 +517,22 @@ function hafas_line_name(string $name): string
     // Präfixe wie "STR", "Bus", "S-Bahn" entfernen
     $clean = preg_replace('/^(STR|Bus|Tram|S-Bahn|U)\s*/i', '', trim($name));
     return $clean !== '' ? $clean : $name;
+}
+
+/**
+ * Extrahiert die Linienbezeichnung aus dem ZB#-Feld einer HAFAS-jid (neues Format 2|#VN#...).
+ * Gibt '' zurück wenn das Feld fehlt (z.B. altes jid-Format 1|...).
+ *
+ * Hintergrund: Im StationBoard kann jny.prodX auf einen falschen Produkt-Eintrag zeigen
+ * (bekannter HAFAS-Datenfehler bei MVB), während ZB# in der jid stets korrekt ist.
+ * Beispiel: "...#ZB#Str   13#..." → "13"
+ */
+function hafas_line_from_jid(string $jid): string
+{
+    if (preg_match('/#ZB#([^#]+)#/', $jid, $m)) {
+        return hafas_line_name($m[1]);
+    }
+    return '';
 }
 
 /**

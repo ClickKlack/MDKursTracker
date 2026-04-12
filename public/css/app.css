@@ -538,6 +538,12 @@ body {
     text-overflow: ellipsis;
 }
 
+.departure-journey-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+}
+
 .departure-times {
     font-size: 0.85rem;
     color: var(--color-text-muted);
