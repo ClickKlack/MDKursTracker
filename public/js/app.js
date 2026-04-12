@@ -23,6 +23,9 @@ export let activeStop = null;
 /** Haltestellenpräfix, der in der Anzeige entfernt wird (z.B. "Magdeburg, ") */
 let stopNamePrefix = '';
 
+/** Öffentliche App-Konfiguration (stopNamePrefix, version, swCacheVersion, deployedAt) */
+export let appConfig = {};
+
 /**
  * Entfernt den konfigurierten Präfix aus einem Haltestellennamen.
  * Beispiel: "Magdeburg, ZOB/Adelheidring" → "ZOB/Adelheidring"
@@ -60,6 +63,10 @@ const VIEWS = {
     history: {
         title: 'Erfassungen',
         module: './views/history.js',
+    },
+    info: {
+        title: 'Über',
+        module: './views/info.js',
     },
 };
 
@@ -187,7 +194,7 @@ async function handleRouteChange() {
     try {
         const mod = await import(viewDef.module);
         currentViewModule = mod;
-        await mod.render(main, params, { activePeriod });
+        await mod.render(main, params, { activePeriod, appConfig });
     } catch (err) {
         // Modul noch nicht implementiert (404) oder Laufzeitfehler
         if (err?.message?.includes('Failed to fetch') || err instanceof TypeError) {
@@ -248,6 +255,7 @@ async function loadConfig() {
     try {
         const cfg = await getConfig();
         stopNamePrefix = cfg.stopNamePrefix ?? '';
+        appConfig      = cfg;
     } catch (err) {
         console.warn('Frontend-Config konnte nicht geladen werden:', err);
     }

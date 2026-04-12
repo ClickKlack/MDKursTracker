@@ -1,6 +1,9 @@
 # Konfigurationsdatei außerhalb Webroot – niemals ins Repository
 /config.php
 
+# Versionsdatei – wird vom deploy.sh generiert, nicht versioniert
+/version.json
+
 # Composer-Abhängigkeiten (werden auf dem Server frisch installiert)
 vendor/
 

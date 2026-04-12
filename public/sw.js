@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -25,6 +25,7 @@ const APP_SHELL = [
     '/js/views/departures.js',
     '/js/views/capture.js',
     '/js/views/history.js',
+    '/js/views/info.js',
     '/icons/icon-192.svg',
     '/icons/icon-512.svg',
 ];
