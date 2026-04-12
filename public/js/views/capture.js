@@ -17,7 +17,7 @@ import { escapeHtml, stripStopPrefix } from '../app.js';
 /** Anzahl Schnellbuttons (01–40, 5 Zeilen à 8) */
 const QUICK_COUNT = 40;
 
-export async function render(container, params, context) {
+export async function render(container, _params, _context) {
     // Daten aus sessionStorage lesen
     const raw = sessionStorage.getItem('pendingCapture');
     if (!raw) {
@@ -162,7 +162,7 @@ function attachListeners(container, data) {
     // Absenden per Button-Klick
     btnSub.addEventListener('click', async () => {
         if (!selectedCourse) return;
-        await submitRecording(container, data, selectedCourse, btnSub, feedback);
+        await submitRecording(data, selectedCourse, btnSub, feedback);
     });
 
     // Absenden per Enter im Input-Feld
@@ -245,9 +245,7 @@ async function loadTripRoute(container, data) {
 
     routeEl.innerHTML = `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
 
-    // Erfassungshaltestelle in den sichtbaren Bereich scrollen
-    const marker = routeEl.querySelector('.route-stop--recording');
-    if (marker) marker.scrollIntoView({ block: 'nearest' });
+    // Kein automatisches Scrollen – die Erfassungselemente oben bleiben im Fokus
 }
 
 /** Schnellbutton-Hervorhebung setzen. nr = null → alle deselektiert. */
@@ -259,7 +257,7 @@ function highlightButton(container, nr) {
 
 // --- POST /api/recordings ----------------------------------------------------
 
-async function submitRecording(container, data, courseNumber, btnSub, feedback) {
+async function submitRecording(data, courseNumber, btnSub, feedback) {
     btnSub.disabled = true;
     feedback.innerHTML = `
         <div class="loading-indicator" style="padding:16px 0">

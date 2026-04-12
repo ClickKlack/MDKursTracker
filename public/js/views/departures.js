@@ -190,14 +190,6 @@ function renderDepartureItem(dep, idx) {
         dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt',
     ].join(', ');
 
-    // Kompakte Laufweg-Info: "ab HH:MM · bis HH:MM"
-    const journeyParts = [];
-    if (dep.journeyStartTime) journeyParts.push(`ab\u00a0${formatTime(dep.journeyStartTime)}`);
-    if (dep.journeyEndTime)   journeyParts.push(`bis\u00a0${formatTime(dep.journeyEndTime)}`);
-    const journeyMetaHtml = journeyParts.length > 0
-        ? `<span class="departure-journey-meta">${escapeHtml(journeyParts.join(' · '))}</span>`
-        : '';
-
     // Hinweis auf ursprüngliche Linie bei Linienwechsel (durchgebundene Fahrt)
     const originalLineHtml = dep.originalLine
         ? `<span class="departure-original-line">vorher Linie\u00a0${escapeHtml(dep.originalLine)}</span>`
@@ -215,7 +207,6 @@ function renderDepartureItem(dep, idx) {
             <span class="departure-info">
                 <span class="departure-direction">${escapeHtml(dep.direction)}</span>
                 ${originalLineHtml}
-                ${journeyMetaHtml}
                 <span class="departure-times">${timeHtml}</span>
             </span>
             <span class="departure-course">${courseHtml}</span>

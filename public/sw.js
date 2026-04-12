@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -55,13 +55,9 @@ self.addEventListener('activate', event => {
                     .map(key => caches.delete(key))
             ))
             .then(() => self.clients.claim())  // Sofort alle Tabs übernehmen
-            // Alle offenen Fenster zur aktuellen URL navigieren → erzwingt
-            // Reload mit neuem Cache, ohne Kooperation von app.js.
-            // Löst das Bootstrap-Problem bei bereits installierten PWAs.
-            .then(() => self.clients.matchAll({ type: 'window' }))
-            .then(clients => Promise.all(
-                clients.map(client => client.navigate(client.url))
-            ))
+        // Kein client.navigate() hier – app.js reagiert auf 'controllerchange'
+        // und ruft window.location.reload() auf. Das ist zuverlässiger und
+        // funktioniert auch auf iOS Safari, wo client.navigate() ignoriert wird.
     );
 });
 
