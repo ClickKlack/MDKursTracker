@@ -123,6 +123,7 @@ GET /api/departures?stopId=de:15003:4000
 | `journeyEnd` | string\|null | Name der Endhaltestelle |
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
 | `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
+| `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 ---
 
@@ -286,12 +287,13 @@ ohne HAFAS-Abfrage) oder die Erfassung nicht existiert.
 ```json
 [
   { "sequence": 1,  "stopId": "de:15003:1000", "name": "Magdeburg, Alte Neustadt",    "departurePlanned": "2026-03-24T14:10:00Z", "isRecordingStop": false },
-  { "sequence": 2,  "stopId": "de:15003:4000", "name": "Magdeburg, Hauptbahnhof",     "departurePlanned": "2026-03-24T14:32:00Z", "isRecordingStop": true  },
-  { "sequence": 3,  "stopId": "de:15003:5000", "name": "Magdeburg, Universitätsplatz","departurePlanned": "2026-03-24T14:38:00Z", "isRecordingStop": false }
+  { "sequence": 2,  "stopId": "de:15003:4000", "name": "Magdeburg, Hauptbahnhof",     "departurePlanned": "2026-03-24T14:32:00Z", "isRecordingStop": true,  "line": "1" },
+  { "sequence": 3,  "stopId": "de:15003:5000", "name": "Magdeburg, Universitätsplatz","departurePlanned": "2026-03-24T14:38:00Z", "isRecordingStop": false, "line": "5" }
 ]
 ```
 
 `departurePlanned` ist `null` beim letzten Halt (nur Ankunft).
+`line` ist `null` wenn HAFAS keine Linieninformation je Halt geliefert hat (best-effort).
 
 ---
 

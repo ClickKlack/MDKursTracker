@@ -306,10 +306,24 @@ async function handleRouteToggle(e) {
 }
 
 function renderRouteList(stops) {
+    let prevLine = null;
     const rows = stops.map(s => {
         const time = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
         const cls  = s.isRecordingStop ? ' route-stop--recording' : '';
-        return `
+
+        // Linienwechsel-Trenner: nur wenn beide Linien bekannt und verschieden
+        let lineChangeSep = '';
+        if (s.line != null && prevLine != null && s.line !== prevLine) {
+            lineChangeSep = `
+            <li class="route-line-change" aria-label="Linienwechsel zu Linie ${escapeHtml(s.line)}">
+                <span class="route-line-change-label">Linie</span>
+                ${lineBadgeHtml(s.line)}
+                <span class="route-line-change-label">ab hier</span>
+            </li>`;
+        }
+        if (s.line != null) prevLine = s.line;
+
+        return lineChangeSep + `
             <li class="route-stop${cls}">
                 <span class="route-stop-time">${escapeHtml(time)}</span>
                 <span class="route-stop-name">${escapeHtml(stripStopPrefix(s.name))}</span>

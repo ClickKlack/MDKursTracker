@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     `sequence`          TINYINT     NOT NULL COMMENT 'Position im Laufweg, beginnend bei 1',
     `stop_id`           VARCHAR(20) NOT NULL,
     `departure_planned` DATETIME    NULL     COMMENT 'NULL bei letztem Halt (nur Ankunft)',
+    `line`              VARCHAR(10) NULL     COMMENT 'Linie an diesem Halt (aus HAFAS prodL); NULL wenn nicht verfügbar',
     PRIMARY KEY (`id`),
     KEY `idx_%%PREFIX%%route_stops_recording` (`recording_id`),
     CONSTRAINT `fk_%%PREFIX%%route_stops_recording`

@@ -188,6 +188,11 @@ function renderDepartureItem(dep, idx) {
         ? `<span class="departure-journey-meta">${escapeHtml(journeyParts.join(' · '))}</span>`
         : '';
 
+    // Hinweis auf ursprüngliche Linie bei Linienwechsel (durchgebundene Fahrt)
+    const originalLineHtml = dep.originalLine
+        ? `<span class="departure-original-line">vorher Linie\u00a0${escapeHtml(dep.originalLine)}</span>`
+        : '';
+
     return `
         <li class="card departure-item"
             role="button"
@@ -199,6 +204,7 @@ function renderDepartureItem(dep, idx) {
             </span>
             <span class="departure-info">
                 <span class="departure-direction">${escapeHtml(dep.direction)}</span>
+                ${originalLineHtml}
                 ${journeyMetaHtml}
                 <span class="departure-times">${timeHtml}</span>
             </span>

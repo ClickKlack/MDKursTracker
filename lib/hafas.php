@@ -160,6 +160,11 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         // davon ab (zeigt die Linie beim Startpunkt der Fahrt) → prodX ist maßgeblich.
         $lineName = hafas_line_name($prod['name'] ?? '');
 
+        // Ursprüngliche Linienbezeichnung aus ZB# (Linie beim Startpunkt der Gesamtfahrt).
+        // Weicht bei Linienübergängen von $lineName ab → als Hinweis für die UI.
+        $jidLine      = hafas_line_from_jid($jny['jid']);
+        $originalLine = ($jidLine !== '' && $jidLine !== $lineName) ? $jidLine : null;
+
         $plannedDate  = $stbStop['dDateS'] ?? ($jny['date'] ?? '');
         $plannedTime  = $stbStop['dTimeS'] ?? '';
         $realtimeDate = $stbStop['dDateR'] ?? '';
@@ -191,6 +196,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
             'hafasTripId'      => $jny['jid'],
             'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
             'line'             => $lineName,
+            'originalLine'     => $originalLine,
             'direction'        => $dirTxt,
             'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
             'departureActual'  => ($realtimeTime !== '')
@@ -255,8 +261,34 @@ function hafas_trip(string $tripId): array
 
     // Basisdatum der Fahrt als Fallback – neuere HAFAS-Versionen lassen dDateS
     // auf Stop-Ebene weg, wenn es mit dem Fahrtdatum übereinstimmt.
-    $jnyDate = $journey['date'] ?? date('Ymd');
-    $stops   = $journey['stopL'] ?? [];
+    $jnyDate  = $journey['date'] ?? date('Ymd');
+    $stops    = $journey['stopL'] ?? [];
+    $prodList = $common['prodL'] ?? [];
+
+    // Produkt-Segmente des Laufwegs für Linienübergang-Erkennung.
+    // HAFAS JourneyDetails enthält in journey.prodL ggf. mehrere Einträge mit fIdx/tIdx,
+    // die angeben, welches Produkt (Linie) für welchen Halt-Index gilt.
+    // Falls nicht vorhanden, bleibt $lineForIdx() immer null → keine Änderung im Verhalten.
+    $jnyProdSegs = $journey['prodL'] ?? [];
+
+    $lineForIdx = static function (int $stopIdx, array $stopData) use ($jnyProdSegs, $prodList): ?string {
+        // Direktes dProdX am Halt bevorzugen (nicht immer vorhanden)
+        $prodX = $stopData['dProdX'] ?? null;
+        if ($prodX === null) {
+            // Fallback: Produkt-Segment über fIdx/tIdx ermitteln
+            foreach ($jnyProdSegs as $seg) {
+                if ($stopIdx >= ($seg['fIdx'] ?? 0) && $stopIdx <= ($seg['tIdx'] ?? PHP_INT_MAX)) {
+                    $prodX = $seg['prodX'] ?? null;
+                    break;
+                }
+            }
+        }
+        if ($prodX === null) {
+            return null;
+        }
+        $prod = $prodList[$prodX] ?? null;
+        return $prod !== null ? hafas_line_name($prod['name'] ?? '') : null;
+    };
 
     $result = [];
     foreach ($stops as $i => $stop) {
@@ -280,6 +312,7 @@ function hafas_trip(string $tripId): array
             'stopId'           => $loc['extId'] ?? '',
             'stop'             => $loc['name'] ?? '',
             'departurePlanned' => ($dTime !== '') ? hafas_iso($dDate, $dTime) : null,
+            'line'             => $lineForIdx($i, $stop),
         ];
     }
 

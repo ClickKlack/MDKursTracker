@@ -544,6 +544,13 @@ body {
     margin-top: 1px;
 }
 
+.departure-original-line {
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    margin-top: 1px;
+}
+
 .departure-times {
     font-size: 0.85rem;
     color: var(--color-text-muted);
@@ -728,6 +735,20 @@ body {
     font-size: 0.5rem;
     color: var(--color-primary);
     line-height: 1.6;
+}
+
+.route-line-change {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 0 3px;
+    border-top: 1px dashed var(--color-border);
+    margin-top: 2px;
+}
+
+.route-line-change-label {
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
 }
 
 /* --- Info-View ------------------------------------------------------------- */

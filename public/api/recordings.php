@@ -282,8 +282,8 @@ function handle_post_recording(): never
         if (!empty($tripStops)) {
             $stopInsert  = $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)');
             $routeInsert = $pdo->prepare(
-                'INSERT INTO ' . tbl('route_stops') . ' (recording_id, sequence, stop_id, departure_planned)
-                 VALUES (?, ?, ?, ?)'
+                'INSERT INTO ' . tbl('route_stops') . ' (recording_id, sequence, stop_id, departure_planned, line)
+                 VALUES (?, ?, ?, ?, ?)'
             );
             foreach ($tripStops as $ts) {
                 $stopInsert->execute([$ts['stopId'], $ts['stop']]);
@@ -292,6 +292,7 @@ function handle_post_recording(): never
                     $ts['sequence'],
                     $ts['stopId'],
                     $ts['departurePlanned'] !== null ? iso_to_mysql($ts['departurePlanned']) : null,
+                    $ts['line'] ?? null,
                 ]);
             }
         } else {
@@ -349,7 +350,8 @@ function handle_get_route(int $recordingId): never
              rs.sequence,
              rs.stop_id,
              st.name              AS stop_name,
-             rs.departure_planned
+             rs.departure_planned,
+             rs.line
          FROM ' . tbl('route_stops') . ' rs
          JOIN ' . tbl('stops') . ' st ON rs.stop_id = st.hafas_id
          WHERE rs.recording_id = ?
@@ -370,6 +372,7 @@ function handle_get_route(int $recordingId): never
             'name'             => $row['stop_name'],
             'departurePlanned' => mysql_to_iso($row['departure_planned']),
             'isRecordingStop'  => $row['stop_id'] === $recordingStopId,
+            'line'             => $row['line'],
         ];
     }
 
