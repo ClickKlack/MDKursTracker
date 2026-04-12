@@ -18,6 +18,17 @@ Options -Indexes
 AddDefaultCharset UTF-8
 
 # =============================================================================
+# Service Worker: niemals vom Browser cachen
+# =============================================================================
+<IfModule mod_headers.c>
+    <FilesMatch "^sw\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </FilesMatch>
+</IfModule>
+
+# =============================================================================
 # Security-Header
 # =============================================================================
 <IfModule mod_headers.c>

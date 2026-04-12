@@ -71,11 +71,48 @@ let currentViewModule = null;
 // =============================================================================
 
 function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.debug('SW registriert, Scope:', reg.scope))
-            .catch(err => console.warn('SW-Registrierung fehlgeschlagen:', err));
+    if (!('serviceWorker' in navigator)) return;
+
+    // Erstbesuch: noch kein Controller → kein Reload auslösen
+    const isFirstInstall = !navigator.serviceWorker.controller;
+
+    navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+            console.debug('SW registriert, Scope:', reg.scope);
+
+            // Race-Condition: SW steckt bereits im Waiting-State
+            if (reg.waiting && !isFirstInstall) {
+                reloadIfSafe();
+                return;
+            }
+
+            // Auf neu installierten SW warten
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'activated' && !isFirstInstall) {
+                        reloadIfSafe();
+                    }
+                });
+            });
+        })
+        .catch(err => console.warn('SW-Registrierung fehlgeschlagen:', err));
+
+    // Verlässlichster Trigger: neuer SW übernimmt via clients.claim()
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!isFirstInstall) reloadIfSafe();
+    });
+}
+
+function reloadIfSafe() {
+    // Kein Reload wenn eine Erfassung gerade im Gange ist
+    if (sessionStorage.getItem('pendingCapture')) {
+        console.debug('SW-Update: Reload verzögert wegen pendingCapture');
+        return;
     }
+    console.debug('Neuer SW aktiv – Seite wird neu geladen');
+    window.location.reload();
 }
 
 // =============================================================================
