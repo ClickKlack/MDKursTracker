@@ -98,9 +98,14 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
  */
 function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 59): array
 {
+    // Rückblick-Fenster aus Config (Abfahrten die bereits vom System als abgefahren gelten,
+    // aber noch sichtbar an der Haltestelle sein können)
+    $cfg          = hafas_config();
+    $lookback     = max(0, (int) ($cfg['departures_lookback_minutes'] ?? 5));
+
     // Kurzer Cache (30 s): Echtzeit-Verspätungen sollen zügig aktualisiert werden,
     // aber identische Anfragen im selben Intervall treffen HAFAS nur einmal.
-    $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes);
+    $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes, $lookback);
     $cached   = hafas_cache_get($cacheKey);
     $logParams = ['stopId' => $stopId, 'results' => $results];
     if ($cached !== null) {
@@ -108,20 +113,21 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         return $cached;
     }
 
-    // Aktuelles Datum und Uhrzeit in Berliner Zeit – HAFAS nutzt sonst ggf. den Folgetag als Default
-    $now = new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin'));
+    // Startzeit = jetzt minus Rückblick-Fenster (Berliner Zeit)
+    $now   = new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin'));
+    $start = $lookback > 0 ? $now->modify("-{$lookback} minutes") : $now;
 
     // Mehr Fahrten anfordern als benötigt, da wir in PHP auf Trams filtern.
-    // dur = Zeitfenster in Minuten; begrenzt die Abfrage auf kommende maxMinutes Minuten.
+    // dur = Gesamtfenster in Minuten ab Startzeit (Rückblick + Vorausschau).
     $req = [
         'type'   => 'DEP',
-        'date'   => $now->format('Ymd'),
-        'time'   => $now->format('His'),
+        'date'   => $start->format('Ymd'),
+        'time'   => $start->format('His'),
         'stbLoc' => ['type' => 'S', 'extId' => $stopId],
         'maxJny' => $results * 5,
     ];
     if ($maxMinutes > 0) {
-        $req['dur'] = $maxMinutes;
+        $req['dur'] = $maxMinutes + $lookback;
     }
 
     $res = hafas_request([['meth' => 'StationBoard', 'req' => $req]], $logParams);

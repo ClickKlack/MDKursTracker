@@ -4,7 +4,7 @@
  * Ablauf:
  *  1. Erfassungsdaten aus sessionStorage (pendingCapture) lesen
  *  2. Linie, Richtung, Abfahrtszeit als Kontext anzeigen
- *  3. Schnellbuttons 01–18 + Freitextfeld (01–99) anbieten
+ *  3. Schnellbuttons 00–39 + Freitextfeld (00–99) anbieten
  *  4. POST /api/recordings → Bestätigungsfeedback
  *  5. Rückkehr zur Abfahrtstafel (#departures), die frische Daten lädt
  */
@@ -72,11 +72,11 @@ function buildFormHtml(data) {
         <div class="capture-divider"></div>
 
         <div class="form-group">
-            <label for="course-input">Andere Kursnummer (01–99)</label>
+            <label for="course-input">Andere Kursnummer (00–99)</label>
             <input
                 type="number"
                 id="course-input"
-                min="1"
+                min="0"
                 max="99"
                 placeholder="z.B. 25"
                 inputmode="numeric"
@@ -100,7 +100,7 @@ function buildFormHtml(data) {
 
 function buildQuickButtons() {
     const buttons = [];
-    for (let i = 1; i <= QUICK_COUNT; i++) {
+    for (let i = 0; i < QUICK_COUNT; i++) {
         const nr = String(i).padStart(2, '0');
         buttons.push(
             `<button class="course-btn" type="button"
@@ -146,10 +146,9 @@ function attachListeners(container, data) {
         const val = input.value.trim();
         const n   = parseInt(val, 10);
 
-        if (val === '' || isNaN(n) || n < 1 || n > 99) {
+        if (val === '' || isNaN(n) || n < 0 || n > 99) {
             selectedCourse = null;
-            // Hervorhebung entfernen (außer wenn Wert im 1–18-Bereich liegt)
-            const padded = (!isNaN(n) && n >= 1 && n <= 99) ? String(n).padStart(2, '0') : null;
+            const padded = (!isNaN(n) && n >= 0 && n <= 99) ? String(n).padStart(2, '0') : null;
             highlightButton(container, padded);
             btnSub.disabled = true;
         } else {

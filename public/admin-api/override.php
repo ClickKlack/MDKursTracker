@@ -34,9 +34,9 @@ function handle_put_override(?int $tripId): never
         json_error('Pflichtfeld fehlt: courseNumber');
     }
 
-    // Kursnummer validieren: zweistellig, 01–99
-    if (!preg_match('/^(0[1-9]|[1-9][0-9])$/', $body['courseNumber'])) {
-        json_error('Kursnummer muss zweistellig im Format 01–99 sein');
+    // Kursnummer validieren: zweistellig, 00–99
+    if (!preg_match('/^[0-9]{2}$/', $body['courseNumber'])) {
+        json_error('Kursnummer muss zweistellig im Format 00–99 sein');
     }
 
     $pdo  = get_db();

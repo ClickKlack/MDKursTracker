@@ -16,6 +16,11 @@ return [
     // Logging deaktiviert → hafas_log_write() läuft ohne DB-Zugriff durch
     'hafas_logging' => false,
 
+    // Rückblick-Fenster für Abfahrtsabfragen in Minuten (Standard: 5).
+    // Fahrten die laut HAFAS bereits abgefahren sind, aber noch an der
+    // Haltestelle stehen, werden so trotzdem in der Liste angezeigt.
+    'departures_lookback_minutes' => 5,
+
     // HAFAS-Dummy-Werte (werden in Unit-Tests nicht aufgerufen)
     'hafas_url'    => 'http://localhost',
     'hafas_aid'    => 'test',
