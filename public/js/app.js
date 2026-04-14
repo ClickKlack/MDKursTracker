@@ -8,7 +8,7 @@
  *  - View-Lifecycle verwalten (render / destroy)
  */
 
-import { getPeriods, getConfig } from './api.js';
+import { getPeriods, getConfig, postUserInit } from './api.js';
 
 // =============================================================================
 // Globaler State
@@ -67,6 +67,10 @@ const VIEWS = {
     info: {
         title: 'Über',
         module: './views/info.js',
+    },
+    profile: {
+        title: 'Profil',
+        module: './views/profile.js',
     },
 };
 
@@ -248,6 +252,25 @@ export function escapeHtml(str) {
 }
 
 // =============================================================================
+// User-Token
+// =============================================================================
+
+/**
+ * Stellt sicher, dass ein User-Token in localStorage vorhanden ist.
+ * Erzeugt bei Erstbesuch ein neues Token und meldet es beim Backend an.
+ */
+function initUserToken() {
+    let token = localStorage.getItem('user_token');
+    if (!token) {
+        // UUID v4 ohne Bindestriche generieren
+        token = crypto.randomUUID().replace(/-/g, '');
+        localStorage.setItem('user_token', token);
+    }
+    // Silent POST – kein Fehler wenn offline oder Backend nicht erreichbar
+    postUserInit().catch(() => {});
+}
+
+// =============================================================================
 // Einstiegspunkt
 // =============================================================================
 
@@ -263,6 +286,9 @@ async function loadConfig() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     registerServiceWorker();
+
+    // User-Token initialisieren (synchron – kein await, da Backend-Call silent)
+    initUserToken();
 
     // Config und Periode parallel laden – beide werden vor dem ersten Render benötigt
     await Promise.all([loadConfig(), loadActivePeriod()]);

@@ -1,0 +1,49 @@
+meta {
+  name: Admin – GET Einzelerfassungen einer Fahrt
+  type: http
+  seq: 30
+}
+
+get {
+  url: {{baseUrl}}/admin-api/trips/{{tripId}}/recordings
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Erfassungen für Trip", bru.getVar("tripId") + ":", res.body.length);
+    res.body.forEach(r => {
+      const user = r.userName ?? r.userDisplayId ?? '–';
+      console.log(" -", r.recordedAt, "| Kurs:", r.courseNumber, "| Nutzer:", user);
+    });
+  }
+}
+
+docs {
+  Alle Einzelerfassungen einer logischen Fahrt laden.
+  Voraussetzung: Admin-Login (12-Admin-Login) und tripId-Variable gesetzt.
+  tripId wird durch 07-Recordings-POST automatisch als Variable gesetzt.
+
+  Antwort:
+  [{
+    "id": 142,
+    "recordedAt": "2026-03-24T14:33:45Z",
+    "courseNumber": "07",
+    "stopId": "de:15003:4000",
+    "stopName": "Magdeburg, Hauptbahnhof",
+    "comment": null,
+    "userName": "Testnutzer",
+    "userDisplayId": "A3K7F",
+    "userDevice": "Chrome 124 / Android 14"
+  }]
+
+  Fehlertest:
+    Ohne Admin-Session → 401
+    Trip-ID nicht gefunden → leeres Array []
+}

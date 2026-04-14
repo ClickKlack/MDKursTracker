@@ -1,0 +1,37 @@
+meta {
+  name: User – GET Profil
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{baseUrl}}/api/user
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.displayId: isDefined
+  res.body.createdAt: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Display-ID:", res.body.displayId);
+    console.log("Name:", res.body.name);
+    console.log("Erstellt:", res.body.createdAt);
+  }
+}
+
+docs {
+  Eigenes Profil laden. Voraussetzung: 23-User-POST-Init ausgeführt.
+
+  Fehlertest:
+    X-User-Token fehlt oder ungültig → 401
+    Token nicht in DB → 404
+}

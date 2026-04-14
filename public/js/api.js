@@ -10,14 +10,19 @@ const BASE_URL = '';
 
 /**
  * Interner Helfer: fetch mit einheitlicher Fehlerbehandlung.
+ * Fügt automatisch den X-User-Token-Header hinzu, wenn ein Token in
+ * localStorage vorhanden ist.
  * @param {string} url
  * @param {RequestInit} [options]
  * @returns {Promise<any>}
  */
 async function apiFetch(url, options = {}) {
-    const defaults = {
-        headers: { 'Content-Type': 'application/json' },
-    };
+    const token   = localStorage.getItem('user_token') ?? '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers['X-User-Token'] = token;
+    }
+    const defaults = { headers };
 
     // Netzwerkfehler (kein Server erreichbar) sauber abfangen
     let response;
@@ -76,6 +81,18 @@ async function apiFetch(url, options = {}) {
  */
 export async function getNearby(lat, lon, results = 10) {
     const params = new URLSearchParams({ lat, lon, results });
+    return apiFetch(`/api/nearby?${params}`);
+}
+
+/**
+ * Haltestellen per Name suchen (nur Tram).
+ * Stadtpräfix wird serverseitig automatisch vorangestellt.
+ * @param {string} name  Suchbegriff (z.B. "Hauptbahnhof")
+ * @param {number} [results=10]
+ * @returns {Promise<Array<{id:string, name:string}>>}
+ */
+export async function getNearbyByName(name, results = 10) {
+    const params = new URLSearchParams({ name, results });
     return apiFetch(`/api/nearby?${params}`);
 }
 
@@ -146,6 +163,20 @@ export async function getRecordingRoute(recordingId) {
 }
 
 /**
+ * Eigene Erfassung bearbeiten (Kursnummer und/oder Kommentar).
+ * Nur in der aktiven Periode möglich.
+ * @param {number} recordingId
+ * @param {{courseNumber?: string, comment?: string|null}} data
+ * @returns {Promise<{ok:boolean}>}
+ */
+export async function putRecording(recordingId, data) {
+    return apiFetch(`/api/recordings/${recordingId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+    });
+}
+
+/**
  * Erfassungen abrufen, optional gefiltert.
  * @param {{
  *   period_id?: number,
@@ -190,6 +221,69 @@ export async function getPeriods() {
  */
 export async function getConfig() {
     return apiFetch('/api/config');
+}
+
+// =============================================================================
+// User-Endpunkte
+// =============================================================================
+
+/**
+ * User-Token registrieren oder last_seen_at aktualisieren.
+ * Wird beim App-Start aufgerufen (silent – kein Fehler bei Offline).
+ * @returns {Promise<{displayId:string, isNew:boolean}>}
+ */
+export async function postUserInit() {
+    return apiFetch('/api/user', { method: 'POST' });
+}
+
+/**
+ * Eigenes Profil laden.
+ * @returns {Promise<{displayId:string, name:string|null, createdAt:string}>}
+ */
+export async function getUserProfile() {
+    return apiFetch('/api/user');
+}
+
+/**
+ * Profilname setzen oder löschen.
+ * @param {string|null} name  null oder '' zum Löschen
+ * @returns {Promise<{ok:boolean}>}
+ */
+export async function putUserProfile(name) {
+    return apiFetch('/api/user', {
+        method: 'PUT',
+        body: JSON.stringify({ name }),
+    });
+}
+
+/**
+ * Favoriten-Haltestellen laden.
+ * @returns {Promise<Array<{stopId:string, stopName:string, createdAt:string}>>}
+ */
+export async function getUserFavorites() {
+    return apiFetch('/api/user/favorites');
+}
+
+/**
+ * Haltestelle als Favorit speichern.
+ * @param {string} stopId
+ * @param {string} stopName
+ * @returns {Promise<{ok:boolean}>}
+ */
+export async function postUserFavorite(stopId, stopName) {
+    return apiFetch('/api/user/favorites', {
+        method: 'POST',
+        body: JSON.stringify({ stopId, stopName }),
+    });
+}
+
+/**
+ * Haltestelle aus Favoriten entfernen.
+ * @param {string} stopId
+ * @returns {Promise<{ok:boolean}>}
+ */
+export async function deleteUserFavorite(stopId) {
+    return apiFetch(`/api/user/favorites/${encodeURIComponent(stopId)}`, { method: 'DELETE' });
 }
 
 // =============================================================================
@@ -303,4 +397,13 @@ export async function updatePeriod(id, data) {
         method: 'PUT',
         body: JSON.stringify(data),
     });
+}
+
+/**
+ * Einzelerfassungen einer Fahrt laden (Admin).
+ * @param {number} tripId
+ * @returns {Promise<Array<{id,recordedAt,courseNumber,stopId,stopName,comment,userName,userDisplayId,userDevice}>>}
+ */
+export async function getAdminTripRecordings(tripId) {
+    return apiFetch(`/admin-api/trips/${tripId}/recordings`);
 }

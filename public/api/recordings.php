@@ -1,6 +1,8 @@
 <?php
-// GET /api/recordings – Erfassungen abrufen (gefiltert)
-// POST /api/recordings – Neue Kursnummer-Erfassung speichern
+// GET  /api/recordings               – Erfassungen abrufen (gefiltert)
+// POST /api/recordings               – Neue Kursnummer-Erfassung speichern
+// PUT  /api/recordings/{id}          – Eigene Erfassung bearbeiten (Kursnummer + Kommentar)
+// GET  /api/recordings/{id}/route    – Laufweg einer Erfassung
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/lib/response.php';
@@ -8,16 +10,25 @@ require_once dirname(__DIR__, 2) . '/lib/logger.php';
 require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
+require_once dirname(__DIR__, 2) . '/lib/user_helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Sub-Pfad erkennen: /api/recordings/{id}/route
+// Sub-Pfad erkennen: /api/recordings/{id}/route oder /api/recordings/{id}
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
 if (preg_match('#/api/recordings/(\d+)/route$#', $uri, $m)) {
     if ($method !== 'GET') {
         json_error('Methode nicht erlaubt', 405);
     }
     handle_get_route((int) $m[1]);
+}
+
+if (preg_match('#/api/recordings/(\d+)$#', $uri, $m)) {
+    if ($method !== 'PUT') {
+        json_error('Methode nicht erlaubt', 405);
+    }
+    handle_put_recording((int) $m[1]);
 }
 
 if ($method === 'GET') {
@@ -26,6 +37,23 @@ if ($method === 'GET') {
     handle_post_recording();
 } else {
     json_error('Methode nicht erlaubt', 405);
+}
+
+// ---------------------------------------------------------------------------
+// Hilfsfunktion: X-User-Token aus Header lesen (optional, kein Fehler wenn fehlt)
+// ---------------------------------------------------------------------------
+
+function get_request_token(): ?string
+{
+    $token = $_SERVER['HTTP_X_USER_TOKEN'] ?? '';
+    if ($token === '') {
+        return null;
+    }
+    // UUID v4 ohne Bindestriche (32 Hex-Zeichen) oder mit (36 Zeichen)
+    if (!preg_match('/^[0-9a-f]{32,36}$/i', $token)) {
+        return null;
+    }
+    return strtolower(str_replace('-', '', $token));
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +79,7 @@ function handle_get_recordings(): never
         if (!in_array($_GET['day_type'], $allowed, true)) {
             json_error('Ungültiger day_type');
         }
-        $where[]           = 't.day_type = :day_type';
+        $where[]             = 't.day_type = :day_type';
         $params[':day_type'] = $_GET['day_type'];
     }
 
@@ -81,6 +109,8 @@ function handle_get_recordings(): never
              r.departure_planned,
              r.departure_actual,
              r.course_number,
+             r.user_token,
+             r.comment,
              t.manual_course_number,
              COALESCE(
                  t.manual_course_number,
@@ -101,6 +131,9 @@ function handle_get_recordings(): never
     );
     $stmt->execute($params);
 
+    // Eigenen Token für isOwn-Vergleich – Token nie im JSON ausgeben
+    $ownToken = get_request_token();
+
     $rows   = $stmt->fetchAll();
     $result = [];
     foreach ($rows as $row) {
@@ -119,6 +152,9 @@ function handle_get_recordings(): never
             'courseNumber'       => $row['course_number'],
             'activeCourseNumber' => $row['active_course_number'],
             'manualCourseNumber' => $row['manual_course_number'],
+            'comment'            => $row['comment'],
+            // isOwn: true nur wenn Token übermittelt und zur Erfassung passt
+            'isOwn'              => $ownToken !== null && $row['user_token'] === $ownToken,
         ];
     }
 
@@ -165,7 +201,7 @@ function handle_post_recording(): never
         json_error('Kursnummer muss zweistellig im Format 00–99 sein');
     }
 
-    // serviceDate-Format validieren: YYYY-MM-DD und echtes Datum
+    // serviceDate-Format validieren: YYYY-MM-DD
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $body['serviceDate'])) {
         json_error('serviceDate muss das Format YYYY-MM-DD haben');
     }
@@ -214,10 +250,8 @@ function handle_post_recording(): never
     }
 
     // Haltestellenname und kanonische HAFAS-ID des Erfassungs-Stops ermitteln.
-    // nearby/departures liefern Kurz-IDs (z.B. "7543"), JourneyDetails Lang-IDs ("300754302").
-    // Daher zuerst Zeitabgleich als Fallback wenn ID-Match scheitert.
-    $recordingStopId   = $body['stopId']; // Fallback: übermittelte ID
-    $recordingStopName = $body['stopId']; // Fallback: ID als Name
+    $recordingStopId   = $body['stopId'];
+    $recordingStopName = $body['stopId'];
 
     foreach ($tripStops as $ts) {
         if ($ts['stopId'] === $body['stopId']) {
@@ -227,9 +261,9 @@ function handle_post_recording(): never
         }
     }
 
-    // Kein ID-Match: Abgleich über departurePlanned-Zeit (HH:MM in UTC)
+    // Kein ID-Match: Abgleich über departurePlanned-Zeit
     if ($recordingStopName === $body['stopId'] && $body['departurePlanned'] !== '') {
-        $bodyTime = substr($body['departurePlanned'], 11, 5); // "HH:MM"
+        $bodyTime = substr($body['departurePlanned'], 11, 5);
         foreach ($tripStops as $ts) {
             if ($ts['departurePlanned'] !== null) {
                 $tsTime = substr($ts['departurePlanned'], 11, 5);
@@ -249,10 +283,13 @@ function handle_post_recording(): never
         ]);
     }
 
+    // User-Token aus Header (optional)
+    $userToken = get_request_token();
+
     // Alles in einer Transaktion speichern
     $pdo->beginTransaction();
     try {
-        // Erfassungs-Haltestelle sicherstellen (mit kanonischer Lang-ID)
+        // Erfassungs-Haltestelle sicherstellen
         $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)')
             ->execute([$recordingStopId, $recordingStopName]);
 
@@ -261,8 +298,8 @@ function handle_post_recording(): never
         $recStmt = $pdo->prepare(
             'INSERT INTO ' . tbl('recordings') . '
                  (trip_id, recorded_at, hafas_trip_id, service_date, stop_id,
-                  departure_planned, departure_actual, course_number)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                  departure_planned, departure_actual, course_number, user_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $recStmt->execute([
             $tripId,
@@ -275,6 +312,7 @@ function handle_post_recording(): never
                 ? iso_to_mysql($body['departureActual'])
                 : null,
             $body['courseNumber'],
+            $userToken,
         ]);
         $recordingId = (int) $pdo->lastInsertId();
 
@@ -310,6 +348,22 @@ function handle_post_recording(): never
         json_error('Speichern fehlgeschlagen', 500);
     }
 
+    // User last_seen_at aktualisieren (non-blocking, Fehler werden nur geloggt)
+    if ($userToken !== null) {
+        try {
+            $ua  = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 512);
+            $dev = parse_device($ua);
+            $pdo->prepare(
+                'UPDATE ' . tbl('users') .
+                ' SET last_seen_at = UTC_TIMESTAMP(), last_user_agent = ?, last_device = ? WHERE token = ?'
+            )->execute([$ua ?: null, $dev ?: null, $userToken]);
+        } catch (Throwable $e) {
+            get_logger()->warning('recordings POST: User-Update fehlgeschlagen', [
+                'exception' => $e->getMessage(),
+            ]);
+        }
+    }
+
     get_logger()->info('Erfassung gespeichert', [
         'recording_id' => $recordingId,
         'trip_id'      => $tripId,
@@ -325,6 +379,99 @@ function handle_post_recording(): never
 }
 
 // ---------------------------------------------------------------------------
+// PUT /api/recordings/{id}
+// ---------------------------------------------------------------------------
+
+function handle_put_recording(int $recordingId): never
+{
+    $token = get_request_token();
+    if ($token === null) {
+        json_error('X-User-Token-Header fehlt oder ist ungültig', 401);
+    }
+
+    $body = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($body)) {
+        json_error('Ungültiger JSON-Body');
+    }
+
+    // Mindestens ein Feld muss angegeben sein
+    $hasCourse  = isset($body['courseNumber']);
+    $hasComment = array_key_exists('comment', $body);
+    if (!$hasCourse && !$hasComment) {
+        json_error('courseNumber oder comment muss angegeben sein');
+    }
+
+    // Kursnummer validieren wenn angegeben
+    if ($hasCourse && !preg_match('/^[0-9]{2}$/', (string) $body['courseNumber'])) {
+        json_error('Kursnummer muss zweistellig im Format 00–99 sein');
+    }
+
+    // Kommentar validieren wenn angegeben
+    $comment = null;
+    if ($hasComment) {
+        $comment = $body['comment'] === null ? null : trim((string) $body['comment']);
+        if ($comment !== null && mb_strlen($comment) > 500) {
+            json_error('Kommentar darf maximal 500 Zeichen lang sein');
+        }
+        if ($comment === '') {
+            $comment = null;
+        }
+    }
+
+    $pdo = get_db();
+
+    // Prüfen ob Erfassung existiert und dem anfragenden User gehört
+    // Außerdem: nur aktive Periode erlaubt (Bearbeitung historischer Daten gesperrt)
+    $stmt = $pdo->prepare(
+        'SELECT r.id, r.user_token, t.period_id
+           FROM ' . tbl('recordings') . ' r
+           JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
+          WHERE r.id = ?'
+    );
+    $stmt->execute([$recordingId]);
+    $rec = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$rec) {
+        json_error('Erfassung nicht gefunden', 404);
+    }
+
+    if ($rec['user_token'] !== $token) {
+        json_error('Keine Berechtigung für diese Erfassung', 403);
+    }
+
+    // Nur aktive Periode bearbeitbar
+    $activePeriodId = get_active_period_id($pdo);
+    if ((int) $rec['period_id'] !== $activePeriodId) {
+        json_error('Erfassungen älterer Perioden können nicht bearbeitet werden', 403);
+    }
+
+    // UPDATE zusammenstellen
+    $sets   = [];
+    $params = [];
+    if ($hasCourse) {
+        $sets[]   = 'course_number = ?';
+        $params[] = $body['courseNumber'];
+    }
+    if ($hasComment) {
+        $sets[]   = 'comment = ?';
+        $params[] = $comment;
+    }
+    $params[] = $recordingId;
+
+    $pdo->prepare(
+        'UPDATE ' . tbl('recordings') . ' SET ' . implode(', ', $sets) . ' WHERE id = ?'
+    )->execute($params);
+
+    get_logger()->info('Erfassung bearbeitet', [
+        'recording_id' => $recordingId,
+        'course'       => $body['courseNumber'] ?? null,
+        'has_comment'  => $hasComment,
+    ]);
+
+    json_response(['ok' => true]);
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/recordings/{id}/route
 // ---------------------------------------------------------------------------
 
@@ -332,7 +479,6 @@ function handle_get_route(int $recordingId): never
 {
     $pdo = get_db();
 
-    // Prüfen ob Erfassung existiert, stop_id und departure_planned holen
     $recStmt = $pdo->prepare(
         'SELECT stop_id, departure_planned FROM ' . tbl('recordings') . ' WHERE id = ?'
     );
@@ -343,8 +489,8 @@ function handle_get_route(int $recordingId): never
         json_error('Erfassung nicht gefunden', 404);
     }
 
-    $recordingStopId          = $rec['stop_id'];
-    $recordingDeparturePlanned = $rec['departure_planned']; // MySQL-Datetime-String
+    $recordingStopId           = $rec['stop_id'];
+    $recordingDeparturePlanned = $rec['departure_planned'];
 
     $stmt = $pdo->prepare(
         'SELECT
@@ -372,8 +518,6 @@ function handle_get_route(int $recordingId): never
             'stopId'           => $row['stop_id'],
             'name'             => $row['stop_name'],
             'departurePlanned' => mysql_to_iso($row['departure_planned']),
-            // Bei doppelt durchfahrenen Haltestellen (Linienwechsel) auch
-            // departure_planned abgleichen um den richtigen Halt zu markieren.
             'isRecordingStop'  => $row['stop_id'] === $recordingStopId
                 && $row['departure_planned'] === $recordingDeparturePlanned,
             'line'             => $row['line'],
@@ -382,3 +526,4 @@ function handle_get_route(int $recordingId): never
 
     json_response($result);
 }
+

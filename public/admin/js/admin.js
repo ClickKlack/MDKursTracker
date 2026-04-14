@@ -95,7 +95,7 @@ const TABS = {
     'hafas-log':       renderHafasLog,
 };
 
-let activeTab = 'school-holidays';
+let activeTab = 'override';
 
 function switchTab(tabName) {
     if (!TABS[tabName]) return;

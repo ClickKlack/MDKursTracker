@@ -14,6 +14,15 @@ $segments = $path !== '' ? explode('/', $path) : [];
 $resource   = $segments[0] ?? '';
 $resourceId = null;
 
+// Muster: /trips/:id/recordings → trip_recordings.php
+if ($resource === 'trips'
+    && isset($segments[1]) && ctype_digit($segments[1])
+    && isset($segments[2]) && $segments[2] === 'recordings') {
+    $resourceId = (int) $segments[1];
+    require __DIR__ . '/trip_recordings.php';
+    return;
+}
+
 // Muster: /trips/:id/override → override.php
 if ($resource === 'trips'
     && isset($segments[1]) && ctype_digit($segments[1])

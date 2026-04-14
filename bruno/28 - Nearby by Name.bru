@@ -1,0 +1,46 @@
+meta {
+  name: Nearby – GET Suche nach Name
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{baseUrl}}/api/nearby
+  body: none
+  auth: none
+}
+
+params:query {
+  name: Hauptbahnhof
+  ~results: 10
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Treffer:", res.body.length);
+    res.body.forEach(s => console.log(" -", s.id, "|", s.name));
+    if (res.body.length > 0) {
+      bru.setVar("stopId", res.body[0].id);
+      bru.setVar("stopName", res.body[0].name);
+    }
+  }
+}
+
+docs {
+  Haltestellen per Name suchen (Alternative zu GPS).
+  stop_name_prefix aus config.php wird server-seitig vorangestellt.
+
+  Beide Modi werden unterstützt:
+    ?name=Hauptbahnhof        → Namenssuche (LocMatch)
+    ?lat=52.12&lon=11.63      → GPS-Suche (bestehend)
+    Keiner von beiden         → 400 Bad Request
+
+  Antwortformat Namenssuche:
+  [{ "id": "de:15003:4000", "name": "Magdeburg, Hauptbahnhof" }]
+  (kein distance-Feld im Namens-Modus)
+}

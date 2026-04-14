@@ -6,9 +6,11 @@
  *  2. Filter: Linie, Wochentagstyp, Datum
  *  3. Liste aller Erfassungen der gewählten Periode (neueste zuerst)
  *  4. Kennzeichnung ob Kursnummer manuell übersteuert
+ *  5. Eigene Erfassungen hervorheben (isOwn)
+ *  6. Eigene Erfassungen nachträglich bearbeiten (Kurs + Kommentar), nur aktive Periode
  */
 
-import { getRecordings, getPeriods, getRecordingRoute } from '../api.js';
+import { getRecordings, getPeriods, getRecordingRoute, putRecording } from '../api.js';
 import { formatTime }                from '../utils/format.js';
 import { lineBadgeHtml }             from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix } from '../app.js';
@@ -34,7 +36,6 @@ export async function render(container, params, context) {
     let periods;
     try {
         periods = await getPeriods();
-        // activePeriodId aus context ggf. aus Perioden ergänzen
         if (activePeriodId === null) {
             activePeriodId  = periods.find(p => p.active)?.id ?? periods.at(-1)?.id ?? null;
             currentPeriodId = activePeriodId;
@@ -62,14 +63,11 @@ export function destroy() {
 // --- Shell aufbauen ----------------------------------------------------------
 
 function buildShell(periods) {
-    // Neueste Periode zuerst in der Auswahlliste
     const options = periods
         .slice()
         .reverse()
         .map(p => {
-            const label = p.active
-                ? `${escapeHtml(p.name)} (aktuell)`
-                : escapeHtml(p.name);
+            const label    = p.active ? `${escapeHtml(p.name)} (aktuell)` : escapeHtml(p.name);
             const selected = p.id === currentPeriodId ? ' selected' : '';
             return `<option value="${p.id}"${selected}>${label}</option>`;
         })
@@ -107,11 +105,10 @@ function buildShell(periods) {
         <div id="recordings-list"></div>`;
 }
 
-/** Read-only-Banner einblenden oder ausblenden */
 function updateReadOnlyBanner(container) {
-    const slot      = container.querySelector('#readonly-banner-slot');
+    const slot        = container.querySelector('#readonly-banner-slot');
     const isOldPeriod = currentPeriodId !== activePeriodId;
-    slot.innerHTML  = isOldPeriod
+    slot.innerHTML    = isOldPeriod
         ? `<div class="history-readonly-banner" role="status">
                Ältere Periode – nur Ansicht, keine neuen Erfassungen möglich
            </div>`
@@ -130,7 +127,6 @@ async function loadAndRender(container) {
             <p>Erfassungen werden geladen…</p>
         </div>`;
 
-    // Filterparameter aus Formular lesen
     const line    = container.querySelector('#filter-line')?.value.trim()  ?? '';
     const dayType = container.querySelector('#filter-daytype')?.value      ?? '';
     const date    = container.querySelector('#filter-date')?.value         ?? '';
@@ -167,33 +163,35 @@ async function loadAndRender(container) {
         return;
     }
 
+    // isEditable: eigene Erfassungen + aktive Periode
+    const isActivePeriod = currentPeriodId === activePeriodId;
+
     listEl.innerHTML = `
         <p class="text-small text-muted history-count">
             ${recordings.length}&nbsp;Erfassung${recordings.length !== 1 ? 'en' : ''}
         </p>
         <ul class="card-list" role="list" aria-label="Erfassungen">
-            ${recordings.map(renderRecordingItem).join('')}
+            ${recordings.map(rec => renderRecordingItem(rec, isActivePeriod)).join('')}
         </ul>`;
 
-    listEl.querySelector('ul').addEventListener('click',   handleRouteToggle);
-    listEl.querySelector('ul').addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRouteToggle(e); }
+    const ul = listEl.querySelector('ul');
+    ul.addEventListener('click',   e => handleListClick(e, container));
+    ul.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleListClick(e, container); }
     });
 }
 
 // --- Einzelne Erfassung rendern ----------------------------------------------
 
-function renderRecordingItem(rec) {
+function renderRecordingItem(rec, isActivePeriod) {
     const isManual  = rec.manualCourseNumber !== null;
     const planTime  = rec.departurePlanned ? formatTime(rec.departurePlanned) : '–';
     const time      = rec.recordedAt  ? formatTime(rec.recordedAt)    : '–';
     const date      = rec.serviceDate ? formatDateShort(rec.serviceDate) : '–';
     const dayLabel  = DAY_TYPE_LABELS[rec.dayType] ?? rec.dayType;
 
-    // Anzuzeigende Kursnummer: manuelle Übersteuerung hat Vorrang
     const displayCourse = rec.manualCourseNumber ?? rec.courseNumber;
 
-    // Falls aktive Kursnummer von der eigenen Erfassung abweicht → Hinweis
     const differsHtml = (
         !isManual &&
         rec.activeCourseNumber !== null &&
@@ -208,17 +206,37 @@ function renderRecordingItem(rec) {
         ? `<span class="badge-manual" title="Kursnummer manuell durch Admin übersteuert">M</span>`
         : '';
 
+    // "Eigene" Erfassung: anderer Stil + Bearbeiten-Button (max. 60 Min. nach Erfassung)
+    const ownClass = rec.isOwn ? ' recording-item--own' : '';
+    const ageMs    = rec.recordedAt ? Date.now() - new Date(rec.recordedAt).getTime() : Infinity;
+    const editBtnHtml = (rec.isOwn && isActivePeriod && !isManual && ageMs < 60 * 60 * 1000)
+        ? `<button class="btn btn-ghost btn-xs btn-edit-recording"
+                   aria-label="Diese Erfassung bearbeiten">
+               Bearbeiten
+           </button>`
+        : '';
+
+    // Kommentar anzeigen wenn vorhanden
+    const commentHtml = rec.comment
+        ? `<span class="recording-comment text-small text-muted">💬&nbsp;${escapeHtml(rec.comment)}</span>`
+        : '';
+
+    const ownBadge = rec.isOwn
+        ? `<span class="badge-own" title="Deine Erfassung">Ich</span>`
+        : '';
+
     const ariaLabel = [
         `Linie ${rec.line}`,
         `nach ${rec.direction}`,
         `Kurs ${displayCourse}`,
         isManual ? 'manuell übersteuert' : '',
+        rec.isOwn ? 'eigene Erfassung' : '',
         `${dayLabel}, ${date}, Planabfahrt ${planTime} Uhr, Haltestelle ${stripStopPrefix(rec.stop)}`,
         `erfasst ${time} Uhr`,
     ].filter(Boolean).join(', ');
 
     return `
-        <li class="card recording-item"
+        <li class="card recording-item${ownClass}"
             role="button"
             tabindex="0"
             data-recording-id="${rec.id}"
@@ -229,8 +247,9 @@ function renderRecordingItem(rec) {
                 <span class="recording-line">${lineBadgeHtml(rec.line)}</span>
                 <span class="recording-direction">${escapeHtml(rec.direction)}</span>
                 <span class="recording-course">
-                    <span class="course-number known">${escapeHtml(displayCourse)}</span>
+                    ${ownBadge}
                     ${manualBadgeHtml}
+                    <span class="course-number known">${escapeHtml(displayCourse)}</span>
                 </span>
             </div>
             <div class="recording-meta text-small text-muted">
@@ -239,22 +258,23 @@ function renderRecordingItem(rec) {
                 &nbsp;·&nbsp;${escapeHtml(planTime)}&nbsp;Uhr
                 <br>erfasst:&nbsp;${escapeHtml(date)}&nbsp;·&nbsp;${escapeHtml(time)}&nbsp;Uhr
                 ${differsHtml}
+                ${commentHtml}
             </div>
+            ${editBtnHtml ? `<div class="recording-footer">${editBtnHtml}</div>` : ''}
             <div class="recording-route" hidden></div>
+            <div class="recording-edit-panel" hidden></div>
         </li>`;
 }
 
 // --- Event-Listener ----------------------------------------------------------
 
 function attachListeners(container) {
-    // Periodenumschalter
     container.querySelector('#period-select')?.addEventListener('change', async e => {
         currentPeriodId = parseInt(e.target.value, 10);
         updateReadOnlyBanner(container);
         await loadAndRender(container);
     });
 
-    // Filter – Reload mit Debounce (300 ms, damit beim Tippen nicht zu viele Anfragen)
     const debouncedLoad = () => {
         if (filterDebounce) clearTimeout(filterDebounce);
         filterDebounce = setTimeout(() => loadAndRender(container), 300);
@@ -265,30 +285,46 @@ function attachListeners(container) {
     container.querySelector('#filter-date')?.addEventListener('change',  debouncedLoad);
 }
 
-// --- Laufweg-Klapp-Logik -----------------------------------------------------
+// --- Zentraler Klick-Handler für die Liste ----------------------------------
 
-async function handleRouteToggle(e) {
+function handleListClick(e, container) {
+    // Bearbeiten-Button
+    const editBtn = e.target.closest('.btn-edit-recording');
+    if (editBtn) {
+        e.stopPropagation();
+        const item = editBtn.closest('.recording-item');
+        if (item) toggleEditPanel(item);
+        return;
+    }
+
+    // Laufweg-Toggle (bestehend)
     const item = e.target.closest('[data-recording-id]');
     if (!item) return;
 
-    const routeEl     = item.querySelector('.recording-route');
-    const isExpanded  = item.getAttribute('aria-expanded') === 'true';
+    // Klick innerhalb des Edit-Panels nicht weiterleiten
+    if (e.target.closest('.recording-edit-panel')) return;
+
+    handleRouteToggle(item);
+}
+
+// --- Laufweg-Klapp-Logik (bestehend) ----------------------------------------
+
+async function handleRouteToggle(item) {
+    const routeEl    = item.querySelector('.recording-route');
+    const isExpanded = item.getAttribute('aria-expanded') === 'true';
 
     if (isExpanded) {
-        // Zuklappen
         item.setAttribute('aria-expanded', 'false');
         routeEl.hidden = true;
         return;
     }
 
-    // Anderen offenen Laufweg schließen
     const openItem = item.closest('ul')?.querySelector('[aria-expanded="true"]');
     if (openItem && openItem !== item) {
         openItem.setAttribute('aria-expanded', 'false');
         openItem.querySelector('.recording-route').hidden = true;
     }
 
-    // Aufklappen
     item.setAttribute('aria-expanded', 'true');
     routeEl.hidden   = false;
     routeEl.innerHTML = `<div class="route-loading"><span class="spinner-small" aria-hidden="true"></span> Laufweg wird geladen…</div>`;
@@ -307,8 +343,7 @@ async function handleRouteToggle(e) {
 }
 
 function renderRouteList(stops) {
-    // Prüfen ob der Laufweg überhaupt einen Linienwechsel enthält
-    const knownLines = stops.map(s => s.line).filter(l => l != null);
+    const knownLines  = stops.map(s => s.line).filter(l => l != null);
     const hasLineChange = new Set(knownLines).size > 1;
 
     let prevLine = null;
@@ -316,8 +351,6 @@ function renderRouteList(stops) {
         const time = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
         const cls  = s.isRecordingStop ? ' route-stop--recording' : '';
 
-        // Linienwechsel-Trenner: bei jedem Linienwechsel inkl. erstem Abschnitt,
-        // aber nur wenn der Laufweg tatsächlich mehrere Linien enthält
         let lineChangeSep = '';
         if (hasLineChange && s.line != null && s.line !== prevLine) {
             lineChangeSep = `
@@ -338,6 +371,129 @@ function renderRouteList(stops) {
     }).join('');
 
     return `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
+}
+
+// --- Inline-Edit-Panel ------------------------------------------------------
+
+function toggleEditPanel(item) {
+    const editPanel = item.querySelector('.recording-edit-panel');
+    if (!editPanel) return;
+
+    const isOpen = !editPanel.hidden;
+    if (isOpen) {
+        editPanel.hidden = true;
+        editPanel.innerHTML = '';
+        return;
+    }
+
+    // Laufweg schließen wenn offen
+    const routeEl = item.querySelector('.recording-route');
+    if (routeEl && !routeEl.hidden) {
+        routeEl.hidden = true;
+        item.setAttribute('aria-expanded', 'false');
+    }
+
+    editPanel.hidden = false;
+    renderEditPanel(item, editPanel);
+}
+
+function renderEditPanel(item, panel) {
+    const recordingId  = parseInt(item.dataset.recordingId, 10);
+    // Aktuelle Kursnummer aus dem DOM auslesen
+    const currentCourse = item.querySelector('.course-number')?.textContent?.trim() ?? '';
+
+    // Kurs-Buttons 00–39
+    const courseButtons = Array.from({ length: 40 }, (_, i) => {
+        const num     = String(i).padStart(2, '0');
+        const active  = num === currentCourse ? ' btn-course--active' : '';
+        return `<button class="btn-course${active}" data-course="${num}">${num}</button>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div class="edit-panel">
+            <p class="text-small text-muted edit-panel-title">Kurs ändern:</p>
+            <div class="course-buttons-grid">${courseButtons}</div>
+            <div class="form-group mt-8">
+                <label for="edit-comment-${recordingId}" class="text-small">Kommentar</label>
+                <textarea id="edit-comment-${recordingId}"
+                          class="form-input edit-comment-input"
+                          rows="2"
+                          maxlength="500"
+                          placeholder="Optionaler Kommentar…"
+                          aria-label="Kommentar zu dieser Erfassung"></textarea>
+            </div>
+            <div id="edit-msg-${recordingId}" class="text-small" aria-live="polite"></div>
+            <div class="edit-panel-actions">
+                <button class="btn btn-primary btn-sm btn-save-edit"
+                        data-recording-id="${recordingId}">Speichern</button>
+                <button class="btn btn-ghost btn-sm btn-cancel-edit">Abbrechen</button>
+            </div>
+        </div>`;
+
+    // Aktuellen Kommentar vorausfüllen
+    const commentText = item.querySelector('.recording-comment')?.textContent?.replace(/^💬\s*/, '') ?? '';
+    const commentEl   = panel.querySelector(`#edit-comment-${recordingId}`);
+    if (commentEl) commentEl.value = commentText;
+
+    // Aktiven Kurs markieren
+    let selectedCourse = currentCourse;
+    panel.querySelectorAll('.btn-course').forEach(btn => {
+        btn.addEventListener('click', () => {
+            panel.querySelectorAll('.btn-course').forEach(b => b.classList.remove('btn-course--active'));
+            btn.classList.add('btn-course--active');
+            selectedCourse = btn.dataset.course;
+        });
+    });
+
+    panel.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
+        panel.hidden = true;
+        panel.innerHTML = '';
+    });
+
+    panel.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
+        const saveBtn  = panel.querySelector('.btn-save-edit');
+        const msgEl    = panel.querySelector(`#edit-msg-${recordingId}`);
+        const comment  = commentEl?.value?.trim() || null;
+
+        saveBtn.disabled = true;
+        msgEl.textContent = '';
+
+        try {
+            await putRecording(recordingId, {
+                courseNumber: selectedCourse,
+                comment,
+            });
+
+            // UI lokal aktualisieren
+            const courseEl = item.querySelector('.course-number');
+            if (courseEl) courseEl.textContent = selectedCourse;
+
+            const existingComment = item.querySelector('.recording-comment');
+            if (comment) {
+                if (existingComment) {
+                    existingComment.textContent = `💬\u00a0${comment}`;
+                } else {
+                    // Kommentar-Element nach differsHtml einfügen
+                    const metaEl = item.querySelector('.recording-meta');
+                    if (metaEl) {
+                        const span = document.createElement('span');
+                        span.className = 'recording-comment text-small text-muted';
+                        span.textContent = `💬\u00a0${comment}`;
+                        metaEl.appendChild(span);
+                    }
+                }
+            } else if (existingComment) {
+                existingComment.remove();
+            }
+
+            panel.hidden = true;
+            panel.innerHTML = '';
+        } catch (err) {
+            msgEl.textContent = `Fehler: ${err.message}`;
+            msgEl.className = 'text-small form-error';
+            saveBtn.disabled = false;
+        }
+    });
 }
 
 // --- Hilfsfunktionen ---------------------------------------------------------

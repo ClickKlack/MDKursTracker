@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Tests für die hafas_log_write()-Funktion in lib/hafas.php
@@ -29,9 +30,7 @@ class HafasLogTest extends TestCase
         hafas_log_write([['meth' => 'LocGeoPos']], 200, 0, [], true);
     }
 
-    /**
-     * @dataProvider endpointProvider
-     */
+    #[DataProvider('endpointProvider')]
     public function testEndpointMapping(string $meth, string $expected): void
     {
         // Endpoint-Mapping via Reflection testen (ohne DB-Zugriff)

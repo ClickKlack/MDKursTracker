@@ -469,10 +469,14 @@ body {
 }
 
 .stop-item {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
     cursor: pointer;
+    padding: 10px 14px;
+}
+
+.stop-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .stop-name {
@@ -636,6 +640,7 @@ body {
     align-items: center;
     gap: 5px;
     flex-shrink: 0;
+    margin-left: auto; /* immer bündig rechts */
 }
 
 .recording-meta {
@@ -836,4 +841,335 @@ body {
         width: 100%;
         max-width: 480px;
     }
+}
+
+/* ==========================================================================
+   Feature: User-System, Namenssuche, Favoriten, Eigene Erfassungen
+   ========================================================================== */
+
+/* --- Profil-View ---------------------------------------------------------- */
+
+.profile-view {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.profile-card,
+.profile-info-card {
+    padding: 16px;
+}
+
+.profile-display-id {
+    font-family: monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--color-text-muted);
+    padding: 8px 0;
+    text-align: center;
+}
+
+.profile-id-hint {
+    margin-top: 4px;
+}
+
+.profile-created {
+    margin-top: 12px;
+    text-align: center;
+}
+
+.form-success { color: var(--color-success, #2d7a4f); margin-top: 8px; }
+.form-error   { color: var(--color-error,   #c0392b); margin-top: 8px; }
+
+/* --- Such-Toggle (GPS / Name) --------------------------------------------- */
+
+.search-toggle {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    margin-bottom: 4px;
+}
+
+.btn-toggle {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 20px;
+    border: 2px solid var(--color-border, #ddd);
+    background: transparent;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: all 0.15s ease;
+}
+
+.btn-toggle.active,
+.btn-toggle[aria-pressed="true"] {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* --- Namenssuche ---------------------------------------------------------- */
+
+#name-search-form {
+    margin-bottom: 4px;
+}
+
+.name-search-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--color-card, #fff);
+    border: 1.5px solid var(--color-border, #d0d0d0);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    margin-bottom: 12px;
+}
+
+.name-search-row:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.name-search-row .form-input {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 12px 14px;
+    font-size: 1rem;
+    outline: none;
+}
+
+.name-search-row .form-input:focus {
+    box-shadow: none;
+    border: none;
+    outline: none;
+}
+
+.name-search-row .btn-search {
+    flex-shrink: 0;
+    margin: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* --- Favoriten ------------------------------------------------------------ */
+
+/* --- Favoriten-Reiter -------------------------------------------------------- */
+
+.fav-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: box-shadow 0.15s, transform 0.1s;
+}
+
+.fav-item:active {
+    transform: scale(0.985);
+    box-shadow: var(--shadow-md);
+}
+
+.fav-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.fav-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fav-remove-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--color-text-muted);
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: color 0.1s, background 0.1s;
+}
+
+.fav-remove-btn:hover {
+    color: var(--color-error, #c0392b);
+    background: rgba(192, 57, 43, 0.08);
+}
+
+/* Stop-Item: Platz für Aktionen rechts */
+
+.stop-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.stop-distance {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+/* Stern-Button */
+
+.btn-star {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 2px 4px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+}
+
+.btn-star:hover { opacity: 0.7; }
+.btn-star--active { color: var(--color-primary); }
+
+/* --- Eigene Erfassungen --------------------------------------------------- */
+
+.recording-item--own {
+    border-left: 3px solid var(--color-primary);
+    background: var(--color-own-bg, rgba(26, 86, 160, 0.04));
+}
+
+.badge-own {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 10px;
+    background: #e67e22;   /* Orange – hebt sich klar von der Kursnummer ab */
+    color: #fff;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.recording-comment {
+    display: block;
+    margin-top: 3px;
+    font-style: italic;
+}
+
+/* Bearbeiten-Button – immer rechts unten in der Karte */
+
+.recording-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+
+.btn-edit-recording {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    border-radius: 12px;
+    border: 1px solid var(--color-primary);
+    background: transparent;
+    color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.btn-edit-recording:hover {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.btn-xs {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+}
+
+/* --- Inline-Edit-Panel ---------------------------------------------------- */
+
+.recording-edit-panel {
+    padding: 10px 0 4px;
+    border-top: 1px solid var(--color-border, #eee);
+    margin-top: 8px;
+}
+
+.edit-panel-title {
+    margin-bottom: 6px;
+}
+
+.course-buttons-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+
+.btn-course {
+    width: 36px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1px solid var(--color-border, #ddd);
+    background: var(--color-surface, #fff);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--color-text);
+    transition: background 0.1s, color 0.1s;
+}
+
+.btn-course:hover {
+    background: var(--color-primary-light, #e8f0fb);
+    border-color: var(--color-primary);
+}
+
+.btn-course--active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+}
+
+.edit-comment-input {
+    width: 100%;
+    resize: vertical;
+    min-height: 48px;
+}
+
+.edit-panel-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* --- Profil in Nav -------------------------------------------------------- */
+
+/* Stellt sicher dass 5 Nav-Items gleichmäßig aufgeteilt werden */
+#app-nav {
+    /* Bereits via grid oder flex im bestehenden CSS – kein Overwrite nötig */
 }

@@ -20,6 +20,28 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%users
+-- Anonyme Nutzer-Identitäten. Kein Login, nur Token-basiert.
+-- Token wird clientseitig generiert (UUID v4) und in localStorage gespeichert.
+-- display_id: 5-stellige Base36-ID (nur im Admin und im eigenen Profil sichtbar).
+-- last_device: Gerätekurzname, aus User-Agent geparst.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%users` (
+    `id`              INT          NOT NULL AUTO_INCREMENT,
+    `token`           VARCHAR(64)  NOT NULL COMMENT 'UUID v4 ohne Bindestriche, clientseitig generiert',
+    `display_id`      CHAR(5)      NOT NULL COMMENT 'Base36 aus SHA-256 des Tokens, für Admin-Anzeige',
+    `name`            VARCHAR(100) NULL     COMMENT 'Optionaler Nutzername, selbst eingegeben',
+    `last_user_agent` VARCHAR(512) NULL     COMMENT 'Browser-User-Agent beim letzten API-Call',
+    `last_device`     VARCHAR(100) NULL     COMMENT 'Gerätekurzname, aus UA geparst, z.B. "Chrome 124 / Android 14"',
+    `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_seen_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_%%PREFIX%%users_token`      (`token`),
+    UNIQUE KEY `uq_%%PREFIX%%users_display_id` (`display_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------------
 -- Tabelle: %%PREFIX%%stops
 -- Periodenübergreifender Namens-Cache für HAFAS-Haltestellen-IDs.
 -- Wird beim ersten Auftreten einer neuen hafas_id befüllt (INSERT IGNORE).
@@ -103,15 +125,21 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%recordings` (
     `departure_planned` DATETIME     NOT NULL,
     `departure_actual`  DATETIME     NULL     COMMENT 'NULL wenn keine Echtzeit verfügbar',
     `course_number`     CHAR(2)      NOT NULL COMMENT '01-99, immer zweistellig',
+    `user_token`        VARCHAR(64)  NULL     COMMENT 'FK zu users.token; NULL für Altdaten',
+    `comment`           VARCHAR(500) NULL     COMMENT 'Optionaler Nutzerkommentar (nur bei eigenen Erfassungen editierbar)',
     PRIMARY KEY (`id`),
     KEY `idx_%%PREFIX%%recordings_trip`        (`trip_id`),
     KEY `idx_%%PREFIX%%recordings_service_date` (`service_date`),
+    KEY `idx_%%PREFIX%%recordings_user_token`   (`user_token`),
     CONSTRAINT `fk_%%PREFIX%%recordings_trip`
         FOREIGN KEY (`trip_id`) REFERENCES `%%PREFIX%%trips` (`id`)
         ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT `fk_%%PREFIX%%recordings_stop`
         FOREIGN KEY (`stop_id`) REFERENCES `%%PREFIX%%stops` (`hafas_id`)
         ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT `fk_%%PREFIX%%recordings_user`
+        FOREIGN KEY (`user_token`) REFERENCES `%%PREFIX%%users` (`token`)
+        ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `chk_%%PREFIX%%course_number`
         CHECK (`course_number` REGEXP '^[0-9]{2}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -127,7 +155,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     `recording_id`      INT         NOT NULL,
     `sequence`          TINYINT     NOT NULL COMMENT 'Position im Laufweg, beginnend bei 1',
     `stop_id`           VARCHAR(20) NOT NULL,
-    `departure_planned` DATETIME    NULL     COMMENT 'NULL bei letztem Halt (nur Ankunft)',
+    `departure_planned` DATETIME    NULL     COMMENT 'Abfahrtszeit; letzter Halt: Ankunftszeit (HAFAS aTimeS-Fallback)',
     `line`              VARCHAR(10) NULL     COMMENT 'Linie an diesem Halt (aus HAFAS prodL); NULL wenn nicht verfügbar',
     PRIMARY KEY (`id`),
     KEY `idx_%%PREFIX%%route_stops_recording` (`recording_id`),
@@ -137,6 +165,25 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     CONSTRAINT `fk_%%PREFIX%%route_stops_stop`
         FOREIGN KEY (`stop_id`) REFERENCES `%%PREFIX%%stops` (`hafas_id`)
         ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%user_favorites
+-- Gespeicherte Lieblingshaltestellen je Nutzer.
+-- Werden in der Nähe-Ansicht immer ganz oben angezeigt.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%user_favorites` (
+    `id`         INT          NOT NULL AUTO_INCREMENT,
+    `user_token` VARCHAR(64)  NOT NULL,
+    `stop_id`    VARCHAR(20)  NOT NULL COMMENT 'HAFAS-Haltestellen-ID',
+    `stop_name`  VARCHAR(100) NOT NULL COMMENT 'Anzeigename der Haltestelle',
+    `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_%%PREFIX%%favorites` (`user_token`, `stop_id`),
+    CONSTRAINT `fk_%%PREFIX%%favorites_user`
+        FOREIGN KEY (`user_token`) REFERENCES `%%PREFIX%%users` (`token`)
+        ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

@@ -1,0 +1,43 @@
+meta {
+  name: Recording – PUT Bearbeiten (Kurs + Kommentar)
+  type: http
+  seq: 29
+}
+
+put {
+  url: {{baseUrl}}/api/recordings/{{lastRecordingId}}
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+body:json {
+  {
+    "courseNumber": "07",
+    "comment": "Fahrzeug war ein Tatra T4D."
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Eigene Erfassung nachträglich bearbeiten.
+  Voraussetzung: 07-Recordings-POST mit demselben X-User-Token ausgeführt
+  (lastRecordingId wird dabei gesetzt).
+
+  Nur Erfassungen der aktiven Periode editierbar.
+  Mindestens eines der Felder (courseNumber, comment) muss angegeben sein.
+  comment: null löscht den Kommentar.
+
+  Fehlertest:
+    X-User-Token gehört zu anderer Erfassung → 403
+    Erfassung in älterer Periode → 403
+    Kein Token → 401
+    Nicht gefunden → 404
+}

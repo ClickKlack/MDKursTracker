@@ -24,7 +24,28 @@ $stmt = $pdo->prepare(
          t.day_type,
          t.direction,
          t.manual_course_number,
-         COUNT(r.id) AS recording_count,
+         COUNT(r.id)               AS recording_count,
+         MIN(rs1.departure_planned) AS start_departure,
+         MIN(st1.name)              AS start_stop_name,
+         (
+             SELECT rs_e.departure_planned
+             FROM ' . tbl('route_stops') . ' rs_e
+             WHERE rs_e.recording_id = (
+                 SELECT r2.id FROM ' . tbl('recordings') . ' r2
+                 WHERE r2.trip_id = t.id LIMIT 1
+             )
+             ORDER BY rs_e.sequence DESC LIMIT 1
+         ) AS end_departure,
+         (
+             SELECT se.name
+             FROM ' . tbl('route_stops') . ' rs_e
+             JOIN ' . tbl('stops') . ' se ON se.hafas_id = rs_e.stop_id
+             WHERE rs_e.recording_id = (
+                 SELECT r2.id FROM ' . tbl('recordings') . ' r2
+                 WHERE r2.trip_id = t.id LIMIT 1
+             )
+             ORDER BY rs_e.sequence DESC LIMIT 1
+         ) AS end_stop_name,
          COALESCE(
              t.manual_course_number,
              (
@@ -37,10 +58,14 @@ $stmt = $pdo->prepare(
              )
          ) AS active_course_number
      FROM ' . tbl('trips') . ' t
-     LEFT JOIN ' . tbl('recordings') . ' r ON r.trip_id = t.id
+     LEFT JOIN ' . tbl('recordings') . '  r   ON r.trip_id = t.id
+     LEFT JOIN ' . tbl('route_stops') . ' rs1 ON rs1.recording_id = r.id AND rs1.sequence = 1
+     LEFT JOIN ' . tbl('stops') . '        st1 ON st1.hafas_id = rs1.stop_id
      WHERE t.period_id = ?
      GROUP BY t.id
-     ORDER BY t.line, t.day_type, t.service_nr'
+     ORDER BY t.line, t.day_type,
+              CAST(SUBSTRING_INDEX(t.service_nr, \'_\', 1)  AS UNSIGNED),
+              CAST(SUBSTRING_INDEX(t.service_nr, \'_\', -1) AS UNSIGNED)'
 );
 $stmt->execute([$periodId]);
 
@@ -57,6 +82,14 @@ foreach ($rows as $row) {
         'activeCourseNumber' => $row['active_course_number'],
         'manualCourseNumber' => $row['manual_course_number'],
         'recordingCount'     => (int) $row['recording_count'],
+        'startDeparture'     => $row['start_departure']
+            ? (new DateTime($row['start_departure']))->format('H:i')
+            : null,
+        'startStopName'      => $row['start_stop_name'],
+        'endDeparture'       => $row['end_departure']
+            ? (new DateTime($row['end_departure']))->format('H:i')
+            : null,
+        'endStopName'        => $row['end_stop_name'] ?? $row['direction'],
     ];
 }
 

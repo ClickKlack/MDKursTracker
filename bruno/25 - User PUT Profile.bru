@@ -1,0 +1,36 @@
+meta {
+  name: User – PUT Profilname setzen
+  type: http
+  seq: 25
+}
+
+put {
+  url: {{baseUrl}}/api/user
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+body:json {
+  {
+    "name": "Testnutzer"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Profilname setzen. Voraussetzung: 23-User-POST-Init ausgeführt.
+  name darf leer sein (null → Profil zurücksetzen): {"name": ""}
+  Maximallänge: 100 Zeichen.
+
+  Fehlertest:
+    name > 100 Zeichen → 400
+    X-User-Token unbekannt → 404
+}

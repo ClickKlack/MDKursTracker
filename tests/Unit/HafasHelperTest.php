@@ -137,4 +137,75 @@ class HafasHelperTest extends TestCase
     {
         $this->assertSame($expected, hafas_line_from_jid($jid));
     }
+
+    // -----------------------------------------------------------------------
+    // hafas_parse_stop_matches – LocMatch-Antwort filtern und mappen
+    // -----------------------------------------------------------------------
+
+    /** Tram-Bit (32) gesetzt → Haltestelle wird übernommen */
+    public function test_parse_stop_matches_keeps_tram_stops(): void
+    {
+        $locL = [
+            ['extId' => '900001', 'name' => 'Magdeburg, Hauptbahnhof',    'pCls' => 32],
+            ['extId' => '900002', 'name' => 'Magdeburg, Hasselbachplatz', 'pCls' => 32],
+        ];
+        $result = hafas_parse_stop_matches($locL, 10);
+        $this->assertCount(2, $result);
+        $this->assertSame('900001', $result[0]['id']);
+        $this->assertSame('Magdeburg, Hauptbahnhof', $result[0]['name']);
+    }
+
+    /** Haltestellen ohne Tram-Bit werden herausgefiltert */
+    public function test_parse_stop_matches_filters_non_tram(): void
+    {
+        $locL = [
+            ['extId' => '800001', 'name' => 'Bahnhof Zoo (Bus)',  'pCls' => 8],  // Bus
+            ['extId' => '900001', 'name' => 'Magdeburg, Hbf',     'pCls' => 32], // Tram
+            ['extId' => '800002', 'name' => 'S-Bahnhof Mitte',    'pCls' => 2],  // S-Bahn
+        ];
+        $result = hafas_parse_stop_matches($locL, 10);
+        $this->assertCount(1, $result);
+        $this->assertSame('900001', $result[0]['id']);
+    }
+
+    /** $results-Limit wird eingehalten */
+    public function test_parse_stop_matches_respects_limit(): void
+    {
+        $locL = array_map(
+            fn(int $i) => ['extId' => "9000{$i}", 'name' => "Haltestelle {$i}", 'pCls' => 32],
+            range(1, 8)
+        );
+        $result = hafas_parse_stop_matches($locL, 3);
+        $this->assertCount(3, $result);
+        $this->assertSame('90001', $result[0]['id']);
+        $this->assertSame('90003', $result[2]['id']);
+    }
+
+    /** pCls fehlt vollständig → Haltestelle wird herausgefiltert */
+    public function test_parse_stop_matches_missing_pcls_is_filtered(): void
+    {
+        $locL = [
+            ['extId' => '900001', 'name' => 'Ohne pCls'],
+            ['extId' => '900002', 'name' => 'Mit Tram',  'pCls' => 32],
+        ];
+        $result = hafas_parse_stop_matches($locL, 10);
+        $this->assertCount(1, $result);
+        $this->assertSame('900002', $result[0]['id']);
+    }
+
+    /** Leere locL-Liste → leeres Ergebnis */
+    public function test_parse_stop_matches_empty_input(): void
+    {
+        $this->assertSame([], hafas_parse_stop_matches([], 10));
+    }
+
+    /** Kombiniertes pCls (Tram + Bus = 40) → Tram-Bit gesetzt, wird übernommen */
+    public function test_parse_stop_matches_combined_pcls(): void
+    {
+        $locL = [
+            ['extId' => '900001', 'name' => 'Tram+Bus-Halt', 'pCls' => 40], // 32 | 8
+        ];
+        $result = hafas_parse_stop_matches($locL, 10);
+        $this->assertCount(1, $result);
+    }
 }

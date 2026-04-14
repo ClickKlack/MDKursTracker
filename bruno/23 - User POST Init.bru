@@ -1,0 +1,53 @@
+meta {
+  name: User – POST Init (Token registrieren)
+  type: http
+  seq: 23
+}
+
+post {
+  url: {{baseUrl}}/api/user
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+assert {
+  res.status: eq 200 or 201
+  res.body.displayId: isDefined
+  res.body.isNew: isDefined
+}
+
+script:pre-request {
+  // Sicherstellen, dass ein userToken vorhanden ist
+  let token = bru.getVar("userToken");
+  if (!token) {
+    // Zufälligen 32-Zeichen-Hex-Token generieren
+    const arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    token = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+    bru.setVar("userToken", token);
+    console.log("Neuer User-Token generiert:", token);
+  }
+}
+
+script:post-response {
+  if (res.status === 201 || res.status === 200) {
+    console.log("Display-ID:", res.body.displayId);
+    console.log("Neu:", res.body.isNew);
+    bru.setVar("userDisplayId", res.body.displayId);
+  }
+}
+
+docs {
+  Registriert einen User-Token oder aktualisiert last_seen_at.
+  Header X-User-Token: 32-stelliger Hex-String (UUID ohne Bindestriche).
+
+  201 → neuer User angelegt
+  200 → bestehender User (last_seen_at aktualisiert)
+
+  Fehlertest:
+    X-User-Token: "ungültig" → 401 Unauthorized
+}

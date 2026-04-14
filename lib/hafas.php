@@ -88,6 +88,75 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
 }
 
 /**
+ * Haltestellen per Name suchen, gefiltert auf Straßenbahn.
+ * Nutzt HAFAS LocMatch (Freitextsuche).
+ *
+ * @param  string $name    Suchbegriff (ggf. bereits mit Stadt-Präfix)
+ * @param  int    $results Maximale Trefferanzahl
+ * @return array<array{id: string, name: string}>
+ */
+function hafas_find_stops(string $name, int $results = 10): array
+{
+    $cacheKey  = hafas_cache_key('stopfinder', $name, $results);
+    $cached    = hafas_cache_get($cacheKey);
+    $logParams = ['name' => $name, 'results' => $results];
+    if ($cached !== null) {
+        hafas_log_write([['meth' => 'LocMatch']], 200, 0, [], true, $logParams);
+        return $cached;
+    }
+
+    $res = hafas_request([
+        [
+            'meth' => 'LocMatch',
+            'req'  => [
+                'input' => [
+                    'field' => 'S',
+                    'loc'   => [
+                        'name' => $name,
+                        'type' => 'S',
+                    ],
+                    'maxLoc' => $results * 3, // mehr anfordern, da wir auf Trams filtern
+                ],
+            ],
+        ],
+    ], $logParams);
+
+    $stops  = $res[0]['res']['match']['locL'] ?? [];
+    $result = hafas_parse_stop_matches($stops, $results);
+
+    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_STOPFINDER);
+
+    return $result;
+}
+
+/**
+ * Filtert und mappt eine rohe HAFAS-locL-Liste auf [{id, name}].
+ * Nur Einträge mit gesetztem Tram-Bit (HAFAS_TRAM_MASK) in pCls werden übernommen.
+ *
+ * @internal Ausgelagert für Unit-Tests ohne echten HAFAS-API-Call.
+ * @param  array<array{extId: string, name: string, pCls?: int}> $locL
+ * @return array<array{id: string, name: string}>
+ */
+function hafas_parse_stop_matches(array $locL, int $results): array
+{
+    $result = [];
+    foreach ($locL as $stop) {
+        // Nur Haltestellen mit Tram-Betrieb: Bit 5 (32) im pCls-Feld
+        if (!(($stop['pCls'] ?? 0) & HAFAS_TRAM_MASK)) {
+            continue;
+        }
+        $result[] = [
+            'id'   => $stop['extId'],
+            'name' => $stop['name'],
+        ];
+        if (count($result) >= $results) {
+            break;
+        }
+    }
+    return $result;
+}
+
+/**
  * Nächste Straßenbahn-Abfahrten an einer Haltestelle.
  *
  * @param  int $maxMinutes Zeitfenster in Minuten (Standard 59); 0 = kein Limit

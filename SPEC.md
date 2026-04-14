@@ -1,8 +1,8 @@
 # SPEC.md – marego Kursnummer-Erfassungs-App: MDKursTracker
 
-> Version: 1.2
-> Stand: 2026-03-24
-> Status: Anforderungskonzept abgeschlossen, Implementierung ausstehend
+> Version: 1.3
+> Stand: 2026-04-14
+> Status: Implementiert (Schema-Version 2)
 
 ---
 
@@ -42,11 +42,28 @@ Erfassungsperiode starten.
 
 ## 3. Nutzer & Zugang
 
-- **Erfasser:** Kein Login. Jeder mit der URL kann Kursnummern eintragen und
-  alle Einträge einsehen.
-- **Admin:** Eigenes Login-Formular (`/admin/`). PHP-Session-basiert.
-  Passwort als `password_hash()`-Wert in Konfigurationsdatei **außerhalb**
-  des Webroot gespeichert – niemals im JS, niemals im Klartext in der DB.
+### 3.1 Erfasser (anonym)
+
+Kein Login. Jeder mit der URL kann Kursnummern eintragen und alle Einträge
+einsehen. Die App erzeugt beim Erstbesuch automatisch ein **UUID-v4-Token**
+(ohne Bindestriche, 32 Hex-Zeichen) und speichert es in `localStorage`.
+
+- Das Token ist dauerhaft (kein automatischer Ablauf)
+- Aus dem Token wird eine **5-stellige Base36-Display-ID** abgeleitet
+  (SHA-256 des Tokens → erste 6 Hex-Zeichen → Basis-36-Umwandlung,
+  Großbuchstaben, führende Nullen auf 5 Stellen). Diese ID ist nur im
+  eigenen Profil-Modal und im Admin-Frontend sichtbar.
+- Bei jedem API-Call wird der Token als HTTP-Header `X-User-Token` übermittelt
+- Optionaler Profilname: Nutzer können freiwillig ihren Namen angeben
+  (hilft dem Admin bei Rückfragen)
+- Alle eigenen Erfassungen sind in der Verlaufsansicht hervorgehoben
+
+### 3.2 Admin
+
+Eigenes Login-Formular (`/admin/`). PHP-Session-basiert, Gültigkeitsdauer
+**30 Tage** (konfiguriert über `session.gc_maxlifetime` und Cookie-Lifetime).
+Passwort als `password_hash()`-Wert in Konfigurationsdatei **außerhalb**
+des Webroot gespeichert – niemals im JS, niemals im Klartext in der DB.
 
 ---
 
@@ -143,12 +160,30 @@ Die anzuzeigende aktive Kursnummer wird zur Laufzeit berechnet:
 
 ## 7. Funktionen
 
-### 7.1 Haltestellen in der Nähe
+### 7.1 Haltestellen suchen
 
-- GPS-Standort via Browser Geolocation API
+Der Haltestellen-View bietet drei Reiter, deren letzter gewählter Zustand
+in `localStorage` gespeichert wird:
+
+**GPS-Reiter:**
+- Standort via Browser Geolocation API
 - PHP-Proxy → INSA HAFAS Nearby-Abfrage
-- Anzeige als Liste, sortiert nach Entfernung
-- Gefiltert auf Modus `tram` (nur Straßenbahnen)
+- Anzeige als Liste sortiert nach Entfernung, gefiltert auf Trams
+
+**Name-Reiter:**
+- Freitexteingabe → `GET /api/nearby?name=…` → HAFAS LocMatch
+- Der in `config.php` konfigurierte `stop_name_prefix` (z.B. `"Magdeburg, "`)
+  wird serverseitig automatisch vorangestellt
+- Suche nur auf Knopfdruck / Enter (kein Live-Search)
+- Letzter Suchbegriff wird in `localStorage` wiederhergestellt
+
+**Favoriten-Reiter:**
+- Zeigt gespeicherte Lieblings-Haltestellen kompakt als Liste
+- Klick navigiert direkt zu Abfahrten
+- × entfernt den Favoriten
+
+Bei GPS- und Name-Ergebnissen kann jede Haltestelle per ⭐-Button als
+Favorit hinzugefügt oder entfernt werden.
 
 ### 7.2 Abfahrten an einer Haltestelle
 
@@ -164,23 +199,38 @@ Die anzuzeigende aktive Kursnummer wird zur Laufzeit berechnet:
 - **Schnellerfassung:** 18 Buttons für `01`–`18`
 - **Freitextfeld:** Freie Eingabe, Validierung auf zweistelliges Format `01`–`99`
 - Nach Bestätigung:
-  - Speicherung der Erfassung in `recordings` (Referenz auf aktuelle Periode
-    über `trip_id`)
+  - Speicherung der Erfassung inkl. `user_token` (wenn vorhanden)
   - Automatischer Abruf des vollständigen Laufwegs via HAFAS Trip-Endpunkt
   - Speicherung aller Halte normalisiert in `route_stops` + `stops`
 
-### 7.4 Einträge einsehen
+### 7.4 Einträge einsehen (Verlauf)
 
 - Liste aller Erfassungen der **aktuellen Periode**, sortiert nach
   `recorded_at` absteigend
 - Filterbar nach: Linie, Wochentagstyp, Datum
 - Kennzeichnung ob Kursnummer manuell übersteuert oder per Mehrheit ermittelt
-- **Periodenumschalter:** Ansicht älterer Perioden zur Auswertung möglich
-  (read-only)
+- **Periodenumschalter:** Ansicht älterer Perioden möglich (read-only)
+- **Eigene Erfassungen** sind mit orangem „Ich"-Badge und blauem linken Rand
+  hervorgehoben
+- **Kommentare** werden unter der Metazeile angezeigt
+- **Inline-Bearbeitung** eigener Erfassungen (nur aktive Periode,
+  max. 60 Minuten nach Erfassung):
+  - Kurs-Buttons `00`–`39`
+  - Kommentarfeld (max. 500 Zeichen)
+  - Speichern aktualisiert die Karte direkt ohne Reload
 
-### 7.5 Admin-Frontend (`/admin/`)
+### 7.5 Eigenes Profil
 
-- Login: HTML-Formular → POST → PHP-Session
+- Aufruf über den Profil-Tab in der Navigation
+- Display-ID wird sofort client-seitig aus dem localStorage-Token berechnet
+  (kein Ladevorgang)
+- Optionaler Name: wird beim Verlassen des Feldes automatisch gespeichert
+  (Debounce: 1,5 s nach Tippende, sofort bei Blur)
+- Name ist nur im Admin-Frontend sichtbar (nicht in der Verlaufsliste)
+
+### 7.6 Admin-Frontend (`/admin/`)
+
+- Login: HTML-Formular → POST → PHP-Session (30 Tage gültig)
 - Logout
 
 **Schulferien:**
@@ -189,6 +239,9 @@ Die anzuzeigende aktive Kursnummer wird zur Laufzeit berechnet:
 **Kursnummer-Übersteuerung:**
 - Manuellen Wert je logischer Fahrt (aktuelle Periode) setzen oder
   zurücksetzen
+- **Einzelerfassungen:** Aufklappbare Liste pro Fahrt (Accordion –
+  immer nur eine offen) mit Zeitpunkt, Haltestelle, Kurs, Kommentar
+  und Nutzerinformationen (Name, Display-ID, Gerät)
 
 **Fahrplanperioden:**
 - Übersicht aller Perioden (Bezeichnung, Startdatum, Anzahl Erfassungen)
@@ -223,7 +276,7 @@ Die aktive Periode ist immer diejenige mit dem höchsten `id`-Wert.
 | `period_id` | INT NOT NULL FK | → `schedule_periods.id` |
 | `service_nr` | VARCHAR(20) NOT NULL | HAFAS fahrtNr |
 | `line` | VARCHAR(10) NOT NULL | Linienbezeichnung (z.B. „6") |
-| `day_type` | ENUM('MO-FR','SA','SO','FT','SF') NOT NULL | Kalendertyp (FT nur in Altdaten, neu immer SO) |
+| `day_type` | ENUM('MO-FR','SA','SO','FT','SF') NOT NULL | Kalendertyp |
 | `direction` | VARCHAR(100) NOT NULL | Zielhaltestellenname |
 | `manual_course_number` | CHAR(2) NULL | Manuelle Übersteuerung (NULL = keine) |
 
@@ -236,14 +289,16 @@ Unique-Index auf `(period_id, service_nr, line, day_type)`.
 | Spalte | Typ | Beschreibung |
 |---|---|---|
 | `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
-| `trip_id` | INT NOT NULL FK | → `trips.id` (trägt `period_id` implizit) |
+| `trip_id` | INT NOT NULL FK | → `trips.id` |
 | `recorded_at` | DATETIME NOT NULL | Zeitstempel der Erfassung (UTC) |
 | `hafas_trip_id` | VARCHAR(100) NOT NULL | HAFAS tripId (tagesgebunden) |
 | `service_date` | DATE NOT NULL | Betriebsdatum |
 | `stop_id` | VARCHAR(20) NOT NULL FK | → `stops.hafas_id` |
 | `departure_planned` | DATETIME NOT NULL | Planmäßige Abfahrt |
-| `departure_actual` | DATETIME NULL | Echtzeit-Abfahrt (NULL wenn nicht verfügbar) |
+| `departure_actual` | DATETIME NULL | Echtzeit-Abfahrt |
 | `course_number` | CHAR(2) NOT NULL | Erfasste Kursnummer |
+| `user_token` | VARCHAR(64) NULL FK | → `users.token`; NULL für Altdaten |
+| `comment` | VARCHAR(500) NULL | Optionaler Nutzerkommentar |
 
 ---
 
@@ -253,7 +308,7 @@ Unique-Index auf `(period_id, service_nr, line, day_type)`.
 |---|---|---|
 | `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
 | `recording_id` | INT NOT NULL FK | → `recordings.id` |
-| `sequence` | TINYINT NOT NULL | Position im Laufweg (1, 2, 3 …) |
+| `sequence` | TINYINT NOT NULL | Position im Laufweg |
 | `stop_id` | VARCHAR(20) NOT NULL FK | → `stops.hafas_id` |
 | `departure_planned` | DATETIME NULL | Planmäßige Abfahrt an diesem Halt |
 
@@ -283,15 +338,49 @@ Periodenübergreifend gültig.
 
 ---
 
-### 8.7 Entity-Relationship-Übersicht
+### 8.7 Tabelle `users`
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
+| `token` | VARCHAR(64) NOT NULL UNIQUE | UUID v4 ohne Bindestriche, clientseitig generiert |
+| `display_id` | CHAR(5) NOT NULL UNIQUE | Base36-Kurzkennung (aus SHA-256 des Tokens) |
+| `name` | VARCHAR(100) NULL | Optionaler Nutzername |
+| `last_user_agent` | VARCHAR(512) NULL | Browser-User-Agent beim letzten API-Call |
+| `last_device` | VARCHAR(100) NULL | Gerätekurzname (z.B. „Chrome 124 / Android 14") |
+| `created_at` | DATETIME NOT NULL | Zeitstempel der Erstanlage |
+| `last_seen_at` | DATETIME NOT NULL | Zeitstempel des letzten API-Calls |
+
+---
+
+### 8.8 Tabelle `user_favorites`
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
+| `user_token` | VARCHAR(64) NOT NULL FK | → `users.token` |
+| `stop_id` | VARCHAR(20) NOT NULL | HAFAS-Haltestellen-ID |
+| `stop_name` | VARCHAR(100) NOT NULL | Anzeigename |
+| `created_at` | DATETIME NOT NULL | Zeitstempel der Anlage |
+
+Unique-Index auf `(user_token, stop_id)`.
+
+---
+
+### 8.9 Entity-Relationship-Übersicht
 
 ```
 schedule_periods (1) ──< trips (1) ──< recordings (1) ──< route_stops
                                                │                 │
                                             stops <──────────────┘
+                                               │
+                                         users (0..1)
+                                               │
+                                      user_favorites (0..n)
 
 school_holidays  (unabhängig, periodenübergreifend)
 stops            (unabhängig, periodenübergreifend)
+users            (unabhängig, periodenübergreifend)
 ```
 
 ---
@@ -323,20 +412,32 @@ Siehe `API.md` für vollständige Request/Response-Dokumentation.
 
 | Methode | Pfad | Funktion |
 |---|---|---|
-| `GET` | `/api/nearby` | Nahegelegene Tramhaltestellen |
+| `GET` | `/api/config` | Frontend-Konfiguration |
+| `GET` | `/api/nearby?lat&lon` | Nahegelegene Tramhaltestellen (GPS) |
+| `GET` | `/api/nearby?name` | Tramhaltestellen per Namenssuche |
 | `GET` | `/api/departures` | Abfahrten an einer Haltestelle |
 | `GET` | `/api/trip` | Vollständiger Laufweg eines Kurses |
 | `GET` | `/api/calendar` | Wochentagstyp für ein Datum |
 | `POST` | `/api/recordings` | Neue Erfassung speichern |
 | `GET` | `/api/recordings` | Erfassungen abrufen |
+| `PUT` | `/api/recordings/:id` | Eigene Erfassung bearbeiten (Kurs + Kommentar) |
+| `GET` | `/api/recordings/:id/route` | Laufweg einer Erfassung |
 | `GET` | `/api/trips` | Logische Fahrten mit aktiver Kursnummer |
 | `GET` | `/api/periods` | Alle Fahrplanperioden |
-| `POST` | `/admin/login` | Admin-Login |
-| `POST` | `/admin/logout` | Admin-Logout |
-| `*` | `/admin/school-holidays` | Schulferien CRUD |
-| `*` | `/admin/trips/:id/override` | Kursnummer-Übersteuerung |
-| `POST` | `/admin/periods` | Fahrplanschnitt |
-| `PUT` | `/admin/periods/:id` | Periode umbenennen / Startdatum korrigieren |
+| `POST` | `/api/user` | Token registrieren / `last_seen_at` aktualisieren |
+| `GET` | `/api/user` | Eigenes Profil laden |
+| `PUT` | `/api/user` | Profilname setzen |
+| `GET` | `/api/user/favorites` | Favoriten laden |
+| `POST` | `/api/user/favorites` | Favorit hinzufügen |
+| `DELETE` | `/api/user/favorites/:stop_id` | Favorit entfernen |
+| `POST` | `/admin-api/login` | Admin-Login |
+| `POST` | `/admin-api/logout` | Admin-Logout |
+| `*` | `/admin-api/school-holidays` | Schulferien CRUD |
+| `PUT` | `/admin-api/trips/:id/override` | Kursnummer-Übersteuerung setzen |
+| `DELETE` | `/admin-api/trips/:id/override` | Kursnummer-Übersteuerung zurücksetzen |
+| `GET` | `/admin-api/trips/:id/recordings` | Einzelerfassungen einer Fahrt |
+| `POST` | `/admin-api/periods` | Fahrplanschnitt |
+| `PUT` | `/admin-api/periods/:id` | Periode umbenennen / Datum korrigieren |
 
 ---
 
@@ -346,23 +447,30 @@ Siehe `API.md` für vollständige Request/Response-Dokumentation.
 - Kein Passwort oder Hash im JavaScript
 - Kein Passwort im Klartext in der Datenbank
 - PHP-Session mit `session_regenerate_id()` nach Login
+- Session-Cookie: `HttpOnly`, `Secure`, `SameSite=Lax`, 30 Tage Lifetime
 - Alle Admin-Endpunkte prüfen Session-Status vor Ausführung
 - Alle Datenbankzugriffe ausschließlich mit Prepared Statements
 - Fahrplanschnitt nur nach explizitem Bestätigungsdialog auslösbar
+- User-Token niemals im JSON-Response öffentlicher Endpunkte —
+  nur `isOwn: bool` wird zurückgegeben
+- Display-ID nur im eigenen Profil-Modal sichtbar, nicht in der Verlaufsliste
 
 ---
 
 ## 12. PWA-Anforderungen
 
 - `manifest.json` mit Name, Icons, `display: standalone`
-- Service Worker für Offline-Fähigkeit (mindestens App-Shell cachen)
+- Service Worker für Offline-Fähigkeit (App-Shell cachen, API-Calls ungecacht)
 - Getestet auf Android Chrome
 
 ---
 
-## 13. Offene Punkte vor Implementierungsstart
+## 13. Datenbankmigrationen
 
-- [ ] Nutzungsrechtliche Klärung INSA HAFAS-API (service@nasa.de)
-- [ ] Webhosting prüfen: PHP-Version ≥ 8.0, curl aktiviert, MariaDB-Version
-- [ ] Konfigurationsdatei-Ablageort außerhalb Webroot mit Hoster abstimmen
-- [ ] Domainstruktur festlegen (Subdomain vs. Unterverzeichnis)
+| Version | Datei | Inhalt |
+|---|---|---|
+| v1 | `DATABASE.sql` | Initiales Schema (alle Tabellen, für Neuinstallation) |
+| v2 | `DATABASE_migrate_v2.sql` | Neue Tabellen `users`, `user_favorites`; neue Spalten `user_token`, `comment` in `recordings` |
+
+Migration v2 ist sicher wiederholbar (`IF NOT EXISTS`). Bestehende Erfassungen
+bleiben unverändert (`user_token` ist nullable).

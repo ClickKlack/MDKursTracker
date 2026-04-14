@@ -1,0 +1,42 @@
+meta {
+  name: Favorites – POST Hinzufügen
+  type: http
+  seq: 27
+}
+
+post {
+  url: {{baseUrl}}/api/user/favorites
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+body:json {
+  {
+    "stopId": "de:15003:4000",
+    "stopName": "Magdeburg, Hauptbahnhof"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.ok: eq true
+}
+
+docs {
+  Favorit hinzufügen. Voraussetzung: 23-User-POST-Init ausgeführt.
+  Duplizierter stopId → INSERT IGNORE, trotzdem 201.
+
+  Favorit löschen:
+    DELETE {{baseUrl}}/api/user/favorites/de%3A15003%3A4000
+    Header X-User-Token: {{userToken}}
+    → 200 { "ok": true }
+
+  Fehlertest:
+    stopId fehlt → 400
+    stopId > 20 Zeichen → 400
+    User-Token unbekannt → 404
+}

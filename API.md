@@ -1,6 +1,6 @@
 # API.md – marego Kursnummer-Erfassungs-App
 
-> Version: 1.1 | Stand: 2026-03-24
+> Version: 1.2 | Stand: 2026-04-14
 
 Alle Endpunkte liefern und erwarten `Content-Type: application/json`.
 Zeitangaben immer in ISO 8601 / UTC. Kursnummern immer zweistellig (`"07"`).
@@ -42,33 +42,51 @@ Das Frontend entfernt diesen Präfix vor der Anzeige von Haltestellennamen.
 
 ### GET `/api/nearby`
 
-Haltestellen in der Nähe eines GPS-Punkts, gefiltert auf Straßenbahnen.
+Haltestellen in der Nähe eines GPS-Punkts **oder** per Namenssuche, gefiltert auf Straßenbahnen.
+Genau einer der beiden Modi muss angegeben werden.
 
-**Parameter:**
+**Parameter – GPS-Modus:**
 
 | Name | Typ | Pflicht | Beschreibung |
 |---|---|---|---|
-| `lat` | float | ja | Breitengrad |
-| `lon` | float | ja | Längengrad |
+| `lat` | float | ja (GPS) | Breitengrad |
+| `lon` | float | ja (GPS) | Längengrad |
 | `results` | int | nein | Max. Anzahl Ergebnisse (Standard: 10) |
 
-**Beispiel-Request:**
+**Parameter – Namens-Modus:**
+
+| Name | Typ | Pflicht | Beschreibung |
+|---|---|---|---|
+| `name` | string | ja (Name) | Haltestellenname (Kurzform; `stop_name_prefix` wird server-seitig vorangestellt) |
+| `results` | int | nein | Max. Anzahl Ergebnisse (Standard: 10) |
+
+**Beispiel-Request GPS:**
 ```
 GET /api/nearby?lat=52.1205&lon=11.6276&results=5
 ```
 
-**Beispiel-Response:**
+**Beispiel-Response GPS:**
 ```json
 [
   {
     "id": "de:15003:4000",
     "name": "Magdeburg, Hauptbahnhof",
     "distance": 142
-  },
+  }
+]
+```
+
+**Beispiel-Request Name:**
+```
+GET /api/nearby?name=Hauptbahnhof
+```
+
+**Beispiel-Response Name** (kein `distance`-Feld):
+```json
+[
   {
-    "id": "de:15003:4001",
-    "name": "Magdeburg, Breiter Weg",
-    "distance": 310
+    "id": "de:15003:4000",
+    "name": "Magdeburg, Hauptbahnhof"
   }
 ]
 ```
@@ -255,6 +273,9 @@ Alle Erfassungen abrufen, optional gefiltert.
 GET /api/recordings?line=6&day_type=MO-FR
 ```
 
+Der optionale Header `X-User-Token` (User-Token aus localStorage) aktiviert das `isOwn`-Feld —
+der Token selbst erscheint nie in der Antwort.
+
 **Beispiel-Response:**
 ```json
 [
@@ -272,10 +293,47 @@ GET /api/recordings?line=6&day_type=MO-FR
     "departureActual":  "2026-03-24T14:33:00Z",
     "courseNumber": "07",
     "activeCourseNumber": "07",
-    "manualCourseNumber": null
+    "manualCourseNumber": null,
+    "comment": null,
+    "isOwn": false
   }
 ]
 ```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `comment` | string\|null | Kommentar zur Erfassung |
+| `isOwn` | bool | `true` wenn `X-User-Token` mit dem erfassenden User übereinstimmt |
+
+---
+
+### PUT `/api/recordings/{id}`
+
+Eigene Erfassung nachträglich bearbeiten (Kursnummer und/oder Kommentar).
+Nur für Erfassungen der aktiven Periode. Erfordert Header `X-User-Token`.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Request-Body** (mindestens ein Feld):
+```json
+{
+  "courseNumber": "07",
+  "comment": "Fahrzeug war ein Tatra T4D."
+}
+```
+
+`comment: null` löscht den vorhandenen Kommentar.
+
+**Erfolg (200):**
+```json
+{ "ok": true }
+```
+
+**Fehler-Beispiele:**
+- `401` – `X-User-Token`-Header fehlt oder ungültig
+- `403` – Erfassung gehört einem anderen User
+- `403` – Erfassung liegt in einer abgeschlossenen Periode
+- `404` – Erfassung nicht gefunden
 
 ---
 
@@ -356,7 +414,128 @@ Alle Fahrplanperioden auflisten.
 
 ---
 
-## 4. Admin-Endpunkte
+## 4. User-Endpunkte
+
+Alle User-Endpunkte erfordern den Header `X-User-Token` mit einem 32-stelligen Hex-Token
+(UUID v4 ohne Bindestriche, generiert im Frontend via `crypto.randomUUID()`).
+
+---
+
+### POST `/api/user`
+
+Token registrieren bzw. `last_seen_at` aktualisieren. Legt den User beim ersten Aufruf an.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Erfolg-Response bei Neuanlage (201):**
+```json
+{ "displayId": "A3K7F", "isNew": true }
+```
+
+**Erfolg-Response bei bestehendem User (200):**
+```json
+{ "displayId": "A3K7F", "isNew": false }
+```
+
+**Fehler:** `401` – Token fehlt oder ungültig
+
+---
+
+### GET `/api/user`
+
+Eigenes Profil laden.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Erfolg (200):**
+```json
+{
+  "displayId": "A3K7F",
+  "name": "Testnutzer",
+  "createdAt": "2026-04-01T10:00:00Z"
+}
+```
+
+`name` ist `null` wenn noch kein Profilname gesetzt wurde.
+
+**Fehler:** `401` – Token ungültig | `404` – Token nicht in DB
+
+---
+
+### PUT `/api/user`
+
+Profilname setzen oder löschen.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Request-Body:**
+```json
+{ "name": "Testnutzer" }
+```
+
+Leerer String (`""`) löscht den Profilnamen (setzt auf `null`).
+Maximallänge: 100 Zeichen.
+
+**Erfolg (200):** `{ "ok": true }`
+
+**Fehler:** `400` – Name zu lang | `401` – Token ungültig | `404` – Token nicht in DB
+
+---
+
+### GET `/api/user/favorites`
+
+Favoriten-Haltestellen laden.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Erfolg (200):**
+```json
+[
+  {
+    "stopId": "de:15003:4000",
+    "stopName": "Magdeburg, Hauptbahnhof",
+    "createdAt": "2026-04-01T10:05:00Z"
+  }
+]
+```
+
+---
+
+### POST `/api/user/favorites`
+
+Favorit hinzufügen.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Request-Body:**
+```json
+{ "stopId": "de:15003:4000", "stopName": "Magdeburg, Hauptbahnhof" }
+```
+
+**Erfolg (201):** `{ "ok": true }` (auch bei bereits vorhandenem Favorit – idempotent)
+
+**Fehler:** `400` – Pflichtfeld fehlt / `stopId` > 20 Zeichen | `401` – Token ungültig | `404` – Token nicht in DB
+
+---
+
+### DELETE `/api/user/favorites/{stop_id}`
+
+Favorit entfernen. URL-Encoded stop_id im Pfad.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Beispiel-Request:**
+```
+DELETE /api/user/favorites/de%3A15003%3A4000
+```
+
+**Erfolg (200):** `{ "ok": true }` (auch wenn Favorit nicht vorhanden – idempotent)
+
+**Fehler:** `400` – stop_id fehlt | `401` – Token ungültig
+
+---
+
+## 5. Admin-Endpunkte
 
 Alle Admin-Endpunkte erfordern eine aktive PHP-Session (Login).
 Ohne gültige Session: HTTP `401 Unauthorized`.
@@ -495,3 +674,37 @@ Bezeichnung oder Startdatum einer Periode nachträglich korrigieren
 ```
 
 **Erfolg:** `200 { "ok": true }`.
+
+---
+
+### GET `/admin-api/trips/:id/recordings`
+
+Alle Einzelerfassungen einer logischen Fahrt laden (für das Admin-Accordion).
+
+**Erfolg (200):**
+```json
+[
+  {
+    "id": 142,
+    "recordedAt": "2026-04-01T14:33:45Z",
+    "courseNumber": "07",
+    "stopId": "de:15003:4000",
+    "stopName": "Magdeburg, Hauptbahnhof",
+    "comment": "Tatra T4D",
+    "userName": "Testnutzer",
+    "userDisplayId": "A3K7F",
+    "userDevice": "Chrome 124 / Android 14"
+  }
+]
+```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `userName` | string\|null | Profilname des Users; `null` wenn kein Name gesetzt |
+| `userDisplayId` | string\|null | 5-stellige Base36-ID; `null` für Altdaten ohne Token |
+| `userDevice` | string\|null | Gerätekurzname (Browser + OS); `null` für Altdaten |
+| `comment` | string\|null | Nutzerkommentar zur Erfassung |
+
+Sortierung: `recorded_at DESC`. Leeres Array wenn keine Erfassungen vorhanden.
+
+**Fehler:** `401` – keine Admin-Session | `403` – keine Berechtigung

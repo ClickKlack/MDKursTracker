@@ -593,3 +593,70 @@ body {
     color: var(--color-muted, #666);
     margin-bottom: 8px;
 }
+
+/* ==========================================================================
+   Feature: Einzelerfassungen-Accordion im Override-Tab
+   ========================================================================== */
+
+.btn-show-recordings {
+    background: none;
+    border: none;
+    color: var(--color-primary, #1a56a0);
+    cursor: pointer;
+    font-size: 0.82rem;
+    text-decoration: underline;
+    padding: 2px 0;
+}
+
+.btn-show-recordings:hover {
+    opacity: 0.75;
+}
+
+.ov-recordings-row {
+    background: var(--color-surface-alt, #f8f9fa);
+}
+
+.ov-recordings-cell {
+    padding: 0 !important;
+}
+
+.ov-recordings-inner {
+    padding: 8px 12px;
+}
+
+.ov-rec-table {
+    width: 100%;
+    font-size: 0.82rem;
+}
+
+.ov-rec-table th,
+.ov-rec-table td {
+    padding: 5px 8px;
+}
+
+.ov-user-id {
+    font-family: monospace;
+    font-size: 0.85em;
+    color: var(--color-text-muted, #888);
+    margin-left: 4px;
+}
+
+.ov-user-device {
+    font-size: 0.78em;
+    color: var(--color-text-muted, #888);
+}
+
+/* Fahrtenliste: Starthaltestelle / Ankunftshaltestelle / Fahrtnummer */
+.trip-service-nr {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #888);
+    font-weight: normal;
+}
+.trip-origin,
+.trip-destination {
+    white-space: nowrap;
+}
+.trip-time {
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #888);
+}

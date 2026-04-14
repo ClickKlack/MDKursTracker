@@ -45,7 +45,7 @@ export async function renderOverride(container) {
 
     container.innerHTML = `
         <div class="section-card">
-            <h2 class="section-title">Kursnummern übersteuern</h2>
+            <h2 class="section-title">Fahrten</h2>
             <div class="override-filters">
                 <div class="form-group">
                     <label for="ov-period">Periode</label>
@@ -78,6 +78,12 @@ export async function renderOverride(container) {
 
     await loadTrips(container, activePeriod?.id);
     attachFilters(container);
+
+    // Row-Actions nur einmal am stabilen #ov-table-wrap registrieren.
+    // renderTable ersetzt nur dessen innerHTML, nicht das Element selbst –
+    // dadurch bleibt der delegierte Listener bei jedem Filter-Neurender erhalten.
+    const wrap = container.querySelector('#ov-table-wrap');
+    attachRowActions(container, wrap);
 }
 
 // --- Trips laden & rendern --------------------------------------------------
@@ -122,7 +128,8 @@ function renderTable(container) {
             <thead>
                 <tr>
                     <th>Linie</th>
-                    <th>Richtung</th>
+                    <th>ab</th>
+                    <th>nach</th>
                     <th>Typ</th>
                     <th>Erfassungen</th>
                     <th>Aktiv</th>
@@ -133,8 +140,6 @@ function renderTable(container) {
                 ${trips.map(t => renderTripRow(t)).join('')}
             </tbody>
         </table>`;
-
-    attachRowActions(container, wrap);
 }
 
 function renderTripRow(t) {
@@ -152,13 +157,34 @@ function renderTripRow(t) {
            </button>`
         : '';
 
+    // Erfassungen-Link als Accordion-Button
+    const recCount    = t.recordingCount ?? 0;
+    const recLabel    = `${recCount} Erfassung${recCount !== 1 ? 'en' : ''}`;
+    const recBtnHtml  = recCount > 0
+        ? `<button class="btn btn-ghost btn-xs btn-show-recordings"
+                   data-id="${t.id}"
+                   aria-expanded="false"
+                   aria-controls="ov-rec-${t.id}">
+               ${escHtml(recLabel)}
+           </button>`
+        : `<span style="color:var(--color-text-muted);font-size:0.82rem">0 Erfassungen</span>`;
+
     return `
         <tr id="ov-row-${t.id}">
-            <td><strong>${escHtml(t.line)}</strong></td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                title="${escHtml(t.direction)}">${escHtml(t.direction)}</td>
+            <td>
+                <strong>${escHtml(t.line)}</strong>
+                <br><span class="trip-service-nr">${escHtml(t.serviceNr)}</span>
+            </td>
+            <td class="trip-origin">
+                ${t.startStopName ? escHtml(t.startStopName) : '–'}
+                ${t.startDeparture ? `<br><span class="trip-time">${escHtml(t.startDeparture)}</span>` : ''}
+            </td>
+            <td class="trip-destination">
+                ${escHtml(t.endStopName ?? t.direction)}
+                ${t.endDeparture ? `<br><span class="trip-time">${escHtml(t.endDeparture)}</span>` : ''}
+            </td>
             <td>${escHtml(DAY_LABELS[t.dayType] ?? t.dayType)}</td>
-            <td style="text-align:center">${t.recordingCount}</td>
+            <td style="text-align:center">${recBtnHtml}</td>
             <td>${courseBadge}</td>
             <td>
                 <div style="display:flex;gap:6px;align-items:center">
@@ -171,6 +197,13 @@ function renderTripRow(t) {
                         Setzen
                     </button>
                     ${resetBtn}
+                </div>
+            </td>
+        </tr>
+        <tr id="ov-rec-${t.id}" class="ov-recordings-row" hidden>
+            <td colspan="7" class="ov-recordings-cell">
+                <div class="ov-recordings-inner" id="ov-rec-inner-${t.id}">
+                    <div class="spinner" style="margin:8px auto"></div>
                 </div>
             </td>
         </tr>`;
@@ -207,6 +240,8 @@ function attachRowActions(container, wrap) {
             await setOverride(container, id, msgEl);
         } else if (btn.classList.contains('btn-ov-reset')) {
             await resetOverride(container, id, msgEl);
+        } else if (btn.classList.contains('btn-show-recordings')) {
+            await toggleRecordings(id, btn);
         }
     });
 
@@ -218,6 +253,79 @@ function attachRowActions(container, wrap) {
         const id = input.id.replace('ov-input-', '');
         wrap.querySelector(`#ov-row-${id} .btn-ov-set`)?.click();
     });
+}
+
+// --- Einzelerfassungen Accordion -------------------------------------------
+
+async function toggleRecordings(tripId, btn) {
+    const recRow   = document.getElementById(`ov-rec-${tripId}`);
+    const innerDiv = document.getElementById(`ov-rec-inner-${tripId}`);
+    if (!recRow || !innerDiv) return;
+
+    const isOpen = btn.getAttribute('aria-expanded') === 'true';
+    if (isOpen) {
+        recRow.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+        return;
+    }
+
+    // Alle anderen offenen Accordion-Zeilen schließen
+    document.querySelectorAll('.ov-recordings-row:not([hidden])').forEach(openRow => {
+        openRow.hidden = true;
+        const openId  = openRow.id.replace('ov-rec-', '');
+        const openBtn = document.querySelector(`[aria-controls="ov-rec-${openId}"]`);
+        openBtn?.setAttribute('aria-expanded', 'false');
+    });
+
+    recRow.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    innerDiv.innerHTML = `<div class="spinner" style="margin:8px auto"></div>`;
+
+    let recs;
+    try {
+        recs = await apiFetch(`/admin-api/trips/${tripId}/recordings`);
+    } catch (err) {
+        innerDiv.innerHTML = `<p class="error-box" style="margin:8px">${escHtml(err.message)}</p>`;
+        return;
+    }
+
+    if (!recs || recs.length === 0) {
+        innerDiv.innerHTML = `<p style="padding:8px;color:var(--color-text-muted);font-size:0.82rem">Keine Erfassungen.</p>`;
+        return;
+    }
+
+    const rows = recs.map(r => {
+        const dt       = r.recordedAt ? new Date(r.recordedAt).toLocaleString('de-DE') : '–';
+        const userLine = r.userName
+            ? `${escHtml(r.userName)} <span class="ov-user-id">${escHtml(r.userDisplayId ?? '')}</span>`
+            : (r.userDisplayId ? `<span class="ov-user-id">${escHtml(r.userDisplayId)}</span>` : '–');
+        const deviceLine = r.userDevice
+            ? `<br><span class="ov-user-device text-small text-muted">${escHtml(r.userDevice)}</span>`
+            : '';
+        const commentHtml = r.comment
+            ? `<br><span class="text-small text-muted">💬 ${escHtml(r.comment)}</span>`
+            : '';
+        return `
+            <tr>
+                <td class="text-small">${escHtml(dt)}</td>
+                <td class="text-small">${escHtml(r.stopName ?? r.stopId)}</td>
+                <td><strong>${escHtml(r.courseNumber)}</strong>${commentHtml}</td>
+                <td class="text-small">${userLine}${deviceLine}</td>
+            </tr>`;
+    }).join('');
+
+    innerDiv.innerHTML = `
+        <table class="data-table ov-rec-table">
+            <thead>
+                <tr>
+                    <th>Zeitpunkt</th>
+                    <th>Haltestelle</th>
+                    <th>Kurs</th>
+                    <th>Nutzer</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
 }
 
 async function setOverride(container, tripId, msgEl) {
