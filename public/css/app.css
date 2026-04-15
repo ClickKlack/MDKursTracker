@@ -151,6 +151,25 @@ body {
     color: var(--color-primary);
 }
 
+/* Wrapper für Icon + Update-Dot */
+.nav-icon-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+/* Kleiner roter Punkt oben rechts am Icon */
+.nav-update-dot {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--color-error);
+    border: 2px solid var(--color-surface);
+}
+.nav-update-dot.hidden { display: none; }
+
 /* --- Loading-Indicator ---------------------------------------------------- */
 .loading-indicator {
     display: flex;
@@ -480,6 +499,7 @@ body {
 .text-mono     { font-family: var(--font-mono); }
 .mt-8          { margin-top: 8px; }
 .mt-16         { margin-top: 16px; }
+.hidden        { display: none !important; }
 
 /* --- Nearby-View ----------------------------------------------------------- */
 
@@ -877,6 +897,24 @@ body {
 .profile-card,
 .profile-info-card {
     padding: 16px;
+}
+
+/* Update-Banner oben im Profil */
+.profile-update-card {
+    padding: 14px 16px;
+    border-left: 4px solid var(--color-primary);
+}
+
+.profile-update-card.hidden {
+    display: none;
+}
+
+.profile-update-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
 }
 
 .profile-display-id {

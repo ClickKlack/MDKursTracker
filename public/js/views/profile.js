@@ -8,7 +8,7 @@
  */
 
 import { postUserInit, getUserProfile, putUserProfile } from '../api.js';
-import { escapeHtml } from '../app.js';
+import { escapeHtml, swUpdateWaiting, applySwUpdate } from '../app.js';
 
 export async function render(container) {
     const token     = localStorage.getItem('user_token') ?? '';
@@ -16,6 +16,19 @@ export async function render(container) {
 
     container.innerHTML = `
         <div class="profile-view">
+            <div id="profile-update-card" class="card profile-update-card${swUpdateWaiting ? '' : ' hidden'}">
+                <div class="profile-update-inner">
+                    <div>
+                        <strong>Update verfügbar</strong>
+                        <p class="text-small text-muted" style="margin:2px 0 0">
+                            Eine neue Version der App ist bereit.
+                        </p>
+                    </div>
+                    <button id="btn-sw-update" class="btn btn-primary btn-sm">
+                        Jetzt aktualisieren
+                    </button>
+                </div>
+            </div>
             <div class="card profile-card">
                 <h2 class="section-title">Mein Profil</h2>
                 <div class="profile-fields">
@@ -53,11 +66,29 @@ export async function render(container) {
             </div>
         </div>`;
 
+    // Update-Button verdrahten
+    container.querySelector('#btn-sw-update')?.addEventListener('click', () => {
+        applySwUpdate();
+    });
+
+    // Falls das Update erst nach dem Rendern verfügbar wird
+    const onUpdate = () => {
+        const card = container.querySelector('#profile-update-card');
+        if (card) card.classList.remove('hidden');
+    };
+    document.addEventListener('swupdateavailable', onUpdate);
+    container._removeUpdateListener = () =>
+        document.removeEventListener('swupdateavailable', onUpdate);
+
     // Name und createdAt leise im Hintergrund laden
     loadNameFromServer(container, token);
 }
 
-export function destroy() {}
+export function destroy() {
+    // Event-Listener aufräumen, falls View verlassen wird
+    const container = document.getElementById('app-main');
+    container?._removeUpdateListener?.();
+}
 
 // --- Display-ID client-seitig berechnen (SHA-256 → Base36) ------------------
 // Gleicher Algorithmus wie PHP derive_display_id() in lib/user_helpers.php

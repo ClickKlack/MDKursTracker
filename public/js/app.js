@@ -78,22 +78,51 @@ const VIEWS = {
 let currentViewModule = null;
 
 // =============================================================================
-// Service Worker
+// Service Worker + Update-Mechanismus
 // =============================================================================
+
+/**
+ * true, sobald ein neuer SW im Waiting-State erkannt wurde.
+ * Wird von profile.js abgefragt, um den Update-Button anzuzeigen.
+ */
+export let swUpdateWaiting = false;
+
+/** Gespeicherte SW-Registration, um später skipWaiting senden zu können. */
+let swReg = null;
+
+/**
+ * Löst das Update aus: sendet SKIP_WAITING an den wartenden SW.
+ * Die Seite wird nach dem controllerchange-Event neu geladen.
+ */
+export function applySwUpdate() {
+    if (swReg?.waiting) {
+        swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+}
+
+function signalUpdateAvailable() {
+    swUpdateWaiting = true;
+    // Punkt am Profil-Icon einblenden
+    const dot = document.getElementById('profile-nav-dot');
+    if (dot) dot.hidden = false;
+    // Profile-View informieren (falls gerade offen)
+    document.dispatchEvent(new CustomEvent('swupdateavailable'));
+}
 
 function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
 
-    // Erstbesuch: noch kein Controller → kein Reload auslösen
+    // Erstbesuch: noch kein Controller → kein Reload nach Update-Erkennung
     const isFirstInstall = !navigator.serviceWorker.controller;
 
     navigator.serviceWorker.register('/sw.js')
         .then(reg => {
+            swReg = reg;
             console.debug('SW registriert, Scope:', reg.scope);
 
             // Race-Condition: SW steckt bereits im Waiting-State
             if (reg.waiting && !isFirstInstall) {
-                reloadIfSafe();
+                signalUpdateAvailable();
                 return;
             }
 
@@ -102,28 +131,21 @@ function registerServiceWorker() {
                 const newWorker = reg.installing;
                 if (!newWorker) return;
                 newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'activated' && !isFirstInstall) {
-                        reloadIfSafe();
+                    if (newWorker.state === 'installed' && reg.active && !isFirstInstall) {
+                        signalUpdateAvailable();
                     }
                 });
             });
         })
         .catch(err => console.warn('SW-Registrierung fehlgeschlagen:', err));
 
-    // Verlässlichster Trigger: neuer SW übernimmt via clients.claim()
+    // Neuer SW hat via clients.claim() übernommen → Seite neu laden
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!isFirstInstall) reloadIfSafe();
+        if (!isFirstInstall) {
+            console.debug('Neuer SW aktiv – Seite wird neu geladen');
+            window.location.reload();
+        }
     });
-}
-
-function reloadIfSafe() {
-    // Kein Reload wenn eine Erfassung gerade im Gange ist
-    if (sessionStorage.getItem('pendingCapture')) {
-        console.debug('SW-Update: Reload verzögert wegen pendingCapture');
-        return;
-    }
-    console.debug('Neuer SW aktiv – Seite wird neu geladen');
-    window.location.reload();
 }
 
 // =============================================================================
