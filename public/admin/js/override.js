@@ -45,7 +45,7 @@ export async function renderOverride(container) {
 
     container.innerHTML = `
         <div class="section-card">
-            <h2 class="section-title">Fahrten</h2>
+            <h2 class="section-title">Erfassungen</h2>
             <div class="override-filters">
                 <div class="form-group">
                     <label for="ov-period">Periode</label>

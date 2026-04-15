@@ -151,7 +151,10 @@ function renderDepartureItem(dep, idx) {
 
     // Zeitanzeige: Sollzeit + ggf. Verspätung oder Frühfahrt
     let timeHtml;
-    if (isDelayed) {
+    if (dep.cancelled) {
+        // Ausgefallene Fahrt: Sollzeit rot und durchgestrichen
+        timeHtml = `<span class="dep-time dep-time-cancelled" aria-label="Fahrt ausgefallen">${escapeHtml(planned)}</span>`;
+    } else if (isDelayed) {
         timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
            <span class="dep-delay time-delayed" aria-label="Verspätung ${delay} Minute${delay !== 1 ? 'n' : ''}">
                +${delay}
@@ -166,9 +169,15 @@ function renderDepartureItem(dep, idx) {
         timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
     }
 
-    // Kursnummer-Badge
+    // Kursnummer-Badge (bei Ausfall: Ausfall-Badge statt Kursnummer)
     let courseHtml;
-    if (dep.activeCourseNumber) {
+    if (dep.cancelled) {
+        courseHtml = `
+            <span class="course-number course-cancelled"
+                  title="Fahrt ausgefallen">
+                Ausfall
+            </span>`;
+    } else if (dep.activeCourseNumber) {
         courseHtml = `
             <span class="course-number known"
                   title="Bekannte Kursnummer (${dep.activeCourseNumber})">
@@ -185,10 +194,10 @@ function renderDepartureItem(dep, idx) {
     const ariaLabel = [
         `Linie ${dep.line}`,
         `nach ${dep.direction}`,
-        `ab ${planned}`,
-        isDelayed ? `+${delay} Min. Verspätung` : isEarly ? `${Math.abs(delay)} Min. zu früh` : 'pünktlich',
-        dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt',
-    ].join(', ');
+        dep.cancelled ? 'Fahrt ausgefallen' : `ab ${planned}`,
+        !dep.cancelled && (isDelayed ? `+${delay} Min. Verspätung` : isEarly ? `${Math.abs(delay)} Min. zu früh` : 'pünktlich'),
+        !dep.cancelled && (dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt'),
+    ].filter(Boolean).join(', ');
 
     // Hinweis auf ursprüngliche Linie bei Linienwechsel (durchgebundene Fahrt)
     const originalLineHtml = dep.originalLine
@@ -196,11 +205,12 @@ function renderDepartureItem(dep, idx) {
         : '';
 
     return `
-        <li class="card departure-item"
-            role="button"
-            tabindex="0"
+        <li class="card departure-item${dep.cancelled ? ' departure-cancelled' : ''}"
+            role="${dep.cancelled ? 'listitem' : 'button'}"
+            tabindex="${dep.cancelled ? '-1' : '0'}"
             data-idx="${idx}"
-            aria-label="${escapeHtml(ariaLabel)}">
+            aria-label="${escapeHtml(ariaLabel)}"
+            ${dep.cancelled ? 'aria-disabled="true"' : ''}>
             <span class="departure-line">
                 ${lineBadgeHtml(dep.line)}
             </span>
@@ -221,6 +231,9 @@ function handleDepartureSelect(e) {
 
     const dep = storedDepartures[parseInt(item.dataset.idx, 10)];
     if (!dep) return;
+
+    // Ausgefallene Fahrten können nicht erfasst werden
+    if (dep.cancelled) return;
 
     // Alle nötigen Erfassungsdaten in sessionStorage ablegen (für Phase 7)
     const captureData = {

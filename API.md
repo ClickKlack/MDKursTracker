@@ -117,6 +117,7 @@ GET /api/departures?stopId=de:15003:4000
     "serviceNr": "120882_10",
     "line": "2",
     "direction": "Westerhüsen",
+    "cancelled": false,
     "departurePlanned": "2026-04-12T12:48:00Z",
     "departureActual":  "2026-04-12T12:48:00Z",
     "journeyStart":     "Magdeburg, City Carré",
@@ -134,6 +135,7 @@ GET /api/departures?stopId=de:15003:4000
 | `serviceNr` | string | Fahrtennummer (ZI_TA im neuen Format) |
 | `line` | string | Linienbezeichnung (aus jid-ZB#, zuverlässiger als prodL) |
 | `direction` | string | Richtungstext (Endhaltestellenname, Marketing-Name) |
+| `cancelled` | bool | `true` = Fahrt (isCncl) oder Halt (dCncl) ist ausgefallen; Erfassung gesperrt |
 | `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
 | `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit |
 | `journeyStart` | string\|null | Name der Starthaltestelle; `null` = nicht im Response verfügbar |
@@ -708,3 +710,58 @@ Alle Einzelerfassungen einer logischen Fahrt laden (für das Admin-Accordion).
 Sortierung: `recorded_at DESC`. Leeres Array wenn keine Erfassungen vorhanden.
 
 **Fehler:** `401` – keine Admin-Session | `403` – keine Berechtigung
+
+---
+
+### GET `/admin-api/trip-group-detail`
+
+Laufweg und Abfahrtszeiten für eine Gruppe logischer Fahrten (für den Accordion im Fahrten-Tab).
+Grundlage ist je Trip die neuste Erfassung mit gespeicherten `route_stops`.
+
+**Parameter:**
+
+| Parameter | Pflicht | Beschreibung |
+|---|---|---|
+| `trip_ids` | ja | Kommagetrennte Trip-IDs (positive Ganzzahlen, max. 50) |
+
+**Beispiel:**
+```
+GET /admin-api/trip-group-detail?trip_ids=1,2,3
+```
+
+**Erfolg (200):**
+```json
+{
+  "stops": [
+    { "stopId": "de:15003:4000", "stopName": "Magdeburg, Hauptbahnhof", "sequence": 1 },
+    { "stopId": "de:15003:4001", "stopName": "Magdeburg, Marktplatz",   "sequence": 2 }
+  ],
+  "trips": [
+    {
+      "id": 1,
+      "serviceNr": "125364_46",
+      "activeCourseNumber": "12",
+      "manualCourseNumber": null,
+      "departures": {
+        "de:15003:4000": "07:15",
+        "de:15003:4001": "07:18"
+      }
+    }
+  ]
+}
+```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `stops` | array | Kanonische Haltestellenliste (längster Laufweg aller Trips) |
+| `stops[].stopId` | string | HAFAS-ID der Haltestelle |
+| `stops[].stopName` | string | Anzeigename der Haltestelle |
+| `stops[].sequence` | int | Position im Laufweg (1-basiert) |
+| `trips` | array | Trips, sortiert nach TA-Teil des `serviceNr` (chronologisch) |
+| `trips[].activeCourseNumber` | string\|null | Aktive Kursnummer (Override oder Mehrheitsregel) |
+| `trips[].manualCourseNumber` | string\|null | Manuelle Übersteuerung; `null` wenn keine |
+| `trips[].departures` | object | Map stop_id → Abfahrtszeit `HH:MM`; fehlende Halte fehlen im Objekt |
+
+Kanonische Stop-Liste ist leer, wenn kein Trip gespeicherte `route_stops` hat.
+
+**Fehler:** `400` – `trip_ids` fehlt oder ungültig | `401` – keine Admin-Session

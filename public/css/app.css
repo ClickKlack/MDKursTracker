@@ -455,6 +455,25 @@ body {
     font-weight: 600;
 }
 
+/* --- Ausgefallene Abfahrten ----------------------------------------------- */
+.departure-item.departure-cancelled {
+    cursor: default;
+    opacity: 0.75;
+}
+
+.dep-time-cancelled {
+    color: var(--color-error);
+    text-decoration: line-through;
+    font-weight: 600;
+}
+
+.course-number.course-cancelled {
+    color: var(--color-error);
+    border-color: var(--color-error);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
 /* --- Hilfsklassen --------------------------------------------------------- */
 .text-muted    { color: var(--color-text-muted); }
 .text-small    { font-size: 0.82rem; }

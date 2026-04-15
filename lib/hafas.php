@@ -270,12 +270,16 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
         $endTimeRaw   = isset($endM[1]) ? str_pad($endM[1], 6, '0') : '';
 
+        // Ausfall: gesamte Fahrt (isCncl) oder dieser Halt (dCncl) ist ausgefallen
+        $cancelled = !empty($jny['isCncl']) || !empty($stbStop['dCncl']);
+
         $result[] = [
             'hafasTripId'      => $jny['jid'],
             'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
             'line'             => $lineName,
             'originalLine'     => $originalLine,
             'direction'        => $dirTxt,
+            'cancelled'        => $cancelled,
             'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
             'departureActual'  => ($realtimeTime !== '')
                 ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)

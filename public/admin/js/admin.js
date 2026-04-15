@@ -12,6 +12,7 @@ import { renderSchoolHolidays } from './school_holidays.js';
 import { renderPeriods }        from './periods.js';
 import { renderOverride }       from './override.js';
 import { renderHafasLog }       from './hafas_log.js';
+import { renderTrips }          from './trips.js';
 
 // =============================================================================
 // API-Helfer (Admin-Kontext; nutzt dieselben Fetch-Konventionen wie api.js)
@@ -89,13 +90,14 @@ export function showMessage(el, message, type = 'success') {
 // =============================================================================
 
 const TABS = {
+    'trips':           renderTrips,
     'school-holidays': renderSchoolHolidays,
     'periods':         renderPeriods,
     'override':        renderOverride,
     'hafas-log':       renderHafasLog,
 };
 
-let activeTab = 'override';
+let activeTab = 'trips';
 
 function switchTab(tabName) {
     if (!TABS[tabName]) return;

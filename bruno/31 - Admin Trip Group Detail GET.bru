@@ -1,0 +1,62 @@
+meta {
+  name: Admin – GET Fahrtengruppen-Detail (Laufweg + Zeiten)
+  type: http
+  seq: 31
+}
+
+get {
+  url: {{baseUrl}}/admin-api/trip-group-detail?trip_ids={{tripId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.stops: isArray
+  res.body.trips: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const { stops, trips } = res.body;
+    console.log("Laufweg-Haltestellen:", stops.length);
+    stops.forEach(s => console.log(" -", s.sequence, s.stopName));
+    console.log("Trips:", trips.length);
+    trips.forEach(t => {
+      console.log(" -", t.serviceNr, "| Kurs:", t.activeCourseNumber ?? "–",
+                  t.manualCourseNumber ? "(manuell)" : "");
+    });
+  }
+}
+
+docs {
+  Laufweg und Abfahrtszeiten für eine Gruppe logischer Fahrten laden.
+  Voraussetzung: Admin-Login (12-Admin-Login) und tripId-Variable gesetzt.
+
+  Parameter:
+    trip_ids – kommagetrennte Trip-IDs, z.B. "1,2,3" (max. 50)
+
+  Antwort:
+  {
+    "stops": [
+      { "stopId": "de:15003:4000", "stopName": "Magdeburg, Hauptbahnhof", "sequence": 1 }
+    ],
+    "trips": [
+      {
+        "id": 1,
+        "serviceNr": "125364_46",
+        "activeCourseNumber": "12",
+        "manualCourseNumber": null,
+        "departures": {
+          "de:15003:4000": "07:15"
+        }
+      }
+    ]
+  }
+
+  Fehlertests:
+    Ohne Admin-Session         → 401
+    trip_ids fehlt             → 400
+    trip_ids enthält Nicht-Int → 400
+    Mehr als 50 IDs            → 400
+}

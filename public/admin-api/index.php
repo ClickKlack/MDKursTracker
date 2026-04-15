@@ -39,11 +39,12 @@ if (isset($segments[1]) && ctype_digit($segments[1])) {
 
 // Erlaubte Endpunkte und ihre Handler-Dateien
 $routes = [
-    'login'           => 'login.php',
-    'logout'          => 'logout.php',
-    'school-holidays' => 'school_holidays.php',
-    'periods'         => 'periods.php',
-    'hafas-log'       => 'hafas_log.php',
+    'login'              => 'login.php',
+    'logout'             => 'logout.php',
+    'school-holidays'    => 'school_holidays.php',
+    'periods'            => 'periods.php',
+    'hafas-log'          => 'hafas_log.php',
+    'trip-group-detail'  => 'trip_group_detail.php',
 ];
 
 if ($resource !== '' && isset($routes[$resource])) {

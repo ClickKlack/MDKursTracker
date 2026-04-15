@@ -15,7 +15,7 @@
 const HAFAS_CACHE_TTL_NEARBY      = 86400; // 1 Tag in Sekunden
 const HAFAS_CACHE_TTL_DEPARTURES  = 30;    // 30 Sekunden
 const HAFAS_CACHE_TTL_TRIP        = 86400; // 1 Tag in Sekunden
-const HAFAS_CACHE_TTL_STOPFINDER  = 900;   // 15 Minuten
+const HAFAS_CACHE_TTL_STOPFINDER  = 86400; // 1 Tag in Sekunden
 
 /**
  * Cache-Eintrag lesen. Gibt null zurück wenn nicht vorhanden oder abgelaufen.
