@@ -152,8 +152,9 @@ function renderDepartureItem(dep, idx) {
     // Zeitanzeige: Sollzeit + ggf. Verspätung oder Frühfahrt
     let timeHtml;
     if (dep.cancelled) {
-        // Ausgefallene Fahrt: Sollzeit rot und durchgestrichen
-        timeHtml = `<span class="dep-time dep-time-cancelled" aria-label="Fahrt ausgefallen">${escapeHtml(planned)}</span>`;
+        // Ausgefallene Fahrt: Sollzeit rot und durchgestrichen, dahinter Ausfall-Badge
+        timeHtml = `<span class="dep-time dep-time-cancelled">${escapeHtml(planned)}</span>
+           <span class="dep-cancelled-badge" aria-label="Fahrt ausgefallen">Ausfall</span>`;
     } else if (isDelayed) {
         timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
            <span class="dep-delay time-delayed" aria-label="Verspätung ${delay} Minute${delay !== 1 ? 'n' : ''}">
@@ -169,15 +170,9 @@ function renderDepartureItem(dep, idx) {
         timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
     }
 
-    // Kursnummer-Badge (bei Ausfall: Ausfall-Badge statt Kursnummer)
+    // Kursnummer-Badge
     let courseHtml;
-    if (dep.cancelled) {
-        courseHtml = `
-            <span class="course-number course-cancelled"
-                  title="Fahrt ausgefallen">
-                Ausfall
-            </span>`;
-    } else if (dep.activeCourseNumber) {
+    if (dep.activeCourseNumber) {
         courseHtml = `
             <span class="course-number known"
                   title="Bekannte Kursnummer (${dep.activeCourseNumber})">

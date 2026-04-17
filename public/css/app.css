@@ -486,11 +486,10 @@ body {
     font-weight: 600;
 }
 
-.course-number.course-cancelled {
-    color: var(--color-error);
-    border-color: var(--color-error);
+.dep-cancelled-badge {
     font-size: 0.72rem;
     font-weight: 700;
+    color: var(--color-error);
 }
 
 /* --- Hilfsklassen --------------------------------------------------------- */
