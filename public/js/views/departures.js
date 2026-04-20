@@ -42,6 +42,9 @@ export async function render(container, params, context) {
 
     await loadAndRender(container, /* quiet= */ false);
 
+    // Guard: destroy() wurde während des ersten Ladens aufgerufen
+    if (!currentStopId) return;
+
     // Alten Timer abräumen (falls render() erneut aufgerufen wird)
     if (refreshTimer) clearInterval(refreshTimer);
 
@@ -82,6 +85,8 @@ async function loadAndRender(container, quiet) {
     } catch (err) {
         // Bei Quiet-Refresh: Fehlermeldung unterhalb der bestehenden Liste einfügen
         if (quiet) return;
+        // Guard: View wurde während des API-Calls zerstört
+        if (!currentStopId) return;
         container.innerHTML = `
             <div class="error-box" role="alert">
                 Abfahrten konnten nicht geladen werden: ${escapeHtml(err.message)}
@@ -95,6 +100,9 @@ async function loadAndRender(container, quiet) {
             .addEventListener('click', () => loadAndRender(container, false));
         return;
     }
+
+    // Guard: View wurde während des API-Calls zerstört (destroy() setzt currentStopId = null)
+    if (!currentStopId) return;
 
     storedDepartures = departures ?? [];
 
@@ -221,6 +229,9 @@ function renderDepartureItem(dep, idx) {
 // --- Event-Handler ----------------------------------------------------------
 
 function handleDepartureSelect(e) {
+    // Defensiv: View nicht mehr aktiv (z. B. durch Zombie-Timer nach destroy())
+    if (!currentStopId) return;
+
     const item = e.target.closest('[data-idx]');
     if (!item) return;
 
