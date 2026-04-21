@@ -100,6 +100,30 @@ export function applySwUpdate() {
     }
 }
 
+/**
+ * Prüft sofort auf eine neue sw.js und wendet sie ggf. an.
+ * Gibt ein Promise zurück, das auflöst sobald der Check abgeschlossen ist.
+ */
+export function checkForSwUpdate() {
+    return swReg?.update().catch(() => {}) ?? Promise.resolve();
+}
+
+/**
+ * Gibt die Version des aktuell aktiven Service Workers zurück,
+ * indem der Cache-Name ausgelesen wird (z.B. "mdkurstracker-shell-v22" → "v22").
+ * Gibt null zurück, wenn kein passender Cache gefunden wird.
+ */
+export async function getActiveSwVersion() {
+    if (!('caches' in window)) return null;
+    try {
+        const keys = await caches.keys();
+        const name = keys.find(k => k.startsWith('mdkurstracker-shell-'));
+        return name ? name.replace('mdkurstracker-shell-', '') : null;
+    } catch {
+        return null;
+    }
+}
+
 function signalUpdateAvailable() {
     swUpdateWaiting = true;
     // Punkt am Profil-Icon einblenden
@@ -119,6 +143,9 @@ function registerServiceWorker() {
         .then(reg => {
             swReg = reg;
             console.debug('SW registriert, Scope:', reg.scope);
+
+            // Sofort auf neue sw.js prüfen (umgeht browser-interne 24h-Throttle)
+            reg.update().catch(() => {});
 
             // Race-Condition: SW steckt bereits im Waiting-State
             if (reg.waiting && !isFirstInstall) {

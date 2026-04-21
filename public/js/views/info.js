@@ -5,11 +5,13 @@
  * Versionsdaten kommen aus dem globalen App-Config-State (via app.js).
  */
 
-import { escapeHtml } from '../app.js';
+import { escapeHtml, checkForSwUpdate, getActiveSwVersion } from '../app.js';
 
 export async function render(container, params, context) {
     const cfg = context.appConfig ?? {};
-    container.innerHTML = buildHtml(cfg);
+    const activeSwVersion = await getActiveSwVersion();
+    container.innerHTML = buildHtml(cfg, activeSwVersion);
+    attachListeners(container);
 }
 
 export function destroy() {
@@ -18,10 +20,16 @@ export function destroy() {
 
 // --- HTML aufbauen -----------------------------------------------------------
 
-function buildHtml(cfg) {
+function buildHtml(cfg, activeSwVersion) {
     const version    = cfg.version        ?? null;
     const swVersion  = cfg.swCacheVersion ?? null;
     const deployedAt = cfg.deployedAt     ?? null;
+
+    const swMismatch = swVersion && activeSwVersion && swVersion !== activeSwVersion;
+
+    const swActiveHtml = activeSwVersion
+        ? `${escapeHtml(activeSwVersion)}${swMismatch ? ' <span class="info-sw-stale">(veraltet)</span>' : ''}`
+        : '<span class="text-muted">–</span>';
 
     return `
         <div class="info-page">
@@ -37,6 +45,26 @@ function buildHtml(cfg) {
                     Durch die Mehrheitsregel über mehrere Erfassungen entsteht ein
                     verlässliches Bild des aktuellen Umlaufs.
                 </p>
+            </section>
+
+            <section class="info-section card">
+                <h2 class="info-heading">Version</h2>
+                <dl class="info-dl">
+                    <dt>Release</dt>
+                    <dd>${version ? escapeHtml(version) : '<span class="text-muted">–</span>'}</dd>
+                    <dt>Deployed</dt>
+                    <dd>${deployedAt ? escapeHtml(formatDeployDate(deployedAt)) : '<span class="text-muted">–</span>'}</dd>
+                    <dt>SW (Server)</dt>
+                    <dd>${swVersion ? escapeHtml(swVersion) : '<span class="text-muted">–</span>'}</dd>
+                    <dt>SW (aktiv)</dt>
+                    <dd>${swActiveHtml}</dd>
+                </dl>
+                <div class="info-update-row">
+                    <button id="btn-check-update" class="btn btn-secondary btn-sm">
+                        Auf Updates prüfen
+                    </button>
+                    <span id="info-update-msg" class="text-small text-muted" aria-live="polite"></span>
+                </div>
             </section>
 
             <section class="info-section card">
@@ -73,19 +101,27 @@ function buildHtml(cfg) {
                 </p>
             </section>
 
-            <section class="info-section card">
-                <h2 class="info-heading">Version</h2>
-                <dl class="info-dl">
-                    <dt>Release</dt>
-                    <dd>${version ? escapeHtml(version) : '<span class="text-muted">–</span>'}</dd>
-                    <dt>Deployed</dt>
-                    <dd>${deployedAt ? escapeHtml(formatDeployDate(deployedAt)) : '<span class="text-muted">–</span>'}</dd>
-                    <dt>SW-Cache</dt>
-                    <dd>${swVersion ? escapeHtml(swVersion) : '<span class="text-muted">–</span>'}</dd>
-                </dl>
-            </section>
-
         </div>`;
+}
+
+// --- Interaktion -------------------------------------------------------------
+
+function attachListeners(container) {
+    const btn = container.querySelector('#btn-check-update');
+    const msg = container.querySelector('#info-update-msg');
+    if (!btn || !msg) return;
+
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        msg.textContent = 'Wird geprüft…';
+        await checkForSwUpdate();
+        // Nach dem Check neu auslesen – wenn ein neues SW sofort übernommen hat,
+        // hat die Seite sich bereits neu geladen. Andernfalls Stand aktualisieren.
+        const active = await getActiveSwVersion();
+        if (!container.isConnected) return;
+        btn.disabled = false;
+        msg.textContent = active ? `Aktiv: ${active}` : 'Kein Update gefunden.';
+    });
 }
 
 // --- Hilfsfunktionen ---------------------------------------------------------

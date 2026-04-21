@@ -854,6 +854,19 @@ body {
     word-break: break-all;
 }
 
+.info-sw-stale {
+    color: #e67e00;
+    font-family: inherit;
+    font-size: 0.8em;
+}
+
+.info-update-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
 .info-link {
     color: var(--color-primary);
     word-break: break-all;

@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v21';
+const CACHE_VERSION = 'v23';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -36,8 +36,9 @@ const APP_SHELL = [
 // =============================================================================
 
 self.addEventListener('install', event => {
-    // Kein skipWaiting() – der neue SW wartet, bis die App explizit
-    // per SKIP_WAITING-Nachricht das Update auslöst (Update-Button im Profil).
+    // skipWaiting() sofort – neue Version aktiviert ohne Benutzereingriff.
+    // Die Seite lädt sich via controllerchange in app.js automatisch neu.
+    self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
     );
