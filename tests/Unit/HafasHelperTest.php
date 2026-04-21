@@ -208,4 +208,59 @@ class HafasHelperTest extends TestCase
         $result = hafas_parse_stop_matches($locL, 10);
         $this->assertCount(1, $result);
     }
+
+    // -----------------------------------------------------------------------
+    // hafas_deduplicate_departures – Langversion-Präferenz bei Kurspaaren
+    // -----------------------------------------------------------------------
+
+    /** Ohne Duplikate bleiben alle Einträge erhalten */
+    public function test_deduplicate_no_duplicates_returns_all(): void
+    {
+        $entries = [
+            ['line' => '2', 'direction' => 'Westerhüsen', 'departurePlanned' => '2026-04-21T17:43:00Z', '_dedupeLocX' => '5', '_duration' => 1100],
+            ['line' => '2', 'direction' => 'Westerhüsen', 'departurePlanned' => '2026-04-21T18:03:00Z', '_dedupeLocX' => '5', '_duration' => 1100],
+        ];
+        $result = hafas_deduplicate_departures($entries);
+        $this->assertCount(2, $result);
+    }
+
+    /** Gleiche Endzeit, frühere Startzeit = längere Dauer → Langversion gewinnt (Richtung Westerhüsen) */
+    public function test_deduplicate_prefers_earlier_start_when_same_end(): void
+    {
+        // Beide enden um 19:54 (LT# 195400), Langversion startet um 17:25 (1T# 172500),
+        // Kurzversion startet um 19:25 (1T# 192500)
+        $short = ['line' => '2', 'direction' => 'Westerhüsen', 'departurePlanned' => '2026-04-21T17:43:00Z', '_dedupeLocX' => '5', '_duration' => 195400 - 192500, '_label' => 'Kurzversion'];
+        $long  = ['line' => '2', 'direction' => 'Westerhüsen', 'departurePlanned' => '2026-04-21T17:43:00Z', '_dedupeLocX' => '5', '_duration' => 195400 - 172500, '_label' => 'Langversion'];
+
+        $result = hafas_deduplicate_departures([$short, $long]);
+        $this->assertCount(1, $result);
+        $this->assertSame('Langversion', $result[0]['_label']);
+
+        $result = hafas_deduplicate_departures([$long, $short]);
+        $this->assertCount(1, $result);
+        $this->assertSame('Langversion', $result[0]['_label']);
+    }
+
+    /** Gleiche Startzeit, spätere Endzeit = längere Dauer → Langversion gewinnt (Richtung City Carré) */
+    public function test_deduplicate_prefers_later_end_when_same_start(): void
+    {
+        // Beide starten um 19:33, Langversion endet um 21:03, Kurzversion um 20:03
+        $short = ['line' => '2', 'direction' => 'City Carré', 'departurePlanned' => '2026-04-21T17:44:00Z', '_dedupeLocX' => '5', '_duration' => 200300 - 193300, '_label' => 'Kurzversion'];
+        $long  = ['line' => '2', 'direction' => 'City Carré', 'departurePlanned' => '2026-04-21T17:44:00Z', '_dedupeLocX' => '5', '_duration' => 210300 - 193300, '_label' => 'Langversion'];
+
+        $result = hafas_deduplicate_departures([$short, $long]);
+        $this->assertCount(1, $result);
+        $this->assertSame('Langversion', $result[0]['_label']);
+    }
+
+    /** Verschiedene Richtungen werden nicht dedupliziert */
+    public function test_deduplicate_different_directions_kept_separately(): void
+    {
+        $entries = [
+            ['line' => '2', 'direction' => 'Westerhüsen',            'departurePlanned' => '2026-04-21T17:43:00Z', '_dedupeLocX' => '5', '_duration' => 1100],
+            ['line' => '2', 'direction' => 'City Carré (Hauptbhf.)', 'departurePlanned' => '2026-04-21T17:44:00Z', '_dedupeLocX' => '5', '_duration' => 1000],
+        ];
+        $result = hafas_deduplicate_departures($entries);
+        $this->assertCount(2, $result);
+    }
 }

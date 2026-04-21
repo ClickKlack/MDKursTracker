@@ -213,8 +213,11 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         }
     }
 
-    $result = [];
-    $seen   = [];  // Duplikat-Filter: "line|dirTxt|dTimeS|locX"
+    // Duplikat-Filter mit Längen-Präferenz:
+    // Schlüssel: "line|dirTxt|dTimeS|locX" → ['endTime' => int, 'entry' => array]
+    // Bei Kurspaaren (gleiche Linie, Richtung, Zeit, Halt) gewinnt die Fahrt
+    // mit der späteren Endzeit (LT# aus der jid) – also immer die Langversion.
+    $best = [];
 
     foreach ($journeys as $jny) {
         $prod    = $prodList[$jny['prodX']] ?? [];
@@ -250,50 +253,61 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         $dirTxt       = $jny['dirTxt'] ?? '';
         $jnyDate      = $jny['date'] ?? '';
 
-        // Typ-B-Deduplizierung: gleiche Linie, Richtung, Soll-Zeit und Haltestelle → nur einmal ausgeben
-        // (tritt auf bei Kurspaaren / Verstärkerfahrten die gleichzeitig vom selben Halt abfahren)
-        $dedupeKey = $lineName . '|' . $dirTxt . '|' . $plannedTime . '|' . ($stbStop['locX'] ?? '');
-        if (isset($seen[$dedupeKey])) {
-            continue;
-        }
-        $seen[$dedupeKey] = true;
-
-        // Starth.: extId aus jid-Feld 1S#, Zeit aus 1T#; Name aus locL falls vorhanden
+        // Start- und Endzeit früh extrahieren – werden für Deduplizierungs-Vergleich benötigt
         preg_match('/#1S#([^#]+)#1T#(\d{4,6})#/', $jny['jid'], $startM);
         $startLocName  = isset($startM[1]) ? ($locByExtId[$startM[1]] ?? null) : null;
         $startTimeRaw  = isset($startM[2]) ? str_pad($startM[2], 6, '0') : '';
+        preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
+        $endTimeRaw = isset($endM[1]) ? str_pad($endM[1], 6, '0') : '';
+
+        // Gesamtdauer als Präferenzmetrik: Langversion hat frühere Startzeit oder spätere
+        // Endzeit – oder beides. LT# − 1T# (als Integer) liefert in beiden Richtungen
+        // den korrekten Gewinner: gleiche Endzeit → frühere Startzeit gewinnt;
+        // gleiche Startzeit → spätere Endzeit gewinnt.
+        $duration = ($endTimeRaw !== '' ? (int) $endTimeRaw : 0)
+                  - ($startTimeRaw !== '' ? (int) $startTimeRaw : 0);
+
+        // Typ-B-Deduplizierung: bei gleicher Linie, Richtung, Soll-Zeit und Halt
+        // die Fahrt mit der längsten Gesamtdauer bevorzugen.
+        $dedupeKey = $lineName . '|' . $dirTxt . '|' . $plannedTime . '|' . ($stbStop['locX'] ?? '');
+        if (isset($best[$dedupeKey]) && $duration <= $best[$dedupeKey]['duration']) {
+            continue;
+        }
 
         // Zielhalt.: Name aus prodL[0].tLocX (zeigt zuverlässig auf Endhalt in locL), Zeit aus LT#
         $jnyProdEntry = $jny['prodL'][0] ?? [];
         $endLoc       = $common['locL'][$jnyProdEntry['tLocX'] ?? -1] ?? [];
         $endLocName   = ($endLoc['name'] ?? '') !== '' ? $endLoc['name'] : null;
-        preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
-        $endTimeRaw   = isset($endM[1]) ? str_pad($endM[1], 6, '0') : '';
 
         // Ausfall: gesamte Fahrt (isCncl) oder dieser Halt (dCncl) ist ausgefallen
         $cancelled = !empty($jny['isCncl']) || !empty($stbStop['dCncl']);
 
-        $result[] = [
-            'hafasTripId'      => $jny['jid'],
-            'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
-            'line'             => $lineName,
-            'originalLine'     => $originalLine,
-            'direction'        => $dirTxt,
-            'cancelled'        => $cancelled,
-            'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
-            'departureActual'  => ($realtimeTime !== '')
-                ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)
-                : null,
-            'journeyStart'     => $startLocName,
-            'journeyStartTime' => ($startTimeRaw !== '' && $jnyDate !== '')
-                ? hafas_iso($jnyDate, $startTimeRaw)
-                : null,
-            'journeyEnd'       => $endLocName,
-            'journeyEndTime'   => ($endTimeRaw !== '' && $jnyDate !== '')
-                ? hafas_iso($jnyDate, $endTimeRaw)
-                : null,
+        $best[$dedupeKey] = [
+            'duration' => $duration,
+            'entry'    => [
+                'hafasTripId'      => $jny['jid'],
+                'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
+                'line'             => $lineName,
+                'originalLine'     => $originalLine,
+                'direction'        => $dirTxt,
+                'cancelled'        => $cancelled,
+                'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
+                'departureActual'  => ($realtimeTime !== '')
+                    ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)
+                    : null,
+                'journeyStart'     => $startLocName,
+                'journeyStartTime' => ($startTimeRaw !== '' && $jnyDate !== '')
+                    ? hafas_iso($jnyDate, $startTimeRaw)
+                    : null,
+                'journeyEnd'       => $endLocName,
+                'journeyEndTime'   => ($endTimeRaw !== '' && $jnyDate !== '')
+                    ? hafas_iso($jnyDate, $endTimeRaw)
+                    : null,
+            ],
         ];
     }
+
+    $result = array_column(array_values($best), 'entry');
 
     hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_DEPARTURES);
 
@@ -663,6 +677,35 @@ function hafas_line_from_jid(string $jid): string
         return hafas_line_name($m[1]);
     }
     return '';
+}
+
+/**
+ * Wählt aus einer Liste normalisierter Abfahrts-Einträge die bevorzugte Version
+ * pro Deduplizierungsschlüssel (gleiche Linie, Richtung, Soll-Zeit, Haltestelle).
+ * Bevorzugt wird immer die Fahrt mit der längsten Gesamtdauer (LT# − 1T#).
+ * Damit gewinnt die Langversion in beiden Richtungen:
+ *   gleiche Endzeit   → frühere Startzeit  → größere Dauer
+ *   gleiche Startzeit → spätere Endzeit    → größere Dauer
+ *
+ * @param  array<array{line: string, direction: string, departurePlanned: string,
+ *                     _dedupeLocX: string, _duration: int}> $entries
+ * @return array Gefilterte Liste, eine Fahrt pro Schlüssel (Langversion bevorzugt)
+ * @internal Ausgelagert für Unit-Tests ohne HAFAS-HTTP-Aufruf.
+ */
+function hafas_deduplicate_departures(array $entries): array
+{
+    $best = [];
+    foreach ($entries as $entry) {
+        $key = ($entry['line'] ?? '')
+             . '|' . ($entry['direction'] ?? '')
+             . '|' . ($entry['departurePlanned'] ?? '')
+             . '|' . ($entry['_dedupeLocX'] ?? '');
+        $d = $entry['_duration'] ?? 0;
+        if (!isset($best[$key]) || $d > $best[$key][0]) {
+            $best[$key] = [$d, $entry];
+        }
+    }
+    return array_column(array_values($best), 1);
 }
 
 /**
