@@ -5,11 +5,11 @@
  *  1. Perioden laden → Periode wählen
  *  2. Fahrten der gewählten Periode laden (GET /api/trips)
  *  3. Filter: Linie, Wochentagstyp
- *  4. Trips clientseitig nach (Typ, ZI-Stamm, Start, Ende) gruppieren
+ *  4. Trips clientseitig nach (Typ, path_fingerprint, Start, Ende) gruppieren
  *  5. Accordion: Laufweg × Abfahrtszeiten je Trip
  */
 
-import { apiFetch, escHtml } from './admin.js';
+import { apiFetch, escHtml, getStopNamePrefix, stripStopName } from './admin.js';
 
 const DAY_LABELS = {
     'MO-FR': 'Mo–Fr',
@@ -18,8 +18,11 @@ const DAY_LABELS = {
     'SF':    'SF',
 };
 
+const DAY_ORDER = { 'MO-FR': 0, 'SA': 1, 'SO': 2, 'SF': 3 };
+
 /** Alle geladenen Trips der aktuell gewählten Periode */
-let allTrips = [];
+let allTrips  = [];
+let stopPrefix = '';
 
 export async function renderTrips(container) {
     // Perioden für Selector laden
@@ -51,12 +54,7 @@ export async function renderTrips(container) {
                     <label for="tr-period">Periode</label>
                     <select id="tr-period">${periodOptions}</select>
                 </div>
-                <div class="form-group">
-                    <label for="tr-line">Linie</label>
-                    <input type="text" id="tr-line" placeholder="alle"
-                           maxlength="5" autocomplete="off" inputmode="numeric">
-                </div>
-                <div class="form-group">
+                <div class="form-group form-group--sm">
                     <label for="tr-daytype">Wochentagstyp</label>
                     <select id="tr-daytype">
                         <option value="">Alle</option>
@@ -65,6 +63,23 @@ export async function renderTrips(container) {
                         <option value="SO">So / Feiertag</option>
                         <option value="SF">Schulferien</option>
                     </select>
+                </div>
+                <div class="form-group form-group--xs">
+                    <label for="tr-line">Linie</label>
+                    <input type="text" id="tr-line" placeholder="alle"
+                           maxlength="5" autocomplete="off" inputmode="numeric">
+                </div>
+                <div class="form-group">
+                    <label for="tr-von">Von</label>
+                    <input type="text" id="tr-von" placeholder="alle"
+                           list="tr-von-list" autocomplete="off">
+                    <datalist id="tr-von-list"></datalist>
+                </div>
+                <div class="form-group">
+                    <label for="tr-nach">Nach</label>
+                    <input type="text" id="tr-nach" placeholder="alle"
+                           list="tr-nach-list" autocomplete="off">
+                    <datalist id="tr-nach-list"></datalist>
                 </div>
             </div>
         </div>
@@ -75,6 +90,7 @@ export async function renderTrips(container) {
             </div>
         </div>`;
 
+    stopPrefix = await getStopNamePrefix();
     await loadTrips(container, activePeriod?.id);
     attachFilters(container);
 
@@ -96,17 +112,33 @@ async function loadTrips(container, periodId) {
         return;
     }
 
+    updateDatalist(container);
     renderTable(container);
+}
+
+/** Füllt die Datalist-Elemente mit eindeutigen Haltestellennamen (Präfix entfernt). */
+function updateDatalist(container) {
+    const strip = n => stripStopName(n, stopPrefix);
+    const vonNames  = [...new Set(allTrips.map(t => t.startStopName).filter(Boolean).map(strip))].sort();
+    const nachNames = [...new Set(allTrips.map(t => t.endStopName ?? t.direction).filter(Boolean).map(strip))].sort();
+    const vonList  = container.querySelector('#tr-von-list');
+    const nachList = container.querySelector('#tr-nach-list');
+    if (vonList)  vonList.innerHTML  = vonNames.map(n  => `<option value="${escHtml(n)}">`).join('');
+    if (nachList) nachList.innerHTML = nachNames.map(n => `<option value="${escHtml(n)}">`).join('');
 }
 
 /** Bildet Gruppen aus den gefilterten Trips und rendert die Tabelle. */
 function renderTable(container) {
     const lineFilter    = container.querySelector('#tr-line')?.value.trim() ?? '';
     const dayTypeFilter = container.querySelector('#tr-daytype')?.value ?? '';
+    const vonFilter     = container.querySelector('#tr-von')?.value.trim().toLowerCase() ?? '';
+    const nachFilter    = container.querySelector('#tr-nach')?.value.trim().toLowerCase() ?? '';
 
     const trips = allTrips.filter(t => {
         if (lineFilter    && t.line    !== lineFilter)    return false;
         if (dayTypeFilter && t.dayType !== dayTypeFilter) return false;
+        if (vonFilter  && !stripStopName(t.startStopName ?? '', stopPrefix).toLowerCase().includes(vonFilter))                      return false;
+        if (nachFilter && !stripStopName(t.endStopName ?? t.direction ?? '', stopPrefix).toLowerCase().includes(nachFilter)) return false;
         return true;
     });
 
@@ -117,16 +149,15 @@ function renderTable(container) {
         return;
     }
 
-    // Gruppen bilden: (dayType, ZI-Stamm, startStop, endStop)
+    // Gruppen bilden: (line, dayType, path_fingerprint, startStop, endStop)
     const groupMap = new Map();
     for (const t of trips) {
-        const stem = t.serviceNr.split('_')[0];
-        const key  = `${t.dayType}|${stem}|${t.startStopName ?? ''}|${t.endStopName ?? t.direction}`;
+        const key = `${t.line}|${t.dayType}|${t.pathFingerprint ?? ''}|${t.startStopName ?? ''}|${t.endStopName ?? t.direction}`;
         if (!groupMap.has(key)) {
             groupMap.set(key, {
                 key,
+                line:          t.line,
                 dayType:       t.dayType,
-                stem,
                 startStopName: t.startStopName ?? '–',
                 endStopName:   t.endStopName   ?? t.direction,
                 tripIds:       [],
@@ -137,6 +168,39 @@ function renderTable(container) {
 
     const groups = [...groupMap.values()];
 
+    const toHHMM = s => { const m = (s ?? '').match(/(\d{2}:\d{2})/); return m ? m[1] : ''; };
+
+    // Fahrten je Gruppe aufsteigend nach Startzeit sortieren; danach
+    // min. Abfahrtszeit pro Gruppe für die Gruppensortierung merken.
+    const startById = new Map(trips.map(t => [t.id, t.startDeparture ?? '']));
+    const endById   = new Map(trips.map(t => [t.id, t.endDeparture   ?? '']));
+    for (const g of groups) {
+        g.tripIds.sort((a, b) => {
+            const ta = toHHMM(startById.get(a));
+            const tb = toHHMM(startById.get(b));
+            return ta < tb ? -1 : ta > tb ? 1 : 0;
+        });
+        g.minStart = toHHMM(startById.get(g.tripIds[0]) ?? '');
+        const ends = g.tripIds.map(id => toHHMM(endById.get(id) ?? '')).filter(Boolean).sort();
+        g.minEnd = ends[0] ?? '';
+    }
+
+    // Gruppen sortieren: Linie numerisch → Typ → Von → Von-Uhrzeit → Nach → Nach-Uhrzeit
+    groups.sort((a, b) => {
+        const la = parseInt(a.line, 10) || 0;
+        const lb = parseInt(b.line, 10) || 0;
+        if (la !== lb) return la - lb;
+        const da = DAY_ORDER[a.dayType] ?? 99;
+        const db = DAY_ORDER[b.dayType] ?? 99;
+        if (da !== db) return da - db;
+        const va = (a.startStopName ?? '').localeCompare(b.startStopName ?? '', 'de');
+        if (va !== 0) return va;
+        if (a.minStart !== b.minStart) return a.minStart < b.minStart ? -1 : 1;
+        const na = (a.endStopName ?? '').localeCompare(b.endStopName ?? '', 'de');
+        if (na !== 0) return na;
+        return a.minEnd < b.minEnd ? -1 : a.minEnd > b.minEnd ? 1 : 0;
+    });
+
     wrap.innerHTML = `
         <p class="text-small text-muted" style="margin-bottom:10px">
             ${groups.length} Gruppe${groups.length !== 1 ? 'n' : ''}
@@ -145,12 +209,12 @@ function renderTable(container) {
         <table class="data-table">
             <thead>
                 <tr>
+                    <th>Linie</th>
                     <th>Typ</th>
-                    <th>Stamm</th>
                     <th>Von</th>
                     <th>Nach</th>
                     <th style="text-align:center">Fahrten</th>
-                    <th style="width:2rem"></th>
+                    <th style="width:2.5rem"></th>
                 </tr>
             </thead>
             <tbody>
@@ -162,12 +226,14 @@ function renderTable(container) {
 function renderGroupRow(g, idx) {
     const rowId    = `tr-grp-${idx}`;
     const detailId = `tr-det-${idx}`;
+    const von  = escHtml(stripStopName(g.startStopName, stopPrefix));
+    const nach = escHtml(stripStopName(g.endStopName,   stopPrefix));
     return `
         <tr id="${rowId}" class="tr-group-row">
+            <td><strong>${escHtml(g.line)}</strong></td>
             <td>${escHtml(DAY_LABELS[g.dayType] ?? g.dayType)}</td>
-            <td class="trip-service-nr">${escHtml(g.stem)}</td>
-            <td>${escHtml(g.startStopName)}</td>
-            <td>${escHtml(g.endStopName)}</td>
+            <td style="white-space:nowrap">${von}</td>
+            <td style="white-space:nowrap">${nach}</td>
             <td style="text-align:center">${g.tripIds.length}</td>
             <td>
                 <button class="btn btn-ghost btn-xs btn-tr-expand"
@@ -215,10 +281,14 @@ function attachAccordion(wrap) {
 
         if (isOpen) return; // War offen → nur schließen
 
+        // Breite vor dem Einblenden setzen, damit die äußere Tabelle nicht
+        // durch den Accordion-Inhalt aufgeweitet wird.
+        innerDiv.style.width = wrap.clientWidth + 'px';
+        innerDiv.innerHTML = `<div class="spinner" style="margin:8px auto"></div>`;
+
         detailRow.hidden = false;
         btn.setAttribute('aria-expanded', 'true');
         btn.textContent = '▼';
-        innerDiv.innerHTML = `<div class="spinner" style="margin:8px auto"></div>`;
 
         let detail;
         try {
@@ -271,14 +341,14 @@ function renderDetail(innerDiv, detail) {
                     </td>`;
         }).join('');
         return `<tr>
-                    <td class="text-small">${escHtml(stop.stopName)}</td>
+                    <td>${escHtml(stripStopName(stop.stopName, stopPrefix))}</td>
                     ${timeCols}
                 </tr>`;
     }).join('');
 
     innerDiv.innerHTML = `
-        <div style="overflow-x:auto;padding:4px 0 8px">
-            <table class="data-table ov-rec-table tr-detail-table">
+        <div class="tr-detail-wrap">
+            <table class="data-table tr-detail-table">
                 <thead>
                     <tr>
                         <th>Haltestelle</th>
@@ -306,6 +376,8 @@ function attachFilters(container) {
         await loadTrips(container, periodId);
     });
 
-    container.querySelector('#tr-line').addEventListener('input',    reload);
     container.querySelector('#tr-daytype').addEventListener('change', reload);
+    container.querySelector('#tr-line').addEventListener('input',    reload);
+    container.querySelector('#tr-von').addEventListener('input',     reload);
+    container.querySelector('#tr-nach').addEventListener('input',    reload);
 }

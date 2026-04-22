@@ -50,6 +50,7 @@ foreach ($departures as $dep) {
 // Mehrheitsregel: häufigste course_number gewinnt; bei Gleichstand ältester Eintrag.
 $stmt = $pdo->prepare(
     'SELECT
+         t.last_hafas_trip_id,
          t.service_nr,
          t.line,
          t.day_type,
@@ -67,25 +68,41 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([$periodId]);
 
-// Lookup-Map: "service_nr|line|day_type" → activeCourseNumber
-$tripMap = [];
+// Zwei Lookup-Maps aufbauen:
+//   1. last_hafas_trip_id → activeCourseNumber  (primär, stabil)
+//   2. "service_nr|line|day_type" → activeCourseNumber  (Fallback, dauerhaft)
+$tripMapByJourneyId  = [];
+$tripMapByServiceNr  = [];
 foreach ($stmt->fetchAll() as $row) {
-    $key           = $row['service_nr'] . '|' . $row['line'] . '|' . $row['day_type'];
-    // manuelle Übersteuerung hat Vorrang vor Mehrheitsregel
-    $tripMap[$key] = $row['manual_course_number'] ?? $row['majority_course_number'];
+    $active = $row['manual_course_number'] ?? $row['majority_course_number'];
+
+    if ($row['last_hafas_trip_id'] !== null) {
+        $tripMapByJourneyId[$row['last_hafas_trip_id']] = $active;
+    }
+
+    // Fallback-Key – bei Kollision gewinnt der zuerst geladene Eintrag
+    // (in der Praxis eindeutig, da service_nr per Trip nur einmal vorkommt)
+    $fbKey = $row['service_nr'] . '|' . $row['line'] . '|' . $row['day_type'];
+    if (!isset($tripMapByServiceNr[$fbKey])) {
+        $tripMapByServiceNr[$fbKey] = $active;
+    }
 }
 
 // Abfahrten mit activeCourseNumber anreichern
+// Primär: Lookup per last_hafas_trip_id; Fallback: service_nr|line|day_type
 $result = [];
 foreach ($departures as $dep) {
     $dateStr = $dep['departurePlanned'] !== null
         ? substr($dep['departurePlanned'], 0, 10)
         : date('Y-m-d');
     $dayType = $dayTypeCache[$dateStr] ?? 'MO-FR';
-    $key     = $dep['serviceNr'] . '|' . $dep['line'] . '|' . $dayType;
+
+    $active = $tripMapByJourneyId[$dep['hafasTripId']]
+        ?? $tripMapByServiceNr[$dep['serviceNr'] . '|' . $dep['line'] . '|' . $dayType]
+        ?? null;
 
     $result[] = array_merge($dep, [
-        'activeCourseNumber' => $tripMap[$key] ?? null,
+        'activeCourseNumber' => $active,
     ]);
 }
 

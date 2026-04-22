@@ -23,6 +23,8 @@ $stmt = $pdo->prepare(
          t.line,
          t.day_type,
          t.direction,
+         t.path_fingerprint,
+         t.schedule_fingerprint,
          t.manual_course_number,
          COUNT(r.id)               AS recording_count,
          MIN(rs1.departure_planned) AS start_departure,
@@ -30,20 +32,14 @@ $stmt = $pdo->prepare(
          (
              SELECT rs_e.departure_planned
              FROM ' . tbl('route_stops') . ' rs_e
-             WHERE rs_e.recording_id = (
-                 SELECT r2.id FROM ' . tbl('recordings') . ' r2
-                 WHERE r2.trip_id = t.id LIMIT 1
-             )
+             WHERE rs_e.trip_id = t.id
              ORDER BY rs_e.sequence DESC LIMIT 1
          ) AS end_departure,
          (
              SELECT se.name
              FROM ' . tbl('route_stops') . ' rs_e
              JOIN ' . tbl('stops') . ' se ON se.hafas_id = rs_e.stop_id
-             WHERE rs_e.recording_id = (
-                 SELECT r2.id FROM ' . tbl('recordings') . ' r2
-                 WHERE r2.trip_id = t.id LIMIT 1
-             )
+             WHERE rs_e.trip_id = t.id
              ORDER BY rs_e.sequence DESC LIMIT 1
          ) AS end_stop_name,
          COALESCE(
@@ -59,7 +55,7 @@ $stmt = $pdo->prepare(
          ) AS active_course_number
      FROM ' . tbl('trips') . ' t
      LEFT JOIN ' . tbl('recordings') . '  r   ON r.trip_id = t.id
-     LEFT JOIN ' . tbl('route_stops') . ' rs1 ON rs1.recording_id = r.id AND rs1.sequence = 1
+     LEFT JOIN ' . tbl('route_stops') . ' rs1 ON rs1.trip_id = t.id AND rs1.sequence = 1
      LEFT JOIN ' . tbl('stops') . '        st1 ON st1.hafas_id = rs1.stop_id
      WHERE t.period_id = ?
      GROUP BY t.id
@@ -73,23 +69,25 @@ $rows   = $stmt->fetchAll();
 $result = [];
 foreach ($rows as $row) {
     $result[] = [
-        'id'                 => (int) $row['id'],
-        'periodId'           => (int) $row['period_id'],
-        'serviceNr'          => $row['service_nr'],
-        'line'               => $row['line'],
-        'dayType'            => $row['day_type'],
-        'direction'          => $row['direction'],
-        'activeCourseNumber' => $row['active_course_number'],
-        'manualCourseNumber' => $row['manual_course_number'],
-        'recordingCount'     => (int) $row['recording_count'],
-        'startDeparture'     => $row['start_departure']
-            ? (new DateTime($row['start_departure']))->format('H:i')
+        'id'                  => (int) $row['id'],
+        'periodId'            => (int) $row['period_id'],
+        'serviceNr'           => $row['service_nr'],
+        'line'                => $row['line'],
+        'dayType'             => $row['day_type'],
+        'direction'           => $row['direction'],
+        'pathFingerprint'     => $row['path_fingerprint'],
+        'scheduleFingerprint' => $row['schedule_fingerprint'],
+        'activeCourseNumber'  => $row['active_course_number'],
+        'manualCourseNumber'  => $row['manual_course_number'],
+        'recordingCount'      => (int) $row['recording_count'],
+        'startDeparture'      => $row['start_departure']
+            ? (new DateTime($row['start_departure'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('H:i')
             : null,
-        'startStopName'      => $row['start_stop_name'],
-        'endDeparture'       => $row['end_departure']
-            ? (new DateTime($row['end_departure']))->format('H:i')
+        'startStopName'       => $row['start_stop_name'],
+        'endDeparture'        => $row['end_departure']
+            ? (new DateTime($row['end_departure'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('H:i')
             : null,
-        'endStopName'        => $row['end_stop_name'] ?? $row['direction'],
+        'endStopName'         => $row['end_stop_name'] ?? $row['direction'],
     ];
 }
 

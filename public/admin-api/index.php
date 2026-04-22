@@ -44,6 +44,7 @@ $routes = [
     'school-holidays'    => 'school_holidays.php',
     'periods'            => 'periods.php',
     'hafas-log'          => 'hafas_log.php',
+    'hafas-cache'        => 'hafas_cache.php',
     'trip-group-detail'  => 'trip_group_detail.php',
 ];
 

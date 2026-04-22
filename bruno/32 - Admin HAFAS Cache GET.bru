@@ -1,0 +1,44 @@
+meta {
+  name: Admin – GET HAFAS Cache-Inhalt
+  type: http
+  seq: 32
+}
+
+get {
+  url: {{baseUrl}}/admin-api/hafas-cache
+  body: none
+  auth: none
+}
+
+params:query {
+  id: {{hafasLogId}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Cache-Inhalt geladen für Log-ID", bru.getVar("hafasLogId"));
+  }
+}
+
+docs {
+  Gibt den noch vorhandenen HAFAS-Cache-Inhalt für einen Log-Eintrag zurück.
+  Voraussetzung: Admin-Login (12-Admin-Login).
+
+  Parameter:
+    id  – ID aus der hafas_log-Tabelle (aus 33-Admin-HAFAS-Log-GET)
+
+  Unterstützte Endpoints: nearby, stopfinder, departures, trip
+
+  Antwort: roher HAFAS-JSON-Cache-Inhalt (Struktur je nach Endpoint)
+
+  Fehlerfälle:
+    id fehlt oder ungültig  → 400
+    Eintrag nicht gefunden  → 404
+    Kein Cache-Key möglich  → 404 ("Kein Cache für diesen Endpoint")
+    Cache nicht vorhanden   → 404 ("Cache nicht vorhanden oder abgelaufen")
+    Ohne Admin-Session      → 401
+}

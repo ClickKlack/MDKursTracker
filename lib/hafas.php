@@ -176,7 +176,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
     // aber identische Anfragen im selben Intervall treffen HAFAS nur einmal.
     $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes, $lookback);
     $cached   = hafas_cache_get($cacheKey);
-    $logParams = ['stopId' => $stopId, 'results' => $results];
+    $logParams = ['stopId' => $stopId, 'results' => $results, 'maxMinutes' => $maxMinutes];
     if ($cached !== null) {
         hafas_log_write([['meth' => 'StationBoard']], 200, 0, [], true, $logParams);
         return $cached;
@@ -535,6 +535,7 @@ function hafas_log_write(
     $meth     = $services[0]['meth'] ?? '';
     $endpoint = match ($meth) {
         'LocGeoPos'      => 'nearby',
+        'LocMatch'       => 'stopfinder',
         'StationBoard'   => 'departures',
         'JourneyDetails' => 'trip',
         default          => 'nearby',

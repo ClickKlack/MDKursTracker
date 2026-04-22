@@ -11,6 +11,7 @@ require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/user_helpers.php';
+require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -224,21 +225,7 @@ function handle_post_recording(): never
     $serviceDate = DateTimeImmutable::createFromFormat('Y-m-d', $body['serviceDate']);
     $dayType = getDayType($serviceDate, $pdo);
 
-    // Logische Fahrt anlegen (IGNORE = kein Fehler bei Duplikat)
-    $pdo->prepare(
-        'INSERT IGNORE INTO ' . tbl('trips') . ' (period_id, service_nr, line, day_type, direction)
-         VALUES (?, ?, ?, ?, ?)'
-    )->execute([$periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction']]);
-
-    // Trip-ID für FK ermitteln
-    $tripStmt = $pdo->prepare(
-        'SELECT id FROM ' . tbl('trips') . '
-         WHERE period_id = ? AND service_nr = ? AND line = ? AND day_type = ?'
-    );
-    $tripStmt->execute([$periodId, $body['serviceNr'], $body['line'], $dayType]);
-    $tripId = (int) $tripStmt->fetchColumn();
-
-    // Vollständigen Laufweg über HAFAS laden
+    // Vollständigen Laufweg über HAFAS laden (vor Trip-Anlage, da Fingerprint daraus berechnet wird)
     try {
         $tripStops = hafas_trip($body['hafasTripId']);
     } catch (RuntimeException $e) {
@@ -247,6 +234,61 @@ function handle_post_recording(): never
             'exception'   => $e->getMessage(),
         ]);
         json_error('HAFAS-Tripabfrage fehlgeschlagen: ' . $e->getMessage(), 500);
+    }
+
+    // Fingerprints berechnen
+    $fp = compute_fingerprints($tripStops);
+
+    // Trip per schedule_fingerprint suchen (primär) oder per service_nr (Fallback)
+    $tripId = null;
+
+    if ($fp['schedule'] !== null) {
+        // Fingerprint-basierter Lookup
+        $tripStmt = $pdo->prepare(
+            'SELECT id, last_hafas_trip_id, service_nr FROM ' . tbl('trips') . '
+             WHERE period_id = ? AND schedule_fingerprint = ? AND day_type = ?'
+        );
+        $tripStmt->execute([$periodId, $fp['schedule'], $dayType]);
+        $existingTrip = $tripStmt->fetch();
+
+        if ($existingTrip) {
+            $tripId = (int) $existingTrip['id'];
+            // last_hafas_trip_id und service_nr nachführen wenn abgewichen
+            if ($existingTrip['last_hafas_trip_id'] !== $body['hafasTripId']
+                || $existingTrip['service_nr'] !== $body['serviceNr']) {
+                $pdo->prepare(
+                    'UPDATE ' . tbl('trips') . '
+                     SET last_hafas_trip_id = ?, service_nr = ?
+                     WHERE id = ?'
+                )->execute([$body['hafasTripId'], $body['serviceNr'], $tripId]);
+            }
+        } else {
+            // Neuen Trip mit Fingerprints anlegen
+            $pdo->prepare(
+                'INSERT INTO ' . tbl('trips') . '
+                     (period_id, service_nr, line, day_type, direction,
+                      path_fingerprint, schedule_fingerprint, last_hafas_trip_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([
+                $periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction'],
+                $fp['path'], $fp['schedule'], $body['hafasTripId'],
+            ]);
+            $tripId = (int) $pdo->lastInsertId();
+        }
+    } else {
+        // Kein schedule_fingerprint (z.B. alle Zeiten fehlen) → service_nr-Fallback
+        $pdo->prepare(
+            'INSERT IGNORE INTO ' . tbl('trips') . '
+                 (period_id, service_nr, line, day_type, direction, last_hafas_trip_id)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        )->execute([$periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction'],
+                    $body['hafasTripId']]);
+        $fbStmt = $pdo->prepare(
+            'SELECT id FROM ' . tbl('trips') . '
+             WHERE period_id = ? AND service_nr = ? AND line = ? AND day_type = ?'
+        );
+        $fbStmt->execute([$periodId, $body['serviceNr'], $body['line'], $dayType]);
+        $tripId = (int) $fbStmt->fetchColumn();
     }
 
     // Haltestellenname und kanonische HAFAS-ID des Erfassungs-Stops ermitteln.
@@ -316,17 +358,19 @@ function handle_post_recording(): never
         ]);
         $recordingId = (int) $pdo->lastInsertId();
 
-        // Alle Laufweg-Haltestellen anlegen und route_stops befüllen
+        // Laufweg-Haltestellen anlegen und route_stops befüllen – nur einmal pro Trip.
+        // INSERT IGNORE auf (trip_id, sequence) verhindert Duplikate bei parallelen Erfassungen.
         if (!empty($tripStops)) {
             $stopInsert  = $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)');
             $routeInsert = $pdo->prepare(
-                'INSERT INTO ' . tbl('route_stops') . ' (recording_id, sequence, stop_id, departure_planned, line)
+                'INSERT IGNORE INTO ' . tbl('route_stops') . '
+                     (trip_id, sequence, stop_id, departure_planned, line)
                  VALUES (?, ?, ?, ?, ?)'
             );
             foreach ($tripStops as $ts) {
                 $stopInsert->execute([$ts['stopId'], $ts['stop']]);
                 $routeInsert->execute([
-                    $recordingId,
+                    $tripId,
                     $ts['sequence'],
                     $ts['stopId'],
                     $ts['departurePlanned'] !== null ? iso_to_mysql($ts['departurePlanned']) : null,
@@ -480,7 +524,9 @@ function handle_get_route(int $recordingId): never
     $pdo = get_db();
 
     $recStmt = $pdo->prepare(
-        'SELECT stop_id, departure_planned FROM ' . tbl('recordings') . ' WHERE id = ?'
+        'SELECT r.stop_id, r.departure_planned, r.trip_id
+         FROM ' . tbl('recordings') . ' r
+         WHERE r.id = ?'
     );
     $recStmt->execute([$recordingId]);
     $rec = $recStmt->fetch();
@@ -501,10 +547,10 @@ function handle_get_route(int $recordingId): never
              rs.line
          FROM ' . tbl('route_stops') . ' rs
          JOIN ' . tbl('stops') . ' st ON rs.stop_id = st.hafas_id
-         WHERE rs.recording_id = ?
+         WHERE rs.trip_id = ?
          ORDER BY rs.sequence ASC'
     );
-    $stmt->execute([$recordingId]);
+    $stmt->execute([$rec['trip_id']]);
     $rows = $stmt->fetchAll();
 
     if (empty($rows)) {

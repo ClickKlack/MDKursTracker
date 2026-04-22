@@ -1,6 +1,6 @@
 -- =============================================================================
 -- DATABASE.sql – marego Kursnummer-Erfassungs-App
--- MariaDB-Schema, Version 1.1, Stand: 2026-03-24
+-- MariaDB-Schema, Version 3.0, Stand: 2026-04-22
 --
 -- Reihenfolge beachten: Tabellen ohne FK zuerst.
 -- Zeichensatz: utf8mb4 (voller Unicode inkl. Emoji)
@@ -87,20 +87,27 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%schedule_periods` (
 
 -- -----------------------------------------------------------------------------
 -- Tabelle: %%PREFIX%%trips
--- Logische, fahrplanstabile Fahrten. Eine Fahrt ist eindeutig durch
--- (period_id, service_nr, line, day_type).
--- Wird beim ersten Erfassen einer Abfahrt automatisch angelegt (INSERT IGNORE).
+-- Logische, fahrplanstabile Fahrten. Primär identifiziert durch
+-- (period_id, schedule_fingerprint, day_type).
+-- service_nr bleibt als nicht-uniquer Hilfswert (zuletzt bekannte HAFAS fahrtNr).
+-- last_hafas_trip_id wird beim Auflösen einer Fahrt im Detail-View lazy nachgeführt.
+-- Wird beim ersten Erfassen einer Abfahrt automatisch angelegt.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `%%PREFIX%%trips` (
     `id`                   INT          NOT NULL AUTO_INCREMENT,
     `period_id`            INT          NOT NULL,
-    `service_nr`           VARCHAR(20)  NOT NULL COMMENT 'HAFAS fahrtNr',
+    `service_nr`           VARCHAR(20)  NOT NULL COMMENT 'Zuletzt bekannte HAFAS fahrtNr (mutable)',
     `line`                 VARCHAR(10)  NOT NULL COMMENT 'z.B. 6',
     `day_type`             ENUM('MO-FR','SA','SO','FT','SF') NOT NULL,
     `direction`            VARCHAR(100) NOT NULL COMMENT 'Zielhaltestellenname',
+    `path_fingerprint`     CHAR(64)     NULL     COMMENT 'SHA-256 über geordnete Stop-IDs des Laufwegs',
+    `schedule_fingerprint` CHAR(64)     NULL     COMMENT 'SHA-256 über Stop-ID+HH:MM-Paare (UTC); identifiziert Fahrtinstanz',
+    `last_hafas_trip_id`   VARCHAR(512) NULL     COMMENT 'Zuletzt bekannte HAFAS Journey-ID; wird lazy nachgeführt',
     `manual_course_number` CHAR(2)      NULL     COMMENT 'Admin-Übersteuerung; NULL = keine',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_%%PREFIX%%trip_period` (`period_id`, `service_nr`, `line`, `day_type`),
+    UNIQUE KEY `uq_%%PREFIX%%trips_fingerprint` (`period_id`, `schedule_fingerprint`, `day_type`),
+    KEY `idx_%%PREFIX%%trips_service_nr`  (`period_id`, `service_nr`, `line`, `day_type`),
+    KEY `idx_%%PREFIX%%trips_last_hafas`  (`last_hafas_trip_id`(191)),
     CONSTRAINT `fk_%%PREFIX%%trips_period`
         FOREIGN KEY (`period_id`) REFERENCES `%%PREFIX%%schedule_periods` (`id`)
         ON DELETE RESTRICT ON UPDATE CASCADE
@@ -147,20 +154,21 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%recordings` (
 
 -- -----------------------------------------------------------------------------
 -- Tabelle: %%PREFIX%%route_stops
--- Normalisierter Laufweg je Erfassung. Wird beim Speichern einer Erfassung
--- automatisch über den HAFAS Trip-Endpunkt befüllt.
+-- Normalisierter Laufweg je Fahrt (Trip). Wird beim ersten Erfassen einer Fahrt
+-- über den HAFAS Trip-Endpunkt befüllt und danach wiederverwendet.
+-- Pro (trip_id, sequence) existiert genau ein Eintrag.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     `id`                INT         NOT NULL AUTO_INCREMENT,
-    `recording_id`      INT         NOT NULL,
+    `trip_id`           INT         NOT NULL,
     `sequence`          TINYINT     NOT NULL COMMENT 'Position im Laufweg, beginnend bei 1',
     `stop_id`           VARCHAR(20) NOT NULL,
     `departure_planned` DATETIME    NULL     COMMENT 'Abfahrtszeit; letzter Halt: Ankunftszeit (HAFAS aTimeS-Fallback)',
     `line`              VARCHAR(10) NULL     COMMENT 'Linie an diesem Halt (aus HAFAS prodL); NULL wenn nicht verfügbar',
     PRIMARY KEY (`id`),
-    KEY `idx_%%PREFIX%%route_stops_recording` (`recording_id`),
-    CONSTRAINT `fk_%%PREFIX%%route_stops_recording`
-        FOREIGN KEY (`recording_id`) REFERENCES `%%PREFIX%%recordings` (`id`)
+    UNIQUE KEY `uq_%%PREFIX%%route_stops_seq` (`trip_id`, `sequence`),
+    CONSTRAINT `fk_%%PREFIX%%route_stops_trip`
+        FOREIGN KEY (`trip_id`) REFERENCES `%%PREFIX%%trips` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT `fk_%%PREFIX%%route_stops_stop`
         FOREIGN KEY (`stop_id`) REFERENCES `%%PREFIX%%stops` (`hafas_id`)
@@ -196,7 +204,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%user_favorites` (
 CREATE TABLE IF NOT EXISTS `%%PREFIX%%hafas_log` (
     `id`          BIGINT      NOT NULL AUTO_INCREMENT,
     `logged_at`   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
-    `endpoint`    ENUM('nearby','departures','trip') NOT NULL,
+    `endpoint`    ENUM('nearby','stopfinder','departures','trip') NOT NULL,
     `http_status` SMALLINT    NOT NULL,
     `duration_ms` SMALLINT    UNSIGNED NOT NULL,
     `cache_hit`   TINYINT(1)  NOT NULL DEFAULT 0,

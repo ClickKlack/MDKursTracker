@@ -1,8 +1,8 @@
 # SPEC.md – marego Kursnummer-Erfassungs-App: MDKursTracker
 
-> Version: 1.3
-> Stand: 2026-04-14
-> Status: Implementiert (Schema-Version 2)
+> Version: 1.4
+> Stand: 2026-04-22
+> Status: Implementiert (Schema-Version 3)
 
 ---
 
@@ -139,14 +139,48 @@ Admin-Frontend gepflegt. Schulferien gelten periodenübergreifend
 
 ## 6. Fahrt-Identifikation & Duplikaterkennung
 
-Eine **logische Fahrt** ist eindeutig identifiziert durch:
+Eine **logische Fahrt** ist eindeutig identifiziert durch ihren `schedule_fingerprint`
+kombiniert mit `period_id` und `day_type`:
 
 ```
-period_id + service_nr + line + day_type
+period_id + schedule_fingerprint + day_type
 ```
 
-Pro logischer Fahrt können beliebig viele **Einzelerfassungen** von
-verschiedenen Nutzern, Tagen und Haltestellen vorliegen. Dies ist gewünscht.
+### Fingerprints
+
+Beide Fingerprints werden aus dem vollständigen Laufweg einer Fahrt berechnet
+(Ausgabe von `hafas_trip()`):
+
+| Fingerprint | Basis | Beschreibung |
+|---|---|---|
+| `path_fingerprint` | SHA-256(`stopId1\|stopId2\|...`) | Identifiziert den Linienverlauf unabhängig von Zeiten |
+| `schedule_fingerprint` | SHA-256(`stopId1_HH:MM\|stopId2_HH:MM\|...`, UTC) | Identifiziert die konkrete Fahrtinstanz (Fahrplanmuster) |
+
+Halte ohne Zeitangabe werden in `schedule_fingerprint` übersprungen. Letzter Halt:
+HAFAS liefert dort die Ankunftszeit als `departurePlanned` (aTimeS-Fallback).
+
+Da HAFAS-Journey-IDs tagesgebunden sind und sich ändern können, werden sie nicht
+mehr zur primären Identifikation verwendet. Stattdessen wird `last_hafas_trip_id`
+auf dem Trip **lazy nachgeführt** (beim Öffnen des Detail-Views, vor der Erfassung).
+
+`service_nr` bleibt als nicht-eindeutiger Hilfswert erhalten und wird ebenfalls lazy
+aktualisiert. Er dient als dauerhafter Fallback-Lookup in der Abfahrten-Übersicht.
+
+### Kurs-Auflösung beim Detail-View
+
+Wenn ein Nutzer auf eine Abfahrt klickt, wird im Hintergrund die HAFAS-Fahrt geladen.
+Das Backend berechnet die Fingerprints, findet den Trip in der DB und aktualisiert
+`last_hafas_trip_id`. So ist die korrekte Kursnummer auch dann sichtbar, wenn die
+Journey-ID sich geändert hat — ohne Extra-Lookup beim Laden der Abfahrtsliste.
+
+### Abfahrten-Übersicht
+
+Kurs-Matching erfolgt mit zwei Strategien (in dieser Reihenfolge):
+
+1. **Primär:** `last_hafas_trip_id` → `activeCourseNumber` (stabiler Treffer nach Detail-View)
+2. **Fallback:** `service_nr|line|day_type` → `activeCourseNumber` (dauerhaft, für ältere Daten)
+
+Wenn weder primär noch Fallback greift: `activeCourseNumber = null`.
 
 ### Aktive Kursnummer
 
@@ -192,16 +226,21 @@ Favorit hinzugefügt oder entfernt werden.
   - Linie, Richtung
   - Abfahrt **Soll** und **Ist** (Echtzeit, wenn verfügbar)
   - Bereits bekannte aktive Kursnummer der aktuellen Periode
-    (farblich hervorgehoben)
+    (farblich hervorgehoben; primär per `last_hafas_trip_id`, Fallback per `service_nr`)
+- **Klick auf eine Abfahrt:** Lädt den vollständigen Laufweg (HAFAS Trip-Endpunkt),
+  berechnet Fingerprints und aktualisiert `last_hafas_trip_id` im Hintergrund.
+  Dadurch wird ggf. ein vorhandener Kurs erkannt und angezeigt, auch wenn sich die
+  Journey-ID seit der letzten Erfassung geändert hat.
 
 ### 7.3 Kursnummer erfassen
 
 - **Schnellerfassung:** 18 Buttons für `01`–`18`
 - **Freitextfeld:** Freie Eingabe, Validierung auf zweistelliges Format `01`–`99`
 - Nach Bestätigung:
+  - Trip-Lookup per `schedule_fingerprint + day_type` (primär) oder `service_nr` (Fallback)
   - Speicherung der Erfassung inkl. `user_token` (wenn vorhanden)
-  - Automatischer Abruf des vollständigen Laufwegs via HAFAS Trip-Endpunkt
-  - Speicherung aller Halte normalisiert in `route_stops` + `stops`
+  - Vollständiger Laufweg (aus Cache des Detail-Views) wird in `route_stops` gespeichert —
+    **pro Trip nur einmal** (INSERT IGNORE), nicht per Erfassung
 
 ### 7.4 Einträge einsehen (Verlauf)
 
@@ -274,13 +313,18 @@ Die aktive Periode ist immer diejenige mit dem höchsten `id`-Wert.
 |---|---|---|
 | `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
 | `period_id` | INT NOT NULL FK | → `schedule_periods.id` |
-| `service_nr` | VARCHAR(20) NOT NULL | HAFAS fahrtNr |
+| `service_nr` | VARCHAR(20) NOT NULL | Zuletzt bekannte HAFAS fahrtNr (mutable, nicht eindeutig) |
 | `line` | VARCHAR(10) NOT NULL | Linienbezeichnung (z.B. „6") |
 | `day_type` | ENUM('MO-FR','SA','SO','FT','SF') NOT NULL | Kalendertyp |
 | `direction` | VARCHAR(100) NOT NULL | Zielhaltestellenname |
+| `path_fingerprint` | CHAR(64) NULL | SHA-256 über geordnete Stop-IDs |
+| `schedule_fingerprint` | CHAR(64) NULL | SHA-256 über Stop-ID+HH:MM-Paare (UTC) |
+| `last_hafas_trip_id` | VARCHAR(512) NULL | Zuletzt bekannte HAFAS Journey-ID (lazy nachgeführt) |
 | `manual_course_number` | CHAR(2) NULL | Manuelle Übersteuerung (NULL = keine) |
 
-Unique-Index auf `(period_id, service_nr, line, day_type)`.
+Unique-Index auf `(period_id, schedule_fingerprint, day_type)` — MariaDB erlaubt mehrere NULL-Zeilen.
+Nicht-uniquer Index auf `(period_id, service_nr, line, day_type)` für Fallback-Lookup.
+Index auf `last_hafas_trip_id` für schnellen Primär-Lookup.
 
 ---
 
@@ -307,10 +351,15 @@ Unique-Index auf `(period_id, service_nr, line, day_type)`.
 | Spalte | Typ | Beschreibung |
 |---|---|---|
 | `id` | INT PK AUTO_INCREMENT | Primärschlüssel |
-| `recording_id` | INT NOT NULL FK | → `recordings.id` |
+| `trip_id` | INT NOT NULL FK | → `trips.id` |
 | `sequence` | TINYINT NOT NULL | Position im Laufweg |
 | `stop_id` | VARCHAR(20) NOT NULL FK | → `stops.hafas_id` |
 | `departure_planned` | DATETIME NULL | Planmäßige Abfahrt an diesem Halt |
+| `line` | VARCHAR(10) NULL | Linie an diesem Halt (für Durchbindungen) |
+
+Unique-Index auf `(trip_id, sequence)` — pro Trip wird der Laufweg nur einmal gespeichert.
+Der Laufweg wird beim Öffnen des Detail-Views oder beim ersten Erfassen einer Fahrt befüllt
+(INSERT IGNORE, bei weiteren Erfassungen derselben Fahrt kein erneuter Schreibvorgang).
 
 ---
 
@@ -370,18 +419,23 @@ Unique-Index auf `(user_token, stop_id)`.
 ### 8.9 Entity-Relationship-Übersicht
 
 ```
-schedule_periods (1) ──< trips (1) ──< recordings (1) ──< route_stops
-                                               │                 │
-                                            stops <──────────────┘
-                                               │
-                                         users (0..1)
-                                               │
-                                      user_favorites (0..n)
+schedule_periods (1) ──< trips (1) ──< recordings
+                              │               │
+                              └──< route_stops│
+                                       │      │
+                                    stops <───┘
+                                       │
+                                 users (0..1)
+                                       │
+                              user_favorites (0..n)
 
 school_holidays  (unabhängig, periodenübergreifend)
 stops            (unabhängig, periodenübergreifend)
 users            (unabhängig, periodenübergreifend)
 ```
+
+`route_stops` ist direkt mit `trips` verknüpft (nicht mehr mit `recordings`).
+Pro Fahrt wird der Laufweg einmal gespeichert und von allen Erfassungen gemeinsam genutzt.
 
 ---
 
@@ -470,7 +524,22 @@ Siehe `API.md` für vollständige Request/Response-Dokumentation.
 | Version | Datei | Inhalt |
 |---|---|---|
 | v1 | `DATABASE.sql` | Initiales Schema (alle Tabellen, für Neuinstallation) |
-| v2 | `DATABASE_migrate_v2.sql` | Neue Tabellen `users`, `user_favorites`; neue Spalten `user_token`, `comment` in `recordings` |
+| v2 | `migrations/v2.sql` | Neue Tabellen `users`, `user_favorites`; neue Spalten `user_token`, `comment` in `recordings` |
+| v3 | `migrations/v3.sql` + `migrations/v3_fingerprints.php` | Fingerprint-Spalten in `trips`; `route_stops` von `recordings` auf `trips` umgehängt |
+
+Migrationsdateien liegen im Verzeichnis `migrations/` (versioniert, aber nicht deployed).
 
 Migration v2 ist sicher wiederholbar (`IF NOT EXISTS`). Bestehende Erfassungen
 bleiben unverändert (`user_token` ist nullable).
+
+**Migration v3** besteht aus zwei Schritten:
+
+1. `./local_scripts/setup_db.sh --migrate-v3` — führt `migrations/v3.sql` aus:
+   neue Spalten, Index-Umbau, `trip_id` in `route_stops` hinzufügen und befüllen
+2. PHP-Skript `migrations/v3_fingerprints.php` — berechnet Fingerprints aus
+   bestehenden `route_stops`, führt Trips mit identischem Fingerprint zusammen,
+   entfernt `recording_id` und befüllt `last_hafas_trip_id` aus der neuesten Erfassung
+
+Trips ohne `route_stops` behalten `schedule_fingerprint = NULL` und sind weiterhin
+über den `service_nr`-Fallback erreichbar. Der `--dry-run`-Modus des PHP-Skripts
+zeigt alle Änderungen an, ohne sie zu schreiben.

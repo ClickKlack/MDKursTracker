@@ -22,7 +22,7 @@
 
     --header-height: 52px;
     --tab-height:    44px;
-    --max-width:     860px;
+    --max-width:     1400px;
 
     --radius-sm: 6px;
     --radius-md: 10px;
@@ -116,13 +116,20 @@ body {
 /* --- Tab-Navigation -------------------------------------------------------- */
 
 .admin-tabs {
+    position: sticky;
+    top: var(--header-height);
+    z-index: 99;
     display: flex;
     background: var(--color-surface);
     border-bottom: 2px solid var(--color-border);
     padding: 0 20px;
     gap: 0;
     overflow-x: auto;
+    scrollbar-width: none;
+    box-shadow: var(--shadow-sm);
 }
+
+.admin-tabs::-webkit-scrollbar { display: none; }
 
 .tab-btn {
     flex-shrink: 0;
@@ -154,6 +161,14 @@ body {
     max-width: var(--max-width);
     margin: 0 auto;
     padding: 24px 20px;
+}
+
+@media (min-width: 900px) {
+    .admin-main { padding: 28px 40px; }
+}
+
+@media (min-width: 1600px) {
+    .admin-main { padding: 32px 60px; }
 }
 
 /* --- Formular-Elemente ----------------------------------------------------- */
@@ -426,14 +441,30 @@ body {
 /* --- Override-Tabelle ------------------------------------------------------ */
 
 .override-filters {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
     gap: 0 14px;
     margin-bottom: 16px;
 }
 
-@media (max-width: 480px) {
-    .override-filters { grid-template-columns: 1fr; }
+.override-filters .form-group {
+    flex: 1 1 170px;
+    min-width: 140px;
+    max-width: 280px;
+}
+
+/* Wochentagstyp: längster Text ist "So/Feiertag" */
+.override-filters .form-group--sm {
+    flex: 1 1 130px;
+    min-width: 110px;
+    max-width: 190px;
+}
+
+/* Linie: max. zweistellig */
+.override-filters .form-group--xs {
+    flex: 0 1 85px;
+    min-width: 65px;
+    max-width: 100px;
 }
 
 .course-badge {
@@ -521,6 +552,58 @@ body {
     justify-content: flex-end;
 }
 
+/* --- Übersichts-Tabellen-Container: schlicht, kein sticky ----------------- */
+
+#tr-table-wrap,
+#ov-table-wrap {
+    overflow-x: auto;
+}
+
+/* --- Detail-Tabelle (Accordion): eigene, abgeschlossene Scroll-Box -------- */
+
+.tr-detail-wrap {
+    overflow: auto;
+    max-height: 55vh;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+/* Kopfzeile bleibt sichtbar beim vertikalen Scrollen */
+.tr-detail-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-surface);
+    box-shadow: 0 1px 0 var(--color-border);
+}
+
+/* Erste Spalte (Haltestelle) bleibt sichtbar beim horizontalen Scrollen */
+.tr-detail-table td:first-child,
+.tr-detail-table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--color-surface);
+    box-shadow: 1px 0 0 var(--color-border);
+}
+
+/* Ecke oben links: beide sticky-Achsen überlagern sich */
+.tr-detail-table thead th:first-child {
+    z-index: 3;
+}
+
+/* --- Detail-Tabelle: kompakt ----------------------------------------------- */
+
+.tr-detail-table {
+    font-size: 0.78rem;
+}
+
+.tr-detail-table th,
+.tr-detail-table td {
+    padding: 3px 7px;
+    white-space: nowrap;
+}
+
 /* --- Responsive ------------------------------------------------------------ */
 
 @media (max-width: 600px) {
@@ -534,64 +617,18 @@ body {
    HAFAS-Log-Tab
    ============================================================================= */
 
-.hafaslog-filters .form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-end;
-}
-
-.hafaslog-filters .form-group--btn {
-    padding-top: 0;
-}
-
-.hl-section {
-    margin-top: 24px;
-}
-
-.hl-section-title {
-    font-size: 0.85rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-muted, #666);
-    margin-bottom: 8px;
-}
-
-.hl-table {
-    width: 100%;
-    border-collapse: collapse;
+.hl-good   { color: var(--color-success); font-weight: 600; }
+.hl-warn   { color: #e65100;              font-weight: 600; }
+.hl-error  { color: var(--color-error);   font-weight: 700; }
+.hl-params {
+    color: var(--color-text-muted);
+    font-family: monospace;
     font-size: 0.82rem;
-}
-
-.hl-table th {
-    text-align: left;
-    padding: 6px 8px;
-    background: var(--color-bg, #f5f5f5);
-    border-bottom: 2px solid var(--color-border, #ddd);
+    max-width: 220px;
     white-space: nowrap;
-}
-
-.hl-table td {
-    padding: 5px 8px;
-    border-bottom: 1px solid var(--color-border, #ddd);
-    vertical-align: top;
-}
-
-.hl-table tr:last-child td {
-    border-bottom: none;
-}
-
-.hl-good  { color: #2e7d32; font-weight: 600; }
-.hl-warn  { color: #e65100; font-weight: 600; }
-.hl-error { color: #c62828; font-weight: 700; }
-.hl-mono   { font-family: monospace; font-size: 0.78rem; }
-.hl-params { color: var(--color-text-muted); white-space: nowrap; }
-
-.hl-note {
-    font-size: 0.8rem;
-    color: var(--color-muted, #666);
-    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
 }
 
 /* ==========================================================================

@@ -151,18 +151,23 @@ GET /api/departures?stopId=de:15003:4000
 
 Vollständiger Laufweg eines Kurses (alle planmäßigen Halte).
 
+Wird `serviceDate` angegeben, wird die Fahrt zusätzlich per `schedule_fingerprint` in der DB
+aufgelöst: `activeCourseNumber` und `tripId` werden zurückgegeben, und `last_hafas_trip_id`
+auf dem Trip wird lazy nachgeführt (Hintergrund-Aktualisierung beim Öffnen des Detail-Views).
+
 **Parameter:**
 
 | Name | Typ | Pflicht | Beschreibung |
 |---|---|---|---|
 | `tripId` | string | ja | HAFAS tripId |
+| `serviceDate` | string | nein | Betriebsdatum `YYYY-MM-DD`; aktiviert Fingerprint-Auflösung |
 
-**Beispiel-Request:**
+**Beispiel-Request ohne serviceDate (nur Laufweg):**
 ```
-GET /api/trip?tripId=1|12345|0|80|24032026
+GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...
 ```
 
-**Beispiel-Response:**
+**Beispiel-Response ohne serviceDate:**
 ```json
 [
   {
@@ -172,21 +177,36 @@ GET /api/trip?tripId=1|12345|0|80|24032026
     "departurePlanned": "2026-03-24T14:10:00Z",
     "departureActual": "2026-03-24T14:11:00Z",
     "line": "1"
-  },
-  {
-    "sequence": 2,
-    "stopId": "de:15003:3901",
-    "stop": "Magdeburg, Salbker Chaussee",
-    "departurePlanned": "2026-03-24T14:12:00Z"
-  },
-  {
-    "sequence": 14,
-    "stopId": "de:15003:4005",
-    "stop": "Magdeburg, Lübecker Str.",
-    "departurePlanned": null
   }
 ]
 ```
+
+**Beispiel-Request mit serviceDate (Fingerprint-Auflösung):**
+```
+GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...&serviceDate=2026-04-22
+```
+
+**Beispiel-Response mit serviceDate:**
+```json
+{
+  "stops": [
+    {
+      "sequence": 1,
+      "stopId": "de:15003:3900",
+      "stop": "Magdeburg, Westerhüsen",
+      "departurePlanned": "2026-04-22T14:10:00Z",
+      "departureActual": null,
+      "line": "1"
+    }
+  ],
+  "tripId": 38,
+  "activeCourseNumber": "07",
+  "pathFingerprint": "a3f9...64-stelliger Hex-String...",
+  "scheduleFingerprint": "c12b...64-stelliger Hex-String..."
+}
+```
+
+`tripId` und `activeCourseNumber` sind `null`, wenn die Fahrt noch nicht in der DB erfasst wurde.
 
 ---
 

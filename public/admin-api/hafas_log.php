@@ -5,6 +5,7 @@
 require_once dirname(__DIR__, 2) . '/lib/auth.php';
 require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/logger.php';
+require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 
 require_admin();
 
@@ -24,7 +25,7 @@ foreach ([$dateFrom, $dateTo] as $d) {
     }
 }
 
-$allowedEndpoints = ['', 'nearby', 'departures', 'trip'];
+$allowedEndpoints = ['', 'nearby', 'stopfinder', 'departures', 'trip'];
 if (!in_array($endpoint, $allowedEndpoints, true)) {
     json_error('Ungültiger endpoint-Filter');
 }
@@ -32,15 +33,15 @@ if (!in_array($endpoint, $allowedEndpoints, true)) {
 // ── WHERE-Klausel aufbauen ───────────────────────────────────────────────────
 
 $where  = ['DATE(logged_at) >= :date_from', 'DATE(logged_at) <= :date_to'];
-$params = [':date_from' => $dateFrom, ':date_to' => $dateTo];
+$sqlParams = [':date_from' => $dateFrom, ':date_to' => $dateTo];
 
 if ($endpoint !== '') {
     $where[]          = 'endpoint = :endpoint';
-    $params[':endpoint'] = $endpoint;
+    $sqlParams[':endpoint'] = $endpoint;
 }
 if ($status !== null) {
     $where[]           = 'http_status = :status';
-    $params[':status'] = $status;
+    $sqlParams[':status'] = $status;
 }
 
 $whereClause = implode(' AND ', $where);
@@ -55,20 +56,42 @@ $rowsStmt = $pdo->prepare(
       ORDER BY logged_at DESC
       LIMIT 500"
 );
-$rowsStmt->execute($params);
+$rowsStmt->execute($sqlParams);
 $rows = $rowsStmt->fetchAll();
 
 $entries = [];
 foreach ($rows as $r) {
+    $entryParams = $r['params'] !== null ? json_decode($r['params'], true) : null;
+
+    $cacheKey = match($r['endpoint']) {
+        'trip'   => isset($entryParams['tripId'])
+                        ? hafas_cache_key('trip', $entryParams['tripId'])
+                        : null,
+        'nearby' => isset($entryParams['lat'], $entryParams['lon'], $entryParams['results'])
+                        ? hafas_cache_key('nearby', $entryParams['lat'], $entryParams['lon'], $entryParams['results'])
+                        : null,
+        'stopfinder' => isset($entryParams['name'], $entryParams['results'])
+                        ? hafas_cache_key('stopfinder', $entryParams['name'], $entryParams['results'])
+                        : null,
+        'departures' => isset($entryParams['stopId'], $entryParams['results'], $entryParams['maxMinutes'])
+                        ? hafas_cache_key('departures', $entryParams['stopId'], $entryParams['results'],
+                              $entryParams['maxMinutes'],
+                              max(0, (int) ((hafas_config())['departures_lookback_minutes'] ?? 5)))
+                        : null,
+        default  => null,
+    };
+    $cacheAvailable = $cacheKey !== null && file_exists(hafas_cache_path($cacheKey));
+
     $entries[] = [
-        'id'          => (int) $r['id'],
-        'loggedAt'    => $r['logged_at'],
-        'endpoint'    => $r['endpoint'],
-        'httpStatus'  => (int) $r['http_status'],
-        'durationMs'  => (int) $r['duration_ms'],
-        'cacheHit'    => (bool) $r['cache_hit'],
-        'retryAfter'  => $r['retry_after'] !== null ? (int) $r['retry_after'] : null,
-        'params'      => $r['params'] !== null ? json_decode($r['params'], true) : null,
+        'id'             => (int) $r['id'],
+        'loggedAt'       => mysql_to_iso($r['logged_at']),
+        'endpoint'       => $r['endpoint'],
+        'httpStatus'     => (int) $r['http_status'],
+        'durationMs'     => (int) $r['duration_ms'],
+        'cacheHit'       => (bool) $r['cache_hit'],
+        'retryAfter'     => $r['retry_after'] !== null ? (int) $r['retry_after'] : null,
+        'params'         => $entryParams,
+        'cacheAvailable' => $cacheAvailable,
     ];
 }
 
@@ -144,7 +167,7 @@ $epStmt = $pdo->prepare(
       GROUP BY endpoint
       ORDER BY total DESC"
 );
-$epStmt->execute($params);
+$epStmt->execute($sqlParams);
 $byEndpoint = [];
 foreach ($epStmt->fetchAll() as $r) {
     $byEndpoint[] = [

@@ -14,7 +14,8 @@
             "lib/auth.php",
             "lib/calendar.php",
             "lib/hafas_cache.php",
-            "lib/hafas.php"
+            "lib/hafas.php",
+            "lib/fingerprint.php"
         ]
     },
     "config": {

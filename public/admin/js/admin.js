@@ -85,6 +85,27 @@ export function showMessage(el, message, type = 'success') {
     }
 }
 
+// --- Stop-Name-Hilfsfunktionen -----------------------------------------------
+
+let _stopPrefixCache = null;
+
+export async function getStopNamePrefix() {
+    if (_stopPrefixCache !== null) return _stopPrefixCache;
+    try {
+        const cfg = await apiFetch('/api/config');
+        _stopPrefixCache = cfg.stopNamePrefix ?? '';
+    } catch {
+        _stopPrefixCache = '';
+    }
+    return _stopPrefixCache;
+}
+
+export function stripStopName(name, prefix) {
+    if (!prefix || !name) return name ?? '';
+    if (name.startsWith(prefix)) return name.slice(prefix.length).trim();
+    return name;
+}
+
 // =============================================================================
 // Tab-Routing
 // =============================================================================

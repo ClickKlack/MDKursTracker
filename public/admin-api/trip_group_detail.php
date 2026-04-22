@@ -3,7 +3,7 @@
 //
 // Gibt für eine Gruppe logischer Fahrten den gemeinsamen Laufweg sowie
 // die Abfahrtszeiten jeder Fahrt an jedem Halt zurück.
-// Grundlage: je Trip die neuste Erfassung mit gespeicherten route_stops.
+// Grundlage: route_stops je Trip (direkt via trip_id).
 //
 // Nur für authentifizierte Admins zugänglich.
 
@@ -66,7 +66,13 @@ $stmtTrips = $pdo->prepare(
      FROM ' . tbl('trips') . ' t
      WHERE t.id IN (' . $placeholders . ')
      ORDER BY
-         CAST(SUBSTRING_INDEX(t.service_nr, \'_\', -1) AS UNSIGNED)'
+         TIME(COALESCE(
+             (SELECT rs1.departure_planned
+              FROM ' . tbl('route_stops') . ' rs1
+              WHERE rs1.trip_id = t.id AND rs1.sequence = 1
+              LIMIT 1),
+             \'9999-01-01 00:00:00\'
+         )) ASC'
 );
 $stmtTrips->execute($tripIds);
 $tripRows = $stmtTrips->fetchAll(PDO::FETCH_ASSOC);
@@ -78,77 +84,37 @@ if (empty($foundIds)) {
     json_response(['stops' => [], 'trips' => []]);
 }
 
-// Pro Trip: neuste Erfassung mit route_stops ermitteln
+// --- Route-Stops direkt per trip_id laden -----------------------------------
+
 $ph2 = implode(',', array_fill(0, count($foundIds), '?'));
-$stmtRec = $pdo->prepare(
-    'SELECT r.trip_id, r.id AS recording_id
-     FROM ' . tbl('recordings') . ' r
-     WHERE r.trip_id IN (' . $ph2 . ')
-       AND EXISTS (
-           SELECT 1 FROM ' . tbl('route_stops') . ' rs WHERE rs.recording_id = r.id
-       )
-     ORDER BY r.trip_id, r.recorded_at DESC'
-);
-$stmtRec->execute($foundIds);
-
-// Neueste Erfassung je Trip (erste Zeile pro trip_id in DESC-Reihenfolge)
-$recordingByTrip = [];
-foreach ($stmtRec->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $tid = (int) $row['trip_id'];
-    if (!isset($recordingByTrip[$tid])) {
-        $recordingByTrip[$tid] = (int) $row['recording_id'];
-    }
-}
-
-// --- Route-Stops aller relevanten Erfassungen laden -------------------------
-
-$allRecordingIds = array_values($recordingByTrip);
-if (empty($allRecordingIds)) {
-    // Fahrten vorhanden, aber ohne gespeicherte route_stops
-    $tripsOut = [];
-    foreach ($tripRows as $tr) {
-        $tripsOut[] = [
-            'id'                 => (int) $tr['id'],
-            'serviceNr'          => $tr['service_nr'],
-            'activeCourseNumber' => $tr['active_course_number'],
-            'manualCourseNumber' => $tr['manual_course_number'],
-            'departures'         => (object) [],
-        ];
-    }
-    json_response(['stops' => [], 'trips' => $tripsOut]);
-}
-
-$ph3 = implode(',', array_fill(0, count($allRecordingIds), '?'));
 $stmtStops = $pdo->prepare(
     'SELECT
-         rs.recording_id,
+         rs.trip_id,
          rs.sequence,
          rs.stop_id,
          rs.departure_planned,
          st.name AS stop_name
      FROM ' . tbl('route_stops') . ' rs
      JOIN ' . tbl('stops') . ' st ON st.hafas_id = rs.stop_id
-     WHERE rs.recording_id IN (' . $ph3 . ')
-     ORDER BY rs.recording_id, rs.sequence'
+     WHERE rs.trip_id IN (' . $ph2 . ')
+     ORDER BY rs.trip_id, rs.sequence'
 );
-$stmtStops->execute($allRecordingIds);
+$stmtStops->execute($foundIds);
 
-// route_stops je recording_id indizieren
-$stopsByRecording = [];
+$stopsByTrip = [];
 foreach ($stmtStops->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $rid = (int) $row['recording_id'];
-    if (!isset($stopsByRecording[$rid])) {
-        $stopsByRecording[$rid] = [];
+    $tid = (int) $row['trip_id'];
+    if (!isset($stopsByTrip[$tid])) {
+        $stopsByTrip[$tid] = [];
     }
-    $stopsByRecording[$rid][] = $row;
+    $stopsByTrip[$tid][] = $row;
 }
 
 // --- Kanonische Stop-Liste: längste Haltestellen-Sequenz -------------------
-// Gleiche Linie → gleicher Laufweg; wir nehmen den mit den meisten Halten.
 
 $canonicalStops = [];
-foreach ($allRecordingIds as $rid) {
-    $stops = $stopsByRecording[$rid] ?? [];
+foreach ($foundIds as $tid) {
+    $stops = $stopsByTrip[$tid] ?? [];
     if (count($stops) > count($canonicalStops)) {
         $canonicalStops = $stops;
     }
@@ -168,15 +134,11 @@ foreach ($canonicalStops as $s) {
 $tripsOut = [];
 foreach ($tripRows as $tr) {
     $tid = (int) $tr['id'];
-    $rid = $recordingByTrip[$tid] ?? null;
 
     $departures = [];
-    if ($rid !== null) {
-        foreach ($stopsByRecording[$rid] ?? [] as $s) {
-            if ($s['departure_planned'] !== null) {
-                // Nur HH:MM ausgeben
-                $departures[$s['stop_id']] = (new DateTime($s['departure_planned']))->format('H:i');
-            }
+    foreach ($stopsByTrip[$tid] ?? [] as $s) {
+        if ($s['departure_planned'] !== null) {
+            $departures[$s['stop_id']] = (new DateTime($s['departure_planned'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('H:i');
         }
     }
 

@@ -8,7 +8,7 @@
  *  4. Je Fahrt: aktuelle Kursnummer anzeigen, override setzen oder löschen
  */
 
-import { apiFetch, escHtml, showMessage } from './admin.js';
+import { apiFetch, escHtml, showMessage, getStopNamePrefix, stripStopName } from './admin.js';
 
 const DAY_LABELS = {
     'MO-FR': 'Mo–Fr',
@@ -17,8 +17,11 @@ const DAY_LABELS = {
     'SF':    'SF',
 };
 
+const DAY_ORDER = { 'MO-FR': 0, 'SA': 1, 'SO': 2, 'SF': 3 };
+
 /** Alle geladenen Trips der aktuell gewählten Periode */
-let allTrips = [];
+let allTrips  = [];
+let stopPrefix = '';
 
 export async function renderOverride(container) {
     // Perioden für Selector laden
@@ -51,12 +54,7 @@ export async function renderOverride(container) {
                     <label for="ov-period">Periode</label>
                     <select id="ov-period">${periodOptions}</select>
                 </div>
-                <div class="form-group">
-                    <label for="ov-line">Linie</label>
-                    <input type="text" id="ov-line" placeholder="alle"
-                           maxlength="5" autocomplete="off" inputmode="numeric">
-                </div>
-                <div class="form-group">
+                <div class="form-group form-group--sm">
                     <label for="ov-daytype">Wochentagstyp</label>
                     <select id="ov-daytype">
                         <option value="">Alle</option>
@@ -65,6 +63,23 @@ export async function renderOverride(container) {
                         <option value="SO">So / Feiertag</option>
                         <option value="SF">Schulferien</option>
                     </select>
+                </div>
+                <div class="form-group form-group--xs">
+                    <label for="ov-line">Linie</label>
+                    <input type="text" id="ov-line" placeholder="alle"
+                           maxlength="5" autocomplete="off" inputmode="numeric">
+                </div>
+                <div class="form-group">
+                    <label for="ov-von">Von</label>
+                    <input type="text" id="ov-von" placeholder="alle"
+                           list="ov-von-list" autocomplete="off">
+                    <datalist id="ov-von-list"></datalist>
+                </div>
+                <div class="form-group">
+                    <label for="ov-nach">Nach</label>
+                    <input type="text" id="ov-nach" placeholder="alle"
+                           list="ov-nach-list" autocomplete="off">
+                    <datalist id="ov-nach-list"></datalist>
                 </div>
             </div>
             <div id="ov-msg"></div>
@@ -76,6 +91,7 @@ export async function renderOverride(container) {
             </div>
         </div>`;
 
+    stopPrefix = await getStopNamePrefix();
     await loadTrips(container, activePeriod?.id);
     attachFilters(container);
 
@@ -100,17 +116,53 @@ async function loadTrips(container, periodId) {
         return;
     }
 
+    updateDatalist(container);
     renderTable(container);
+}
+
+function updateDatalist(container) {
+    const strip = n => stripStopName(n, stopPrefix);
+    const vonNames  = [...new Set(allTrips.map(t => t.startStopName).filter(Boolean).map(strip))].sort();
+    const nachNames = [...new Set(allTrips.map(t => t.endStopName ?? t.direction).filter(Boolean).map(strip))].sort();
+    const vonList  = container.querySelector('#ov-von-list');
+    const nachList = container.querySelector('#ov-nach-list');
+    if (vonList)  vonList.innerHTML  = vonNames.map(n  => `<option value="${escHtml(n)}">`).join('');
+    if (nachList) nachList.innerHTML = nachNames.map(n => `<option value="${escHtml(n)}">`).join('');
 }
 
 function renderTable(container) {
     const lineFilter    = container.querySelector('#ov-line')?.value.trim() ?? '';
     const dayTypeFilter = container.querySelector('#ov-daytype')?.value ?? '';
+    const vonFilter     = container.querySelector('#ov-von')?.value.trim().toLowerCase() ?? '';
+    const nachFilter    = container.querySelector('#ov-nach')?.value.trim().toLowerCase() ?? '';
 
     const trips = allTrips.filter(t => {
         if (lineFilter    && t.line    !== lineFilter)    return false;
         if (dayTypeFilter && t.dayType !== dayTypeFilter) return false;
+        if (vonFilter  && !stripStopName(t.startStopName ?? '', stopPrefix).toLowerCase().includes(vonFilter))                      return false;
+        if (nachFilter && !stripStopName(t.endStopName ?? t.direction ?? '', stopPrefix).toLowerCase().includes(nachFilter)) return false;
         return true;
+    });
+
+    const toHHMM = s => { const m = (s ?? '').match(/(\d{2}:\d{2})/); return m ? m[1] : ''; };
+
+    trips.sort((a, b) => {
+        const la = parseInt(a.line, 10) || 0;
+        const lb = parseInt(b.line, 10) || 0;
+        if (la !== lb) return la - lb;
+        const da = DAY_ORDER[a.dayType] ?? 99;
+        const db = DAY_ORDER[b.dayType] ?? 99;
+        if (da !== db) return da - db;
+        const va = (a.startStopName ?? '').localeCompare(b.startStopName ?? '', 'de');
+        if (va !== 0) return va;
+        const sta = toHHMM(a.startDeparture);
+        const stb = toHHMM(b.startDeparture);
+        if (sta !== stb) return sta < stb ? -1 : 1;
+        const na = (a.endStopName ?? '').localeCompare(b.endStopName ?? '', 'de');
+        if (na !== 0) return na;
+        const eta = toHHMM(a.endDeparture);
+        const etb = toHHMM(b.endDeparture);
+        return eta < etb ? -1 : eta > etb ? 1 : 0;
     });
 
     const wrap = container.querySelector('#ov-table-wrap');
@@ -128,9 +180,9 @@ function renderTable(container) {
             <thead>
                 <tr>
                     <th>Linie</th>
-                    <th>ab</th>
-                    <th>nach</th>
                     <th>Typ</th>
+                    <th>Von</th>
+                    <th>Nach</th>
                     <th>Erfassungen</th>
                     <th>Aktiv</th>
                     <th>Übersteuern</th>
@@ -173,17 +225,17 @@ function renderTripRow(t) {
         <tr id="ov-row-${t.id}">
             <td>
                 <strong>${escHtml(t.line)}</strong>
-                <br><span class="trip-service-nr">${escHtml(t.serviceNr)}</span>
+                <br><span class="trip-service-nr" title="Letzte bekannte Service-Nr.">${escHtml(t.serviceNr)}</span>
             </td>
+            <td>${escHtml(DAY_LABELS[t.dayType] ?? t.dayType)}</td>
             <td class="trip-origin">
-                ${t.startStopName ? escHtml(t.startStopName) : '–'}
+                ${t.startStopName ? escHtml(stripStopName(t.startStopName, stopPrefix)) : '–'}
                 ${t.startDeparture ? `<br><span class="trip-time">${escHtml(t.startDeparture)}</span>` : ''}
             </td>
             <td class="trip-destination">
-                ${escHtml(t.endStopName ?? t.direction)}
+                ${escHtml(stripStopName(t.endStopName ?? t.direction, stopPrefix))}
                 ${t.endDeparture ? `<br><span class="trip-time">${escHtml(t.endDeparture)}</span>` : ''}
             </td>
-            <td>${escHtml(DAY_LABELS[t.dayType] ?? t.dayType)}</td>
             <td style="text-align:center">${recBtnHtml}</td>
             <td>${courseBadge}</td>
             <td>
@@ -223,8 +275,10 @@ function attachFilters(container) {
         await loadTrips(container, periodId);
     });
 
-    container.querySelector('#ov-line').addEventListener('input',    reload);
     container.querySelector('#ov-daytype').addEventListener('change', reload);
+    container.querySelector('#ov-line').addEventListener('input',    reload);
+    container.querySelector('#ov-von').addEventListener('input',     reload);
+    container.querySelector('#ov-nach').addEventListener('input',    reload);
 }
 
 function attachRowActions(container, wrap) {
@@ -277,9 +331,12 @@ async function toggleRecordings(tripId, btn) {
         openBtn?.setAttribute('aria-expanded', 'false');
     });
 
+    const ovWrap = document.getElementById('ov-table-wrap');
+    if (ovWrap) innerDiv.style.width = ovWrap.clientWidth + 'px';
+    innerDiv.innerHTML = `<div class="spinner" style="margin:8px auto"></div>`;
+
     recRow.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
-    innerDiv.innerHTML = `<div class="spinner" style="margin:8px auto"></div>`;
 
     let recs;
     try {
@@ -295,7 +352,7 @@ async function toggleRecordings(tripId, btn) {
     }
 
     const rows = recs.map(r => {
-        const dt       = r.recordedAt ? new Date(r.recordedAt).toLocaleString('de-DE') : '–';
+        const dt       = r.recordedAt ? new Date(r.recordedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) : '–';
         const userLine = r.userName
             ? `${escHtml(r.userName)} <span class="ov-user-id">${escHtml(r.userDisplayId ?? '')}</span>`
             : (r.userDisplayId ? `<span class="ov-user-id">${escHtml(r.userDisplayId)}</span>` : '–');

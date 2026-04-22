@@ -36,6 +36,7 @@ class HafasLogTest extends TestCase
         // Endpoint-Mapping via Reflection testen (ohne DB-Zugriff)
         $endpoint = match ($meth) {
             'LocGeoPos'      => 'nearby',
+            'LocMatch'       => 'stopfinder',
             'StationBoard'   => 'departures',
             'JourneyDetails' => 'trip',
             default          => 'nearby',
@@ -47,6 +48,7 @@ class HafasLogTest extends TestCase
     {
         return [
             ['LocGeoPos',      'nearby'],
+            ['LocMatch',       'stopfinder'],
             ['StationBoard',   'departures'],
             ['JourneyDetails', 'trip'],
             ['UnknownMethod',  'nearby'],
