@@ -17,6 +17,17 @@ let favorites   = [];
 let searchMode = localStorage.getItem('nearby_search_mode') ?? 'gps';
 if (!['favorites', 'gps', 'name'].includes(searchMode)) searchMode = 'gps';
 
+// Auto-Suche nach dem Tippen (Name-Reiter)
+const AUTO_SEARCH_DELAY_MS   = 550;
+const AUTO_SEARCH_MIN_CHARS  = 3;
+let   debounceTimer          = null;
+/** Monoton steigender Token; ältere Responses werden verworfen */
+let   searchToken            = 0;
+
+function cancelAutoSearch() {
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+}
+
 export async function render(container, params, context) {
     container.innerHTML = buildShell();
     attachTabListeners(container, params, context);
@@ -33,6 +44,7 @@ export async function render(container, params, context) {
         const inputEl   = container.querySelector('#stop-name-input');
         if (inputEl && lastQuery) {
             inputEl.value = lastQuery;
+            inputEl.dispatchEvent(new Event('input'));
             await runNameSearch(container);
         } else {
             inputEl?.focus();
@@ -41,6 +53,8 @@ export async function render(container, params, context) {
 }
 
 export function destroy() {
+    cancelAutoSearch();
+    searchToken++;  // laufenden Name-Suche-Response invalidieren
     favoriteIds = new Set();
     favorites   = [];
 }
@@ -77,6 +91,11 @@ function buildShell() {
                        autocomplete="off"
                        inputmode="search"
                        aria-label="Haltestellenname eingeben">
+                <button type="button"
+                        class="btn-clear-search"
+                        id="btn-clear-search"
+                        aria-label="Suche leeren"
+                        hidden>×</button>
                 <button class="btn btn-primary btn-search" id="btn-search-name">Suchen</button>
             </div>
         </div>
@@ -110,8 +129,37 @@ function attachTabListeners(container, params, context) {
         await runNameSearch(container);
     });
 
-    container.querySelector('#stop-name-input')?.addEventListener('keydown', async e => {
+    const inputEl  = container.querySelector('#stop-name-input');
+    const clearBtn = container.querySelector('#btn-clear-search');
+
+    inputEl?.addEventListener('keydown', async e => {
         if (e.key === 'Enter') { e.preventDefault(); await runNameSearch(container); }
+    });
+
+    // Bei jedem Tastendruck: Clear-Button toggeln + Auto-Suche neu einplanen
+    inputEl?.addEventListener('input', () => {
+        if (clearBtn) clearBtn.hidden = inputEl.value === '';
+
+        cancelAutoSearch();
+        const query = inputEl.value.trim();
+        if (query.length >= AUTO_SEARCH_MIN_CHARS) {
+            debounceTimer = setTimeout(() => {
+                debounceTimer = null;
+                runNameSearch(container);
+            }, AUTO_SEARCH_DELAY_MS);
+        }
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        if (!inputEl) return;
+        cancelAutoSearch();
+        searchToken++;  // laufende Anfrage invalidieren
+        inputEl.value = '';
+        localStorage.removeItem('nearby_name_query');
+        const contentEl = container.querySelector('#nearby-content');
+        if (contentEl) contentEl.innerHTML = '';
+        clearBtn.hidden = true;
+        inputEl.focus();
     });
 }
 
@@ -240,12 +288,15 @@ async function runGpsSearch(container, params, context) {
 // --- Name-Suche -------------------------------------------------------------
 
 async function runNameSearch(container) {
+    cancelAutoSearch();  // ggf. noch laufenden Debounce-Timer stoppen
+
     const input     = container.querySelector('#stop-name-input');
     const query     = input?.value?.trim() ?? '';
     const contentEl = container.querySelector('#nearby-content');
 
     if (!query) { input?.focus(); return; }
 
+    const myToken = ++searchToken;
     localStorage.setItem('nearby_name_query', query);
     showLoading(contentEl, 'Haltestellen werden gesucht…');
 
@@ -253,10 +304,13 @@ async function runNameSearch(container) {
     try {
         stops = await getNearbyByName(query, 10);
     } catch (err) {
+        if (myToken !== searchToken) return;  // veralteter Response
         renderError(contentEl, `Suche fehlgeschlagen: ${err.message}`,
             () => runNameSearch(container));
         return;
     }
+
+    if (myToken !== searchToken) return;  // zwischenzeitlich neue Anfrage gestartet
 
     if (!stops?.length) {
         contentEl.innerHTML = `

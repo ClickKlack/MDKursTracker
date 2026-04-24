@@ -1029,6 +1029,43 @@ body {
     white-space: nowrap;
 }
 
+/* Native Clear-X des type="search" unterdrücken – wir stellen ein eigenes */
+.name-search-row .form-input::-webkit-search-cancel-button,
+.name-search-row .form-input::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.btn-clear-search {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    margin-right: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted, #888);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-clear-search:hover,
+.btn-clear-search:focus-visible {
+    background: color-mix(in srgb, var(--color-text, #000) 10%, transparent);
+    color: var(--color-text, #333);
+    outline: none;
+}
+
+.btn-clear-search[hidden] {
+    display: none;
+}
+
 /* --- Favoriten ------------------------------------------------------------ */
 
 /* --- Favoriten-Reiter -------------------------------------------------------- */
