@@ -5,13 +5,13 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/trips
+  url: {{baseUrl}}/api/trips?period_id=1
   body: none
   auth: none
 }
 
 params:query {
-  ~period_id: 1
+  period_id: 1
 }
 
 assert {
@@ -34,7 +34,7 @@ script:post-response {
 docs {
   period_id ist optional (Standard: aktive Periode).
   Aktiviere den Parameter durch Entfernen der Tilde (~).
-
+  
   Nach einer Erfassung (07 - Recordings POST) sollte hier
   die Fahrt mit activeCourseNumber erscheinen.
 }

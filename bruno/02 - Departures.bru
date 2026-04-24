@@ -5,14 +5,15 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/departures
+  url: {{baseUrl}}/api/departures?results=10&stopId=7332
   body: none
   auth: none
 }
 
 params:query {
-  stopId: {{stopId}}
   results: 10
+  stopId: 7332
+  ~stopId: {{stopId}}
 }
 
 assert {
@@ -36,12 +37,12 @@ script:post-response {
     bru.setVar("direction",          dep.direction);
     bru.setVar("departurePlanned",   dep.departurePlanned ?? "");
     bru.setVar("departureActual",    dep.departureActual ?? "");
-
+  
     // Betriebsdatum aus departurePlanned ableiten (YYYY-MM-DD)
     if (dep.departurePlanned) {
       bru.setVar("serviceDate", dep.departurePlanned.substring(0, 10));
     }
-
+  
     console.log("Abfahrt gesetzt:", dep.line, "→", dep.direction, "| TripId:", dep.hafasTripId);
     console.log("activeCourseNumber:", dep.activeCourseNumber);
   }
