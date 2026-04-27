@@ -37,6 +37,36 @@ class HafasHelperTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // hafas_jid_time_pad – Zeitangaben aus 1T#/LT# auf HHMMSS normalisieren
+    // -----------------------------------------------------------------------
+
+    public static function jidTimePadProvider(): array
+    {
+        return [
+            // 4-stellig (HHMM) – Sekunden rechts anhängen
+            ['2345',   '234500'],   // 23:45
+            ['0015',   '001500'],   // 00:15
+            // 2-/3-stellig: HAFAS lässt führende Nullen weg → links auf HHMM, dann 00 anhängen
+            ['15',     '001500'],   // 0:15
+            ['137',    '013700'],   // 1:37
+            // 5-stellig (HMMSS, Mitternachtsüberschreitung) – links auf HHMMSS padden
+            ['10037',  '010037'],   // 1:00:37 – Originalfall des Bugs
+            ['12345',  '012345'],   // 1:23:45
+            // 6-stellig (HHMMSS) – unverändert
+            ['234500', '234500'],
+            ['010037', '010037'],
+            // Leere Eingabe → leer
+            ['',       ''],
+        ];
+    }
+
+    #[DataProvider('jidTimePadProvider')]
+    public function test_hafas_jid_time_pad(string $raw, string $expected): void
+    {
+        $this->assertSame($expected, hafas_jid_time_pad($raw));
+    }
+
+    // -----------------------------------------------------------------------
     // hafas_line_name – Präfixbereinigung
     // -----------------------------------------------------------------------
 

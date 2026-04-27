@@ -19,6 +19,9 @@ local_scripts/
 # HAFAS-Cache (Dateisystem-Cache, kein Repo-Inhalt)
 cache/hafas/
 
+# tmp-Cache: nur Laufzeit, nichts davon versionieren
+cache/tmp/
+
 # PHPUnit-Cache
 .phpunit.result.cache
 

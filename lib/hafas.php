@@ -256,9 +256,9 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         // Start- und Endzeit früh extrahieren – werden für Deduplizierungs-Vergleich benötigt
         preg_match('/#1S#([^#]+)#1T#(\d{4,6})#/', $jny['jid'], $startM);
         $startLocName  = isset($startM[1]) ? ($locByExtId[$startM[1]] ?? null) : null;
-        $startTimeRaw  = isset($startM[2]) ? str_pad($startM[2], 6, '0') : '';
+        $startTimeRaw  = isset($startM[2]) ? hafas_jid_time_pad($startM[2]) : '';
         preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
-        $endTimeRaw = isset($endM[1]) ? str_pad($endM[1], 6, '0') : '';
+        $endTimeRaw = isset($endM[1]) ? hafas_jid_time_pad($endM[1]) : '';
 
         // Gesamtdauer als Präferenzmetrik: Langversion hat frühere Startzeit oder spätere
         // Endzeit – oder beides. LT# − 1T# (als Integer) liefert in beiden Richtungen
@@ -574,6 +574,27 @@ function hafas_log_write(
         // Logging-Fehler dürfen nie den normalen Betrieb stören
         get_logger()->warning('hafas_log_write fehlgeschlagen', ['exception' => $e->getMessage()]);
     }
+}
+
+/**
+ * Normalisiert eine aus der HAFAS-jid extrahierte Zeitangabe (1T#, LT#) auf
+ * 6-stelliges HHMMSS. HAFAS verwendet im jid je nach Trip wechselnde
+ * Längen (führende Nullen weggelassen):
+ *   2–4 Ziffern → HHMM (z. B. "15" = 0:15, "2345" = 23:45) → SS rechts anhängen
+ *   5–6 Ziffern → HHMMSS (z. B. "10037" = 1:00:37) → links auf 6 padden
+ *
+ * Ohne diese Unterscheidung würde z. B. "10037" via str_pad(…, 6, '0') zu
+ * "100370" (= 10:03:70) statt "010037" (= 1:00:37).
+ */
+function hafas_jid_time_pad(string $raw): string
+{
+    if ($raw === '') {
+        return '';
+    }
+    if (strlen($raw) <= 4) {
+        return str_pad($raw, 4, '0', STR_PAD_LEFT) . '00';
+    }
+    return str_pad($raw, 6, '0', STR_PAD_LEFT);
 }
 
 /**
