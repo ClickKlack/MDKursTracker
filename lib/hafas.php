@@ -260,16 +260,24 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         preg_match('/#LT#(\d{4,6})#/', $jny['jid'], $endM);
         $endTimeRaw = isset($endM[1]) ? hafas_jid_time_pad($endM[1]) : '';
 
+        // ISO-Zeitpunkte einmalig berechnen – werden für Dedup, Duration und Output benutzt.
+        $plannedIso     = hafas_iso($plannedDate, $plannedTime);
+        $startIso       = ($startTimeRaw !== '' && $jnyDate !== '') ? hafas_iso($jnyDate, $startTimeRaw) : null;
+        $endIso         = ($endTimeRaw   !== '' && $jnyDate !== '') ? hafas_iso($jnyDate, $endTimeRaw)   : null;
+
         // Gesamtdauer als Präferenzmetrik: Langversion hat frühere Startzeit oder spätere
-        // Endzeit – oder beides. LT# − 1T# (als Integer) liefert in beiden Richtungen
-        // den korrekten Gewinner: gleiche Endzeit → frühere Startzeit gewinnt;
-        // gleiche Startzeit → spätere Endzeit gewinnt.
-        $duration = ($endTimeRaw !== '' ? (int) $endTimeRaw : 0)
-                  - ($startTimeRaw !== '' ? (int) $startTimeRaw : 0);
+        // Endzeit – oder beides. ISO-Differenz (Sekunden) ist Tageswechsel-sicher,
+        // die alte Integer-Subtraktion auf rohen jid-Strings hätte bei mitternachts­
+        // überschreitenden Fahrten ein negatives Ergebnis geliefert.
+        $duration = ($startIso !== null && $endIso !== null)
+            ? (strtotime($endIso) - strtotime($startIso))
+            : 0;
 
         // Typ-B-Deduplizierung: bei gleicher Linie, Richtung, Soll-Zeit und Halt
-        // die Fahrt mit der längsten Gesamtdauer bevorzugen.
-        $dedupeKey = $lineName . '|' . $dirTxt . '|' . $plannedTime . '|' . ($stbStop['locX'] ?? '');
+        // die Fahrt mit der längsten Gesamtdauer bevorzugen. Schlüssel auf ISO-Zeit
+        // (statt rohem dTimeS), damit '001800' und '01001800' (gleiche Wallclock,
+        // verschiedenes HAFAS-Encoding) als Dublette erkannt werden.
+        $dedupeKey = $lineName . '|' . $dirTxt . '|' . ($plannedIso ?? '') . '|' . ($stbStop['locX'] ?? '');
         if (isset($best[$dedupeKey]) && $duration <= $best[$dedupeKey]['duration']) {
             continue;
         }
@@ -291,18 +299,14 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
                 'originalLine'     => $originalLine,
                 'direction'        => $dirTxt,
                 'cancelled'        => $cancelled,
-                'departurePlanned' => hafas_iso($plannedDate, $plannedTime),
+                'departurePlanned' => $plannedIso,
                 'departureActual'  => ($realtimeTime !== '')
                     ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)
                     : null,
                 'journeyStart'     => $startLocName,
-                'journeyStartTime' => ($startTimeRaw !== '' && $jnyDate !== '')
-                    ? hafas_iso($jnyDate, $startTimeRaw)
-                    : null,
+                'journeyStartTime' => $startIso,
                 'journeyEnd'       => $endLocName,
-                'journeyEndTime'   => ($endTimeRaw !== '' && $jnyDate !== '')
-                    ? hafas_iso($jnyDate, $endTimeRaw)
-                    : null,
+                'journeyEndTime'   => $endIso,
             ],
         ];
     }
@@ -578,13 +582,18 @@ function hafas_log_write(
 
 /**
  * Normalisiert eine aus der HAFAS-jid extrahierte Zeitangabe (1T#, LT#) auf
- * 6-stelliges HHMMSS. HAFAS verwendet im jid je nach Trip wechselnde
- * Längen (führende Nullen weggelassen):
- *   2–4 Ziffern → HHMM (z. B. "15" = 0:15, "2345" = 23:45) → SS rechts anhängen
- *   5–6 Ziffern → HHMMSS (z. B. "10037" = 1:00:37) → links auf 6 padden
+ * ein von hafas_iso() konsumierbares Format. HAFAS verwendet im jid keine
+ * Sekunden, lässt führende Nullen weg und kodiert Halte am Folgetag mit einem
+ * vorangestellten Tages-Counter:
+ *   1–4 Stellen → "HHMM" (z. B. "15" = 0:15, "137" = 1:37, "2345" = 23:45)
+ *                 → links auf 4 padden, "00" als Sekunden anhängen → 6 Stellen
+ *   ≥5 Stellen  → "[Tagesoffset][HHMM]" (z. B. "10037" = +1 Tag, 0:37;
+ *                 "12345" = +1 Tag, 23:45) → Präfix erhalten, HHMM links
+ *                 padden, "00" anhängen → ≥7 Stellen, hafas_iso erkennt das
+ *                 als NNHHMMSS-Form.
  *
- * Ohne diese Unterscheidung würde z. B. "10037" via str_pad(…, 6, '0') zu
- * "100370" (= 10:03:70) statt "010037" (= 1:00:37).
+ * Belegt durch capture-hafas.php: Trip mit jid LT#10037 endet tatsächlich um
+ * +1 Tag 00:37 lokal, nicht um 1:00:37 — die alte HMMSS-Annahme war falsch.
  */
 function hafas_jid_time_pad(string $raw): string
 {
@@ -594,20 +603,36 @@ function hafas_jid_time_pad(string $raw): string
     if (strlen($raw) <= 4) {
         return str_pad($raw, 4, '0', STR_PAD_LEFT) . '00';
     }
-    return str_pad($raw, 6, '0', STR_PAD_LEFT);
+    $prefix = substr($raw, 0, -4);
+    $hhmm   = substr($raw, -4);
+    return $prefix . $hhmm . '00';
 }
 
 /**
- * Konvertiert HAFAS-Datum (YYYYMMDD) + Zeit (HHMMSS, ggf. > 235959) in ISO-8601-UTC.
+ * Konvertiert HAFAS-Datum (YYYYMMDD) + Zeit in ISO-8601-UTC.
+ *
+ * HAFAS verwendet zwei Zeit-Formate:
+ *   - 6-stellig HHMMSS (Standardfall, kein Tageswechsel)
+ *   - >6-stellig NNHHMMSS, mit NN = Tagesoffset für Halte nach Mitternacht
+ *     (z.B. '01000300' = +1 Tag, 00:03:00). dDateS bleibt dabei meist leer.
+ * Zusätzlich kann HHMMSS auch Stunden ≥ 24 enthalten (alte Form für
+ *   Mitternachts-Übergang); beide Formen werden zu $extraDays addiert.
  */
 function hafas_iso(string $date, string $time): ?string
 {
     if ($date === '' || $time === '') return null;
 
+    // Tagesoffset-Präfix bei mitternachts­überschreitenden Halten extrahieren
+    $extraDays = 0;
+    if (strlen($time) > 6) {
+        $extraDays = (int) substr($time, 0, -6);
+        $time      = substr($time, -6);
+    }
+
     $hours      = (int) substr($time, 0, 2);
     $minutes    = (int) substr($time, 2, 2);
     $seconds    = (int) substr($time, 4, 2);
-    $extraDays  = intdiv($hours, 24);
+    $extraDays += intdiv($hours, 24);
     $hours      = $hours % 24;
 
     $tz = new DateTimeZone('Europe/Berlin');

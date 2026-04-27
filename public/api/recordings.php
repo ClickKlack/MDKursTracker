@@ -221,10 +221,6 @@ function handle_post_recording(): never
     $pdo      = get_db();
     $periodId = get_active_period_id($pdo);
 
-    // Wochentagstyp aus Betriebsdatum berechnen
-    $serviceDate = DateTimeImmutable::createFromFormat('Y-m-d', $body['serviceDate']);
-    $dayType = getDayType($serviceDate, $pdo);
-
     // Vollständigen Laufweg über HAFAS laden (vor Trip-Anlage, da Fingerprint daraus berechnet wird)
     try {
         $tripStops = hafas_trip($body['hafasTripId']);
@@ -235,6 +231,25 @@ function handle_post_recording(): never
         ]);
         json_error('HAFAS-Tripabfrage fehlgeschlagen: ' . $e->getMessage(), 500);
     }
+
+    // Betriebsdatum autoritativ aus dem Trip-Start ableiten – das Frontend liefert
+    // serviceDate auf Basis des Erfasser-Halts, was bei Mitternachts-Übergängen
+    // den falschen Tag ergibt (Sonntag-Nachtfahrt mit Erfassung 00:15 wäre sonst
+    // Montag/MO-FR statt Sonntag/SO). Frontend-Wert bleibt als Plausibilitäts-Hinweis.
+    $derivedDate = derive_service_date($tripStops);
+    if ($derivedDate !== null && $derivedDate !== $body['serviceDate']) {
+        get_logger()->info('recordings POST: serviceDate aus Trip-Start korrigiert', [
+            'frontend_value' => $body['serviceDate'],
+            'derived_value'  => $derivedDate,
+            'hafasTripId'    => $body['hafasTripId'],
+            'stopId'         => $body['stopId'],
+        ]);
+        $body['serviceDate'] = $derivedDate;
+    }
+
+    // Wochentagstyp aus dem (ggf. korrigierten) Betriebsdatum berechnen
+    $serviceDate = DateTimeImmutable::createFromFormat('Y-m-d', $body['serviceDate']);
+    $dayType = getDayType($serviceDate, $pdo);
 
     // Fingerprints berechnen
     $fp = compute_fingerprints($tripStops);

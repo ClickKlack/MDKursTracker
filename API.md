@@ -259,6 +259,15 @@ vollständigen Laufweg.
 }
 ```
 
+**`serviceDate`-Auflösung:** Der vom Client gelieferte `serviceDate` wird
+serverseitig autoritativ aus dem Trip-Start abgeleitet
+(`derive_service_date()`), damit mitternachts­überschreitende Fahrten
+zuverlässig dem richtigen Betriebstag zugeordnet werden – eine Sonntag-
+Nachtfahrt 23:45 → Mo 01:37 zählt vollständig zum Sonntag (`SO`), auch
+wenn der Erfasser an einem Halt nach Mitternacht aussteigt. Die
+Frontend-Eingabe gilt nur als Plausibilitäts­hinweis und wird, falls sie
+abweicht, im Log vermerkt und durch den abgeleiteten Wert ersetzt.
+
 **Erfolg-Response (201):**
 ```json
 {

@@ -147,4 +147,59 @@ class FingerprintTest extends TestCase
     {
         $this->assertSame($expected, extract_utc_hhmm($input));
     }
+
+    // -----------------------------------------------------------------------
+    // derive_service_date – Betriebsdatum aus Trip-Start
+    // -----------------------------------------------------------------------
+
+    public function test_derive_service_date_uses_first_stop_local_date(): void
+    {
+        $stops = [
+            // 12:00 UTC = 14:00 Berlin (Sommerzeit) – derselbe Kalendertag
+            ['stopId' => 'a', 'departurePlanned' => '2026-04-22T12:00:00Z'],
+            ['stopId' => 'b', 'departurePlanned' => '2026-04-22T12:05:00Z'],
+        ];
+        $this->assertSame('2026-04-22', derive_service_date($stops));
+    }
+
+    public function test_derive_service_date_keeps_start_day_for_overnight_trip(): void
+    {
+        // Sonntag-Nachtfahrt 23:45 lokal → Halte nach Mitternacht liegen kalendarisch
+        // im Montag, der Betriebstag bleibt aber der Sonntag (Trip-Start).
+        $stops = [
+            // 21:45 UTC = So 23:45 Berlin
+            ['stopId' => 'start', 'departurePlanned' => '2026-04-26T21:45:00Z'],
+            // 22:15 UTC = Mo 00:15 Berlin
+            ['stopId' => 'late',  'departurePlanned' => '2026-04-26T22:15:00Z'],
+        ];
+        $this->assertSame('2026-04-26', derive_service_date($stops));
+    }
+
+    public function test_derive_service_date_skips_stops_without_time(): void
+    {
+        $stops = [
+            ['stopId' => 'a', 'departurePlanned' => null],
+            ['stopId' => 'b', 'departurePlanned' => ''],
+            ['stopId' => 'c', 'departurePlanned' => '2026-04-22T22:00:00Z'],
+        ];
+        $this->assertSame('2026-04-23', derive_service_date($stops));
+    }
+
+    public function test_derive_service_date_returns_null_when_no_times(): void
+    {
+        $stops = [
+            ['stopId' => 'a', 'departurePlanned' => null],
+            ['stopId' => 'b'],
+        ];
+        $this->assertNull(derive_service_date($stops));
+    }
+
+    public function test_derive_service_date_handles_winter_time(): void
+    {
+        // 23:30 UTC = 00:30 Berlin nächster Tag (Winterzeit, UTC+1)
+        $stops = [
+            ['stopId' => 'a', 'departurePlanned' => '2026-01-15T23:30:00Z'],
+        ];
+        $this->assertSame('2026-01-16', derive_service_date($stops));
+    }
 }

@@ -60,6 +60,12 @@ docs {
 
   courseNumber manuell anpassen (01–99, zweistellig).
 
+  serviceDate wird serverseitig aus der Trip-Startzeit abgeleitet, der
+  hier gesendete Wert dient nur als Hinweis. Bei mitternachts­überschreitenden
+  Nachtfahrten kann der zurückgegebene dayType deshalb vom erwarteten
+  Wert abweichen – maßgeblich ist der Betriebstag der Fahrt, nicht der
+  Kalendertag des Erfasser-Halts.
+
   Fehlertest – ungültige Kursnummer:
     "courseNumber": "00"  → 400 Bad Request
     "courseNumber": "100" → 400 Bad Request

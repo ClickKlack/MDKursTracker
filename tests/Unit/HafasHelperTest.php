@@ -22,8 +22,16 @@ class HafasHelperTest extends TestCase
             ['20260324', '143200', '2026-03-24T13:32:00Z'],
             // Sommerzeit (UTC+2): 14:32 Berlin = 12:32 UTC
             ['20260701', '143200', '2026-07-01T12:32:00Z'],
-            // Zeit nach Mitternacht: 25:00 = +1 Tag, 01:00 Uhr
+            // Stunden-Overflow (alte Form): 25:00 = +1 Tag, 01:00 Uhr
             ['20260324', '250000', '2026-03-25T00:00:00Z'],
+            // 8-stellige Form mit Tagesoffset-Präfix: '01000300' = +1 Tag, 00:03:00
+            // (echte Werte aus capture-hafas.php: durchgebundene Nachtfahrt N2/N1)
+            ['20260427', '01000000', '2026-04-27T22:00:00Z'],
+            ['20260427', '01000300', '2026-04-27T22:03:00Z'],
+            ['20260427', '01001500', '2026-04-27T22:15:00Z'],
+            ['20260427', '01003700', '2026-04-27T22:37:00Z'],
+            // 8-stellig + Stunden-Overflow kombiniert (defensiv, falls HAFAS beides mischt)
+            ['20260427', '01250000', '2026-04-28T23:00:00Z'],
             // Leere Eingaben → null
             ['', '', null],
             ['20260324', '', null],
@@ -43,20 +51,18 @@ class HafasHelperTest extends TestCase
     public static function jidTimePadProvider(): array
     {
         return [
-            // 4-stellig (HHMM) – Sekunden rechts anhängen
-            ['2345',   '234500'],   // 23:45
-            ['0015',   '001500'],   // 00:15
-            // 2-/3-stellig: HAFAS lässt führende Nullen weg → links auf HHMM, dann 00 anhängen
-            ['15',     '001500'],   // 0:15
-            ['137',    '013700'],   // 1:37
-            // 5-stellig (HMMSS, Mitternachtsüberschreitung) – links auf HHMMSS padden
-            ['10037',  '010037'],   // 1:00:37 – Originalfall des Bugs
-            ['12345',  '012345'],   // 1:23:45
-            // 6-stellig (HHMMSS) – unverändert
-            ['234500', '234500'],
-            ['010037', '010037'],
+            // 1–4 Stellen: HHMM, Sekunden rechts anhängen
+            ['2345', '234500'],   // 23:45
+            ['0015', '001500'],   // 00:15 (4-stellig mit führender Null)
+            ['15',   '001500'],   // 0:15 (HAFAS lässt führende Nullen weg)
+            ['137',  '013700'],   // 1:37 (3-stellig)
+            ['37',   '003700'],   // 0:37
+            // ≥5 Stellen: erste Stelle(n) = Tagesoffset, letzte 4 = HHMM
+            ['10037', '1003700'], // +1 Tag, 00:37 – aus capture-hafas.php (LT#10037)
+            ['10012', '1001200'], // +1 Tag, 00:12
+            ['12345', '1234500'], // +1 Tag, 23:45 (langer Trip Sa→So)
             // Leere Eingabe → leer
-            ['',       ''],
+            ['', ''],
         ];
     }
 

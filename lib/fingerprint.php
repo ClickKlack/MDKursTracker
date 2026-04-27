@@ -71,3 +71,35 @@ function extract_utc_hhmm(?string $iso): ?string
     }
     return null;
 }
+
+/**
+ * Bestimmt das Betriebsdatum (YYYY-MM-DD, Europe/Berlin) eines Trips aus
+ * dessen Laufweg.
+ *
+ * Konvention: Der Betriebstag richtet sich nach dem Start der Fahrt – eine
+ * Sonntag-Nachtfahrt 23:45 → Mo 01:37 gehört vollständig zum Sonntag-
+ * Betriebstag, auch wenn Halte nach Mitternacht kalendarisch im Montag liegen.
+ *
+ * Genommen wird der erste Halt mit Plan-Zeit (departurePlanned). Das ist
+ * robust gegen fehlende Zeiten am ersten Halt (selten, aber möglich).
+ *
+ * @param array $stops Ausgabe von hafas_trip(): [{stopId, departurePlanned, ...}, ...]
+ * @return string|null YYYY-MM-DD oder null wenn kein Halt eine Plan-Zeit hat
+ */
+function derive_service_date(array $stops): ?string
+{
+    foreach ($stops as $s) {
+        $iso = $s['departurePlanned'] ?? null;
+        if ($iso === null || $iso === '') {
+            continue;
+        }
+        try {
+            return (new DateTimeImmutable($iso))
+                ->setTimezone(new DateTimeZone('Europe/Berlin'))
+                ->format('Y-m-d');
+        } catch (Exception) {
+            continue;
+        }
+    }
+    return null;
+}
