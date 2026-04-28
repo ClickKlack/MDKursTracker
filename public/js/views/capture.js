@@ -12,7 +12,7 @@
 import { postRecording, getTrip, postTouchTrip } from '../api.js';
 import { formatTime, calcDelay }   from '../utils/format.js';
 import { lineBadgeHtml }           from '../utils/lines.js';
-import { escapeHtml, stripStopPrefix } from '../app.js';
+import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
 
 /** Anzahl Schnellbuttons (01–40, 5 Zeilen à 8) */
 const QUICK_COUNT = 40;
@@ -104,8 +104,6 @@ function buildFormHtml(data) {
             Erfassen
         </button>
 
-        <div id="capture-feedback" aria-live="polite"></div>
-
         <div class="capture-divider"></div>
 
         <div id="capture-route">
@@ -131,9 +129,8 @@ function buildQuickButtons() {
 // --- Event-Handler -----------------------------------------------------------
 
 function attachListeners(container, data) {
-    const input    = container.querySelector('#course-input');
-    const btnSub   = container.querySelector('#btn-submit');
-    const feedback = container.querySelector('#capture-feedback');
+    const input  = container.querySelector('#course-input');
+    const btnSub = container.querySelector('#btn-submit');
 
     /** Aktuell gewählte Kursnummer (zweistellig, z.B. "07") oder null */
     let selectedCourse = null;
@@ -186,7 +183,7 @@ function attachListeners(container, data) {
     // Absenden per Button-Klick
     btnSub.addEventListener('click', async () => {
         if (!selectedCourse) return;
-        await submitRecording(data, selectedCourse, btnSub, feedback);
+        await submitRecording(data, selectedCourse, btnSub);
     });
 
     // Absenden per Enter im Input-Feld
@@ -353,12 +350,8 @@ function highlightButton(container, nr) {
 
 // --- POST /api/recordings ----------------------------------------------------
 
-async function submitRecording(data, courseNumber, btnSub, feedback) {
+async function submitRecording(data, courseNumber, btnSub) {
     btnSub.disabled = true;
-    feedback.innerHTML = `
-        <div class="loading-indicator" style="padding:16px 0">
-            <div class="spinner" aria-hidden="true"></div>
-        </div>`;
 
     try {
         await postRecording({
@@ -373,30 +366,21 @@ async function submitRecording(data, courseNumber, btnSub, feedback) {
             courseNumber,
         });
 
-        // Erfolg: sessionStorage leeren, Bestätigungsmeldung zeigen
+        // Erfolg: sessionStorage leeren, Snackbar zeigen, zurück zur Abfahrtstafel.
+        // Die Snackbar hängt an document.body und überlebt die Navigation – damit
+        // sieht der Nutzer die Bestätigung auch noch in der Abfahrtstafel.
         sessionStorage.removeItem('pendingCapture');
+        showActionSnackbar(`Kurs ${courseNumber} gespeichert`);
 
-        feedback.innerHTML = `
-            <div class="capture-success" role="alert">
-                <span class="capture-success-icon" aria-hidden="true">✓</span>
-                Kurs&nbsp;<strong>${escapeHtml(courseNumber)}</strong> gespeichert!
-            </div>`;
-
-        // Nach kurzer Anzeige zurück zur Abfahrtstafel – die lädt frische Daten.
-        // searchStopId ist die HAFAS-Kurz-ID der Haltestelle (Eingabe für /api/departures);
-        // data.stopId ist die Lang-ID des Bahnsteigs (nur für die Erfassung relevant).
+        // searchStopId: HAFAS-Kurz-ID der Haltestelle (Eingabe für /api/departures).
+        // data.stopId: Lang-ID des Bahnsteigs (nur für die Erfassung relevant).
         // Fallback auf data.stopId für ältere pendingCapture-Datensätze.
-        setTimeout(() => {
-            const stopId   = encodeURIComponent(data.searchStopId ?? data.stopId ?? '');
-            const stopName = data.stopName ? encodeURIComponent(data.stopName) : '';
-            window.location.hash = `#departures?stopId=${stopId}&stopName=${stopName}`;
-        }, 1200);
+        const stopId   = encodeURIComponent(data.searchStopId ?? data.stopId ?? '');
+        const stopName = data.stopName ? encodeURIComponent(data.stopName) : '';
+        window.location.hash = `#departures?stopId=${stopId}&stopName=${stopName}`;
 
     } catch (err) {
-        feedback.innerHTML = `
-            <div class="error-box" role="alert">
-                Erfassung fehlgeschlagen: ${escapeHtml(err.message)}
-            </div>`;
+        showActionSnackbar(`Erfassung fehlgeschlagen: ${err.message}`, /* isError= */ true);
         // Button wieder freigeben, damit Nutzer es erneut versuchen kann
         btnSub.disabled = false;
     }

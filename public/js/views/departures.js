@@ -12,7 +12,7 @@
 import { getDepartures, postRecording }           from '../api.js';
 import { formatTime, calcDelay, getServiceDate }  from '../utils/format.js';
 import { lineBadgeHtml }                          from '../utils/lines.js';
-import { escapeHtml, stripStopPrefix }            from '../app.js';
+import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
 
 /** Laufender Auto-Refresh-Timer */
 let refreshTimer = null;
@@ -71,9 +71,6 @@ export function destroy() {
     currentStopName  = null;
     currentContainer = null;
     storedDepartures = [];
-
-    // Offene Bestätigungs-Toasts entfernen, sobald die View verlassen wird
-    document.querySelectorAll('.dep-confirm-toast').forEach(t => t.remove());
 }
 
 // --- Laden & Rendern --------------------------------------------------------
@@ -354,38 +351,13 @@ async function handleConfirmCourse(dep, btnEl) {
         // Erfolgs-Toast überlebt den Re-Render, weil er an document.body hängt.
         // Liste danach leise neu laden – damit eine bisher heuristische Quelle
         // auf "recorded" wechselt und der Refresh-Timer nicht zwischenfunkt.
-        showConfirmToast(`Kurs ${dep.activeCourseNumber} bestätigt`, /* isError= */ false);
+        showActionSnackbar(`Kurs ${dep.activeCourseNumber} bestätigt`);
         if (currentContainer) {
             await loadAndRender(currentContainer, /* quiet= */ true);
         }
     } catch (err) {
-        showConfirmToast(`Bestätigung fehlgeschlagen: ${err.message}`, /* isError= */ true);
+        showActionSnackbar(`Bestätigung fehlgeschlagen: ${err.message}`, /* isError= */ true);
         btnEl.disabled = false;
         btnEl.classList.remove('is-pending');
     }
-}
-
-/**
- * Kurzer Auto-Dismiss-Toast unten am Viewport, im Stil der bestehenden
- * Snackbar (history.js / .snackbar). Lebt an document.body und bleibt dadurch
- * sichtbar, auch wenn der View-Container neu gerendert wird.
- */
-function showConfirmToast(message, isError) {
-    // Nur einen Toast gleichzeitig zeigen
-    document.querySelectorAll('.dep-confirm-toast').forEach(t => t.remove());
-
-    const bar = document.createElement('div');
-    bar.className = 'snackbar dep-confirm-toast '
-                  + (isError ? 'dep-confirm-toast--error' : 'dep-confirm-toast--success');
-    bar.setAttribute('role', isError ? 'alert' : 'status');
-    bar.innerHTML = isError
-        ? `<span class="snackbar-text">${escapeHtml(message)}</span>`
-        : `<span class="snackbar-text">
-               <span class="dep-confirm-toast-icon" aria-hidden="true">✓</span>
-               ${escapeHtml(message)}
-           </span>`;
-    document.body.appendChild(bar);
-
-    const ms = isError ? 4500 : 2800;
-    setTimeout(() => bar.remove(), ms);
 }

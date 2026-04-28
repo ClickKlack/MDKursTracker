@@ -301,6 +301,38 @@ export function escapeHtml(str) {
 }
 
 // =============================================================================
+// Action-Snackbar
+// =============================================================================
+
+/**
+ * Zeigt einen kurzen Auto-Dismiss-Toast unten am Viewport. Hängt an
+ * document.body (überlebt damit Re-Renders und View-Wechsel innerhalb der SPA)
+ * und nutzt die bestehende .snackbar-Box (siehe history.js für die Undo-
+ * Variante). Nur ein Action-Toast gleichzeitig sichtbar.
+ *
+ * @param {string}  message  Klartext (wird HTML-escaped)
+ * @param {boolean} [isError=false]  rot + längere Anzeigedauer für Fehler
+ */
+export function showActionSnackbar(message, isError = false) {
+    document.querySelectorAll('.snackbar--auto-dismiss').forEach(t => t.remove());
+
+    const bar = document.createElement('div');
+    bar.className = 'snackbar snackbar--auto-dismiss '
+                  + (isError ? 'snackbar--error' : 'snackbar--success');
+    bar.setAttribute('role', isError ? 'alert' : 'status');
+    bar.innerHTML = isError
+        ? `<span class="snackbar-text">${escapeHtml(message)}</span>`
+        : `<span class="snackbar-text">
+               <span class="snackbar-icon" aria-hidden="true">✓</span>
+               ${escapeHtml(message)}
+           </span>`;
+    document.body.appendChild(bar);
+
+    const ms = isError ? 4500 : 2800;
+    setTimeout(() => bar.remove(), ms);
+}
+
+// =============================================================================
 // User-Token
 // =============================================================================
 
