@@ -1,0 +1,65 @@
+meta {
+  name: Trips Touch POST – Trip-Mapping per Fingerprint nachführen
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/trips/touch
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "hafasTripId":      "{{hafasTripId}}",
+    "serviceNr":        "{{serviceNr}}",
+    "line":             "{{line}}",
+    "stopId":           "{{stopId}}",
+    "departurePlanned": "{{departurePlanned}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.matched: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    if (res.body.matched) {
+      console.log("Trip gefunden:");
+      console.log("  tripId:             ", res.body.tripId);
+      console.log("  updated:            ", res.body.updated);
+      console.log("  activeCourseNumber: ", res.body.activeCourseNumber);
+      console.log("  courseSource:       ", res.body.courseSource);
+    } else {
+      console.log("Kein Match – reason:", res.body.reason);
+      if (res.body.heuristicCourseNumber) {
+        console.log("  Heuristik:", res.body.heuristicCourseNumber,
+                    "| Source:", res.body.heuristicCourseSource,
+                    "| TripId:", res.body.heuristicTripId);
+      }
+    }
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 01-Nearby + 02-Departures ausführen, damit
+  hafasTripId, serviceNr, line, stopId und departurePlanned als
+  Variablen gesetzt sind.
+
+  Verlinkt eine HAFAS-Fahrt per schedule_fingerprint mit einem
+  bestehenden Trip-Datensatz und führt last_hafas_trip_id sowie
+  service_nr nach. Legt KEINEN neuen Trip an – bei fehlendem Match
+  liefert der Endpunkt matched=false mit reason. Bei matched=false
+  und reason=no_trip wird zusätzlich ein heuristischer route_stops-
+  Lookup versucht; bei eindeutigem Treffer enthält die Antwort
+  heuristicCourseNumber/heuristicCourseSource/heuristicTripId.
+
+  Mögliche reason-Werte bei matched=false:
+    no_trip          – kein Trip mit passendem Fingerprint
+    no_fingerprint   – Fahrt hat zu wenige Halte mit Zeitangabe
+    no_service_date  – Betriebsdatum nicht ableitbar
+    hafas_error      – HAFAS-Anfrage fehlgeschlagen (best-effort)
+}

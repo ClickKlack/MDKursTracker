@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     `line`              VARCHAR(10) NULL     COMMENT 'Linie an diesem Halt (aus HAFAS prodL); NULL wenn nicht verfügbar',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_%%PREFIX%%route_stops_seq` (`trip_id`, `sequence`),
+    KEY `idx_%%PREFIX%%route_stops_lookup` (`stop_id`, `departure_planned`, `line`),
     CONSTRAINT `fk_%%PREFIX%%route_stops_trip`
         FOREIGN KEY (`trip_id`) REFERENCES `%%PREFIX%%trips` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE,

@@ -9,7 +9,7 @@
  *  5. Rückkehr zur Abfahrtstafel (#departures), die frische Daten lädt
  */
 
-import { postRecording, getTrip } from '../api.js';
+import { postRecording, getTrip, postTouchTrip } from '../api.js';
 import { formatTime, calcDelay }   from '../utils/format.js';
 import { lineBadgeHtml }           from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix } from '../app.js';
@@ -37,8 +37,23 @@ export async function render(container, _params, _context) {
     container.innerHTML = buildFormHtml(data);
     attachListeners(container, data);
 
+    // Vorschlag aus der Abfahrtstafel sofort rendern (ohne Roundtrip).
+    if (data.suggestedCourseNumber) {
+        renderSuggestion(container, {
+            number: data.suggestedCourseNumber,
+            source: data.suggestedCourseSource ?? 'recorded',
+        });
+    }
+
     // Fahrtverlauf asynchron nachladen
     loadTripRoute(container, data);
+
+    // Trip-Mapping per Fingerprint nachführen (best-effort, Fehler ignorieren).
+    // Damit erscheint die zugeordnete Kursnummer auf der Abfahrtstafel auch dann,
+    // wenn HAFAS für dieselbe Fahrt eine neue tripId/serviceNr ausgegeben hat –
+    // ohne dass eine Erfassung gespeichert werden muss. Aktualisiert zudem den
+    // Vorschlags-Badge, falls die Antwort einen besseren Wert liefert.
+    touchTripMapping(container, data);
 }
 
 export function destroy() {
@@ -64,6 +79,8 @@ function buildFormHtml(data) {
         </div>
 
         <p class="capture-prompt">Welche Kursnummer hat diese Bahn?</p>
+
+        <div id="capture-suggestion" class="capture-suggestion" hidden></div>
 
         <div class="course-grid" role="group" aria-label="Kursnummer schnell auswählen">
             ${buildQuickButtons()}
@@ -141,6 +158,14 @@ function attachListeners(container, data) {
         input.focus();
     });
 
+    // Vorschlags-Badge: Klick übernimmt den Wert wie ein Schnellbutton
+    container.querySelector('#capture-suggestion').addEventListener('click', e => {
+        const btn = e.target.closest('.course-number');
+        if (!btn || !btn.dataset.course) return;
+        selectCourse(btn.dataset.course);
+        input.focus();
+    });
+
     // Freitext-Input
     input.addEventListener('input', () => {
         const val = input.value.trim();
@@ -171,6 +196,78 @@ function attachListeners(container, data) {
             btnSub.click();
         }
     });
+
+}
+
+// --- Vorschlags-Badge --------------------------------------------------------
+
+/**
+ * Rendert oder ersetzt den Vorschlags-Badge über der Kursnummer-Grid.
+ * @param {HTMLElement} container
+ * @param {{number:string, source:'manual'|'recorded'|'heuristic'}} suggestion
+ */
+function renderSuggestion(container, suggestion) {
+    const el = container.querySelector('#capture-suggestion');
+    if (!el) return;
+
+    const cls = suggestion.source === 'manual'    ? 'manual'
+              : suggestion.source === 'heuristic' ? 'heuristic'
+              :                                     'known';
+    const label = suggestion.source === 'manual'    ? 'Manueller Wert'
+                : suggestion.source === 'heuristic' ? 'Vermutet (Plan-Daten)'
+                :                                     'Bekannter Wert';
+    const title = suggestion.source === 'heuristic'
+        ? 'Vermutete Kursnummer aus Plan-Daten – bitte prüfen'
+        : 'Vorschlag übernehmen';
+
+    el.innerHTML = `
+        <span class="text-small text-muted">${escapeHtml(label)}:</span>
+        <button type="button" class="course-number ${cls}"
+                data-course="${escapeHtml(suggestion.number)}"
+                title="${escapeHtml(title)}"
+                aria-label="Vorschlag ${escapeHtml(suggestion.number)} übernehmen">
+            ${escapeHtml(suggestion.number)}
+        </button>`;
+    el.hidden = false;
+}
+
+// --- Trip-Mapping nachführen -------------------------------------------------
+
+async function touchTripMapping(container, data) {
+    if (!data.hafasTripId || !data.serviceNr || !data.line) return;
+    try {
+        const res = await postTouchTrip({
+            hafasTripId:      data.hafasTripId,
+            serviceNr:        data.serviceNr,
+            line:             data.line,
+            stopId:           data.stopId,
+            departurePlanned: data.departurePlanned,
+        });
+
+        // Vorschlag aktualisieren, wenn Touch einen Wert liefert, der nicht
+        // identisch zum bereits angezeigten ist.
+        if (res?.matched && res.activeCourseNumber) {
+            const newSource = res.courseSource ?? 'recorded';
+            if (data.suggestedCourseNumber !== res.activeCourseNumber
+                || data.suggestedCourseSource !== newSource) {
+                renderSuggestion(container, {
+                    number: res.activeCourseNumber,
+                    source: newSource,
+                });
+            }
+        } else if (!res?.matched && res?.heuristicCourseNumber
+                   && !data.suggestedCourseNumber) {
+            // Abfahrtstafel hatte keinen Treffer, aber die Heuristik findet
+            // doch noch einen – nachträglich anbieten.
+            renderSuggestion(container, {
+                number: res.heuristicCourseNumber,
+                source: res.heuristicCourseSource ?? 'heuristic',
+            });
+        }
+    } catch (err) {
+        // Best-effort – Fehler dürfen die Erfassung nicht stören
+        console.warn('[capture] touchTripMapping fehlgeschlagen:', err.message);
+    }
 }
 
 // --- Fahrtverlauf laden & rendern --------------------------------------------

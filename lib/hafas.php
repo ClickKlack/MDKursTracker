@@ -299,6 +299,11 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
                 'originalLine'     => $originalLine,
                 'direction'        => $dirTxt,
                 'cancelled'        => $cancelled,
+                // Lang-ID des Bahnsteigs an dem diese Abfahrt erfolgt
+                // (extId aus locL). Wird vom Frontend an die Capture-View und
+                // die Heuristik-Lookups in /api/departures + /api/trips/touch
+                // weitergereicht – route_stops.stop_id ist ebenfalls Lang-ID.
+                'stopId'           => $foundId,
                 'departurePlanned' => $plannedIso,
                 'departureActual'  => ($realtimeTime !== '')
                     ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)

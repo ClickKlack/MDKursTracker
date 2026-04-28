@@ -1,6 +1,6 @@
 <?php
 // GET /api/departures – Nächste Tramabfahrten an einer Haltestelle,
-// angereichert mit activeCourseNumber aus der eigenen DB.
+// angereichert mit activeCourseNumber + courseSource aus der eigenen DB.
 // Parameter: stopId (string, Pflicht), results (int, optional, Standard 20)
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
@@ -9,6 +9,7 @@ require_once dirname(__DIR__, 2) . '/lib/logger.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
+require_once dirname(__DIR__, 2) . '/lib/course_lookup.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Methode nicht erlaubt', 405);
@@ -68,41 +69,59 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([$periodId]);
 
-// Zwei Lookup-Maps aufbauen:
-//   1. last_hafas_trip_id → activeCourseNumber  (primär, stabil)
-//   2. "service_nr|line|day_type" → activeCourseNumber  (Fallback, dauerhaft)
-$tripMapByJourneyId  = [];
-$tripMapByServiceNr  = [];
+// Drei Lookup-Maps aufbauen, je mit Quellangabe pro Treffer:
+//   1. byJourney   – last_hafas_trip_id → ['number','source']  (primär, stabil)
+//   2. byServiceNr – serviceNr|line|dayType → [...]            (Fallback)
+//   3. byRouteStop – stopId|line|dayType|HH:MM → [...]         (heuristisch)
+$byJourney   = [];
+$byServiceNr = [];
 foreach ($stmt->fetchAll() as $row) {
-    $active = $row['manual_course_number'] ?? $row['majority_course_number'];
+    $number = $row['manual_course_number'] ?? $row['majority_course_number'];
+    if ($number === null) {
+        continue;
+    }
+    $entry = [
+        'number' => $number,
+        'source' => $row['manual_course_number'] !== null ? 'manual' : 'recorded',
+    ];
 
     if ($row['last_hafas_trip_id'] !== null) {
-        $tripMapByJourneyId[$row['last_hafas_trip_id']] = $active;
+        $byJourney[$row['last_hafas_trip_id']] = $entry;
     }
 
     // Fallback-Key – bei Kollision gewinnt der zuerst geladene Eintrag
     // (in der Praxis eindeutig, da service_nr per Trip nur einmal vorkommt)
     $fbKey = $row['service_nr'] . '|' . $row['line'] . '|' . $row['day_type'];
-    if (!isset($tripMapByServiceNr[$fbKey])) {
-        $tripMapByServiceNr[$fbKey] = $active;
+    if (!isset($byServiceNr[$fbKey])) {
+        $byServiceNr[$fbKey] = $entry;
     }
 }
 
-// Abfahrten mit activeCourseNumber anreichern
-// Primär: Lookup per last_hafas_trip_id; Fallback: service_nr|line|day_type
+$byRouteStop = build_route_stop_course_map($pdo, $periodId);
+
+// Abfahrten mit activeCourseNumber + courseSource anreichern
+$maps   = ['byJourney' => $byJourney, 'byServiceNr' => $byServiceNr, 'byRouteStop' => $byRouteStop];
 $result = [];
 foreach ($departures as $dep) {
     $dateStr = $dep['departurePlanned'] !== null
         ? substr($dep['departurePlanned'], 0, 10)
         : date('Y-m-d');
     $dayType = $dayTypeCache[$dateStr] ?? 'MO-FR';
+    // HH:MM aus ISO-8601-UTC-String "YYYY-MM-DDTHH:MM:SSZ" → Position 11..15
+    $hhmm = $dep['departurePlanned'] !== null ? substr($dep['departurePlanned'], 11, 5) : null;
 
-    $active = $tripMapByJourneyId[$dep['hafasTripId']]
-        ?? $tripMapByServiceNr[$dep['serviceNr'] . '|' . $dep['line'] . '|' . $dayType]
-        ?? null;
+    $pick = pick_course_for_departure($maps, [
+        'hafasTripId' => $dep['hafasTripId'],
+        'serviceNr'   => $dep['serviceNr'],
+        'line'        => $dep['line'],
+        'dayType'     => $dayType,
+        'stopId'      => $dep['stopId'] ?? $stopId,
+        'hhmm'        => $hhmm,
+    ]);
 
     $result[] = array_merge($dep, [
-        'activeCourseNumber' => $active,
+        'activeCourseNumber' => $pick['number'],
+        'courseSource'       => $pick['source'],
     ]);
 }
 

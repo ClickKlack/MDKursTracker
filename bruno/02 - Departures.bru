@@ -24,6 +24,8 @@ assert {
   res.body[0].line: isDefined
   res.body[0].direction: isDefined
   res.body[0].departurePlanned: isDefined
+  res.body[0].activeCourseNumber: isDefined
+  res.body[0].courseSource: isDefined
 }
 
 script:post-response {
@@ -35,6 +37,7 @@ script:post-response {
     bru.setVar("serviceNr",          dep.serviceNr);
     bru.setVar("line",               dep.line);
     bru.setVar("direction",          dep.direction);
+    bru.setVar("stopId",             dep.stopId ?? "");
     bru.setVar("departurePlanned",   dep.departurePlanned ?? "");
     bru.setVar("departureActual",    dep.departureActual ?? "");
   
@@ -44,6 +47,6 @@ script:post-response {
     }
   
     console.log("Abfahrt gesetzt:", dep.line, "→", dep.direction, "| TripId:", dep.hafasTripId);
-    console.log("activeCourseNumber:", dep.activeCourseNumber);
+    console.log("activeCourseNumber:", dep.activeCourseNumber, "| courseSource:", dep.courseSource);
   }
 }

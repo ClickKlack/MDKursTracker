@@ -197,6 +197,29 @@ export async function getRecordings(filters = {}) {
 }
 
 /**
+ * HAFAS-Fahrt per Fingerprint mit bestehendem Trip verlinken.
+ * Aktualisiert last_hafas_trip_id und service_nr am gefundenen Trip;
+ * legt nichts neu an. Bei Miss zusätzlich heuristischer route_stops-Lookup.
+ * Best-effort – Fehler werden vom Caller ignoriert.
+ * @param {{
+ *   hafasTripId:string, serviceNr:string, line:string,
+ *   stopId:string, departurePlanned:string
+ * }} data
+ * @returns {Promise<{
+ *   matched:boolean, tripId?:number, updated?:boolean,
+ *   activeCourseNumber?:string|null, courseSource?:string|null,
+ *   heuristicCourseNumber?:string, heuristicCourseSource?:string, heuristicTripId?:number,
+ *   reason?:string
+ * }>}
+ */
+export async function postTouchTrip(data) {
+    return apiFetch('/api/trips/touch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+/**
  * Logische Fahrten einer Periode mit berechneter aktiver Kursnummer.
  * @param {number} [periodId]  Standard: aktive Periode
  * @returns {Promise<Array>}

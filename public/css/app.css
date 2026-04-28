@@ -15,6 +15,7 @@
     --color-text:          #1a1a2e;
     --color-text-muted:    #5a6a80;
     --color-success:       #2e7d32;
+    --color-warning:       #ed6c02;
     --color-error:         #c62828;
     --color-known-course:  #1b5e20;
 
@@ -267,10 +268,31 @@ body {
     color: #fff;
 }
 
+.course-number.heuristic {
+    background: var(--color-warning);
+    color: #fff;
+}
+
 .course-number.unknown {
     background: var(--color-border);
     color: var(--color-text-muted);
     font-weight: 500;
+}
+
+/* --- Capture-Vorschlag ---------------------------------------------------- */
+.capture-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px 0;
+}
+
+.capture-suggestion .course-number {
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 4px 12px;
+    border: none;
+    font-family: var(--font-mono);
 }
 
 /* --- Linien-Badge ---------------------------------------------------------- */

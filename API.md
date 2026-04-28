@@ -122,9 +122,11 @@ GET /api/departures?stopId=de:15003:4000
     "departureActual":  "2026-04-12T12:48:00Z",
     "journeyStart":     "Magdeburg, City Carré",
     "journeyStartTime": "2026-04-12T12:44:00Z",
+    "stopId":           "300754301",
     "journeyEnd":       "Magdeburg, Westerhüsen (Betriebshof)",
     "journeyEndTime":   "2026-04-12T13:13:00Z",
-    "activeCourseNumber": "07"
+    "activeCourseNumber": "07",
+    "courseSource": "recorded"
   }
 ]
 ```
@@ -136,6 +138,7 @@ GET /api/departures?stopId=de:15003:4000
 | `line` | string | Linienbezeichnung (aus jid-ZB#, zuverlässiger als prodL) |
 | `direction` | string | Richtungstext (Endhaltestellenname, Marketing-Name) |
 | `cancelled` | bool | `true` = Fahrt (isCncl) oder Halt (dCncl) ist ausgefallen; Erfassung gesperrt |
+| `stopId` | string | Lang-ID des konkreten Bahnsteigs (extId aus HAFAS locL); enthält die Steig-Stelle. Frontend nutzt sie für `pendingCapture.stopId`, damit der Heuristik-Lookup gegen `route_stops.stop_id` matchen kann. |
 | `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
 | `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit |
 | `journeyStart` | string\|null | Name der Starthaltestelle; `null` = nicht im Response verfügbar |
@@ -143,6 +146,7 @@ GET /api/departures?stopId=de:15003:4000
 | `journeyEnd` | string\|null | Name der Endhaltestelle |
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
 | `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
+| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (eindeutiger route_stops-Treffer) oder `null` |
 | `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 ---
@@ -385,6 +389,73 @@ ohne HAFAS-Abfrage) oder die Erfassung nicht existiert.
 
 `departurePlanned` ist `null` beim letzten Halt (nur Ankunft).
 `line` ist `null` wenn HAFAS keine Linieninformation je Halt geliefert hat (best-effort).
+
+---
+
+### POST `/api/trips/touch`
+
+Verlinkt eine HAFAS-Fahrt per `schedule_fingerprint` mit einem bestehenden
+Trip-Datensatz. Aktualisiert dort `last_hafas_trip_id` und `service_nr`,
+ohne eine Erfassung anzulegen. Wird vom Frontend beim Öffnen der
+Capture-View aufgerufen, damit die Abfahrtstafel die zugeordnete
+Kursnummer auch dann anzeigt, wenn HAFAS für dieselbe Fahrt eine neue
+`tripId`/`serviceNr` ausgibt. Legt **keinen** neuen Trip an. Bei fehlendem
+Fingerprint-Match (`reason: "no_trip"`) wird zusätzlich ein heuristischer
+Lookup über `route_stops` versucht; bei eindeutigem Treffer enthält die
+Antwort `heuristicCourseNumber` als Vorschlag für die Capture-View.
+
+**Request-Body:**
+```json
+{
+  "hafasTripId":      "1|12345|0|80|24032026",
+  "serviceNr":        "41058",
+  "line":             "6",
+  "stopId":           "de:15003:4000",
+  "departurePlanned": "2026-03-24T14:32:00Z"
+}
+```
+
+`stopId` und `departurePlanned` werden für den heuristischen Fallback
+benötigt. `departurePlanned` muss ISO-8601-UTC sein.
+
+**Erfolg-Response (200) – Match per Fingerprint:**
+```json
+{
+  "matched": true,
+  "tripId": 38,
+  "updated": true,
+  "activeCourseNumber": "07",
+  "courseSource": "recorded"
+}
+```
+
+`courseSource`: `manual` (Trip hat Override), `recorded` (Mehrheit aus
+Erfassungen) oder `null` (Trip existiert, aber keine Recordings).
+
+**Antwort bei matched=false mit Heuristik-Treffer:**
+```json
+{
+  "matched": false,
+  "reason": "no_trip",
+  "heuristicCourseNumber": "07",
+  "heuristicCourseSource": "heuristic",
+  "heuristicTripId": 42
+}
+```
+
+`heuristicCourseSource`: `heuristic` oder `manual` (wenn der heuristisch
+gefundene Trip einen Override hat).
+
+Bei `matched: false` enthält die Antwort einen `reason`:
+- `no_trip` – kein Trip mit passendem Fingerprint vorhanden
+  (heuristische Felder dann ggf. zusätzlich gesetzt)
+- `no_fingerprint` – Fahrt hat zu wenige Halte mit Zeitangabe
+- `no_service_date` – Betriebsdatum nicht ableitbar
+- `hafas_error` – HAFAS-Anfrage fehlgeschlagen (best-effort, kein 5xx)
+
+**Fehler:**
+- `400` – Pflichtfeld fehlt oder Feldlänge überschritten
+- `400` – `departurePlanned` nicht im Format `YYYY-MM-DDTHH:MM:SSZ`
 
 ---
 

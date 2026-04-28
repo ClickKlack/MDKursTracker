@@ -178,12 +178,22 @@ function renderDepartureItem(dep, idx) {
         timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
     }
 
-    // Kursnummer-Badge
+    // Kursnummer-Badge – Quelle bestimmt Stil und Tooltip:
+    //   manual    → grün  (admin-überschrieben)
+    //   recorded  → blau  (Mehrheit aus Erfassungen)
+    //   heuristic → orange (route_stops-Fallback, unsicher)
+    //   null      → grau  ("noch nicht erfasst")
     let courseHtml;
     if (dep.activeCourseNumber) {
+        const source = dep.courseSource ?? 'recorded';
+        const cls = source === 'manual'    ? 'manual'
+                  : source === 'heuristic' ? 'heuristic'
+                  :                          'known';
+        const title = source === 'manual'    ? `Manuelle Kursnummer (${dep.activeCourseNumber})`
+                    : source === 'heuristic' ? `Vermutete Kursnummer aus Plan-Daten (${dep.activeCourseNumber})`
+                    :                          `Bekannte Kursnummer (${dep.activeCourseNumber})`;
         courseHtml = `
-            <span class="course-number known"
-                  title="Bekannte Kursnummer (${dep.activeCourseNumber})">
+            <span class="course-number ${cls}" title="${escapeHtml(title)}">
                 ${escapeHtml(dep.activeCourseNumber)}
             </span>`;
     } else {
@@ -199,7 +209,9 @@ function renderDepartureItem(dep, idx) {
         `nach ${dep.direction}`,
         dep.cancelled ? 'Fahrt ausgefallen' : `ab ${planned}`,
         !dep.cancelled && (isDelayed ? `+${delay} Min. Verspätung` : isEarly ? `${Math.abs(delay)} Min. zu früh` : 'pünktlich'),
-        !dep.cancelled && (dep.activeCourseNumber ? `Kurs ${dep.activeCourseNumber}` : 'Kurs unbekannt'),
+        !dep.cancelled && (dep.activeCourseNumber
+            ? (dep.courseSource === 'heuristic' ? `Kurs ${dep.activeCourseNumber} (vermutet)` : `Kurs ${dep.activeCourseNumber}`)
+            : 'Kurs unbekannt'),
     ].filter(Boolean).join(', ');
 
     // Hinweis auf ursprüngliche Linie bei Linienwechsel (durchgebundene Fahrt)
@@ -241,17 +253,25 @@ function handleDepartureSelect(e) {
     // Ausgefallene Fahrten können nicht erfasst werden
     if (dep.cancelled) return;
 
-    // Alle nötigen Erfassungsdaten in sessionStorage ablegen (für Phase 7)
+    // Alle nötigen Erfassungsdaten in sessionStorage ablegen (für Phase 7).
+    // stopId: Lang-ID des konkreten Bahnsteigs aus dem HAFAS-Departure (z.B.
+    // "300754301"). Fallback auf die Suchanfrage-ID, wenn HAFAS keine
+    // extId mitliefert. Lang-Form ist nötig, damit der Heuristik-Lookup in
+    // /api/trips/touch gegen route_stops.stop_id (Lang-ID) matchen kann.
     const captureData = {
-        hafasTripId:      dep.hafasTripId,
-        serviceNr:        dep.serviceNr,
-        line:             dep.line,
-        direction:        dep.direction,
-        stopId:           currentStopId,
-        stopName:         currentStopName,
-        serviceDate:      dep.departurePlanned ? getServiceDate(dep.departurePlanned) : '',
-        departurePlanned: dep.departurePlanned,
-        departureActual:  dep.departureActual ?? null,
+        hafasTripId:           dep.hafasTripId,
+        serviceNr:             dep.serviceNr,
+        line:                  dep.line,
+        direction:             dep.direction,
+        stopId:                dep.stopId ?? currentStopId,
+        stopName:              currentStopName,
+        serviceDate:           dep.departurePlanned ? getServiceDate(dep.departurePlanned) : '',
+        departurePlanned:      dep.departurePlanned,
+        departureActual:       dep.departureActual ?? null,
+        // Vorschlag aus der Abfahrtstafel mitgeben – Capture-View zeigt ihn
+        // sofort an, ohne auf den Touch-Aufruf warten zu müssen.
+        suggestedCourseNumber: dep.activeCourseNumber ?? null,
+        suggestedCourseSource: dep.courseSource ?? null,
     };
     sessionStorage.setItem('pendingCapture', JSON.stringify(captureData));
     window.location.hash = '#capture';
