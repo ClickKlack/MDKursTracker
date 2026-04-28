@@ -335,7 +335,7 @@ async function handleConfirmCourse(dep, btnEl) {
     btnEl.classList.add('is-pending');
 
     try {
-        await postRecording({
+        const res = await postRecording({
             hafasTripId:      dep.hafasTripId,
             serviceNr:        dep.serviceNr,
             line:             dep.line,
@@ -351,7 +351,10 @@ async function handleConfirmCourse(dep, btnEl) {
         // Erfolgs-Toast überlebt den Re-Render, weil er an document.body hängt.
         // Liste danach leise neu laden – damit eine bisher heuristische Quelle
         // auf "recorded" wechselt und der Refresh-Timer nicht zwischenfunkt.
-        showActionSnackbar(`Kurs ${dep.activeCourseNumber} bestätigt`);
+        const replaced = (res?.replacedRecordingIds?.length ?? 0) > 0;
+        showActionSnackbar(
+            `Kurs ${dep.activeCourseNumber} bestätigt${replaced ? ' · vorherige Erfassung ersetzt' : ''}`
+        );
         if (currentContainer) {
             await loadAndRender(currentContainer, /* quiet= */ true);
         }

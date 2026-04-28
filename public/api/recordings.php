@@ -363,6 +363,47 @@ function handle_post_recording(): never
         $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)')
             ->execute([$recordingStopId, $recordingStopName]);
 
+        // Korrektur-Erkennung: Erfasst derselbe Nutzer am selben Betriebstag,
+        // an derselben Haltestelle und für dieselbe Plan-Abfahrt erneut, ist
+        // das fast immer eine Korrektur einer falsch erfassten Kursnummer
+        // (Match bewusst ohne course_number). Die ältere Erfassung wird soft-
+        // gelöscht; Lazy-Cleanup entfernt sie nach 30 Tagen final.
+        // Anonyme Erfassungen (kein User-Token) bleiben außen vor – sonst
+        // würden sich fremde Erfassungen gegenseitig löschen.
+        $departurePlannedMysql = iso_to_mysql($body['departurePlanned']);
+        $replacedIds = [];
+        if ($userToken !== null) {
+            $dupStmt = $pdo->prepare(
+                'SELECT id FROM ' . tbl('recordings') . '
+                  WHERE user_token = ?
+                    AND service_date = ?
+                    AND stop_id = ?
+                    AND departure_planned = ?
+                    AND deleted_at IS NULL'
+            );
+            $dupStmt->execute([
+                $userToken,
+                $body['serviceDate'],
+                $recordingStopId,
+                $departurePlannedMysql,
+            ]);
+            $replacedIds = array_map('intval', $dupStmt->fetchAll(PDO::FETCH_COLUMN));
+
+            if (!empty($replacedIds)) {
+                $placeholders = implode(',', array_fill(0, count($replacedIds), '?'));
+                $pdo->prepare(
+                    'UPDATE ' . tbl('recordings') .
+                    ' SET deleted_at = UTC_TIMESTAMP() WHERE id IN (' . $placeholders . ')'
+                )->execute($replacedIds);
+
+                get_logger()->info('Erfassung ersetzt', [
+                    'replaced_ids' => $replacedIds,
+                    'stop_id'      => $recordingStopId,
+                    'service_date' => $body['serviceDate'],
+                ]);
+            }
+        }
+
         // Erfassung anlegen
         $now = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
         $recStmt = $pdo->prepare(
@@ -377,7 +418,7 @@ function handle_post_recording(): never
             $body['hafasTripId'],
             $body['serviceDate'],
             $recordingStopId,
-            iso_to_mysql($body['departurePlanned']),
+            $departurePlannedMysql,
             isset($body['departureActual']) && $body['departureActual'] !== null
                 ? iso_to_mysql($body['departureActual'])
                 : null,
@@ -461,12 +502,16 @@ function handle_post_recording(): never
         ]);
     }
 
-    json_response([
+    $resp = [
         'recordingId' => $recordingId,
         'tripId'      => $tripId,
         'periodId'    => $periodId,
         'dayType'     => $dayType,
-    ], 201);
+    ];
+    if (!empty($replacedIds)) {
+        $resp['replacedRecordingIds'] = $replacedIds;
+    }
+    json_response($resp, 201);
 }
 
 // ---------------------------------------------------------------------------

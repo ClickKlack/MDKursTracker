@@ -1,0 +1,57 @@
+meta {
+  name: Recording POST Replace – Setup (1. Erfassung mit Token)
+  type: http
+  seq: 35
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+body:json {
+  {
+    "hafasTripId":      "{{hafasTripId}}",
+    "serviceNr":        "{{serviceNr}}",
+    "line":             "{{line}}",
+    "direction":        "{{direction}}",
+    "stopId":           "{{stopId}}",
+    "serviceDate":      "{{serviceDate}}",
+    "departurePlanned": "{{departurePlanned}}",
+    "departureActual":  "{{departureActual}}",
+    "courseNumber":     "07"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.recordingId: isDefined
+  res.body.replacedRecordingIds: isUndefined
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("firstReplaceRecordingId", res.body.recordingId);
+    console.log("Setup-Erfassung angelegt, ID:", res.body.recordingId);
+  }
+}
+
+docs {
+  Setup für den Replace-Trigger-Test (36). Legt eine eigene Erfassung mit
+  X-User-Token für eine konkrete (serviceDate, stopId, departurePlanned)-
+  Kombination an. Der nachfolgende Test 36 erfasst dieselbe Kombination
+  erneut mit anderer Kursnummer und erwartet, dass diese ID hier in
+  `replacedRecordingIds` zurückgemeldet wird.
+
+  Voraussetzungen (in dieser Reihenfolge):
+    01-Nearby, 02-Departures (setzt hafasTripId / stopId / serviceDate /
+    departurePlanned / line / direction / serviceNr)
+    23-User-POST-Init (setzt userToken)
+
+  Erwartung: 201, kein replacedRecordingIds (erste eigene Erfassung).
+}

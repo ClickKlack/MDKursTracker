@@ -1,0 +1,67 @@
+meta {
+  name: Recording POST Replace – Trigger (Korrektur ersetzt Setup)
+  type: http
+  seq: 36
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+body:json {
+  {
+    "hafasTripId":      "{{hafasTripId}}",
+    "serviceNr":        "{{serviceNr}}",
+    "line":             "{{line}}",
+    "direction":        "{{direction}}",
+    "stopId":           "{{stopId}}",
+    "serviceDate":      "{{serviceDate}}",
+    "departurePlanned": "{{departurePlanned}}",
+    "departureActual":  "{{departureActual}}",
+    "courseNumber":     "08"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.recordingId: isDefined
+  res.body.replacedRecordingIds: isArray
+  res.body.replacedRecordingIds: length 1
+}
+
+script:post-response {
+  if (res.status === 201) {
+    const expected = parseInt(bru.getVar("firstReplaceRecordingId"), 10);
+    const got      = res.body.replacedRecordingIds?.[0];
+    if (got !== expected) {
+      throw new Error(
+        `replacedRecordingIds[0] erwartet ${expected}, erhalten ${got}`
+      );
+    }
+    console.log("Replace verifiziert:", expected, "→ soft-deleted, neu:", res.body.recordingId);
+    bru.setVar("lastRecordingId", res.body.recordingId);
+  }
+}
+
+docs {
+  Erwartet: derselbe Nutzer (X-User-Token) erfasst dieselbe (serviceDate,
+  stopId, departurePlanned)-Kombination wie in Test 35, aber mit anderer
+  Kursnummer (08 statt 07). Der Backend-Replace soll greifen:
+    - Die Setup-Erfassung aus 35 wird soft-gelöscht.
+    - Antwort enthält `replacedRecordingIds: [<setup-id>]`.
+    - Eine neue, aktive Erfassung mit Kurs 08 entsteht.
+
+  Match-Kriterium ist bewusst ohne course_number — sonst würde gerade die
+  Korrektur einer falsch erfassten Kursnummer (häufigster Fehlerfall) nicht
+  greifen.
+
+  Voraussetzungen: 02-Departures, 23-User-Init, 35-Replace-Setup wurden in
+  dieser Reihenfolge ausgeführt (Variablen userToken und
+  firstReplaceRecordingId müssen gesetzt sein).
+}

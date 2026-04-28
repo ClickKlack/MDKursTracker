@@ -354,7 +354,7 @@ async function submitRecording(data, courseNumber, btnSub) {
     btnSub.disabled = true;
 
     try {
-        await postRecording({
+        const res = await postRecording({
             hafasTripId:      data.hafasTripId,
             serviceNr:        data.serviceNr,
             line:             data.line,
@@ -370,7 +370,10 @@ async function submitRecording(data, courseNumber, btnSub) {
         // Die Snackbar hängt an document.body und überlebt die Navigation – damit
         // sieht der Nutzer die Bestätigung auch noch in der Abfahrtstafel.
         sessionStorage.removeItem('pendingCapture');
-        showActionSnackbar(`Kurs ${courseNumber} gespeichert`);
+        const replaced = (res?.replacedRecordingIds?.length ?? 0) > 0;
+        showActionSnackbar(
+            `Kurs ${courseNumber} gespeichert${replaced ? ' · vorherige Erfassung ersetzt' : ''}`
+        );
 
         // searchStopId: HAFAS-Kurz-ID der Haltestelle (Eingabe für /api/departures).
         // data.stopId: Lang-ID des Bahnsteigs (nur für die Erfassung relevant).

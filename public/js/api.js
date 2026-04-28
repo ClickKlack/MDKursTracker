@@ -144,7 +144,7 @@ export async function getCalendar(date) {
  *   departureActual:  string|null,
  *   courseNumber:     string
  * }} data
- * @returns {Promise<{recordingId:number, tripId:number, periodId:number, dayType:string}>}
+ * @returns {Promise<{recordingId:number, tripId:number, periodId:number, dayType:string, replacedRecordingIds?:number[]}>}
  */
 export async function postRecording(data) {
     return apiFetch('/api/recordings', {
