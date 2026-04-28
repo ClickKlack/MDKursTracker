@@ -177,6 +177,25 @@ export async function putRecording(recordingId, data) {
 }
 
 /**
+ * Eigene Erfassung soft-löschen. Wiederherstellung über restoreRecording().
+ * Nur in der aktiven Periode möglich.
+ * @param {number} recordingId
+ * @returns {Promise<{ok:boolean, alreadyDeleted?:boolean}>}
+ */
+export async function deleteRecording(recordingId) {
+    return apiFetch(`/api/recordings/${recordingId}`, { method: 'DELETE' });
+}
+
+/**
+ * Soft-Delete einer eigenen Erfassung rückgängig machen (Undo aus Snackbar).
+ * @param {number} recordingId
+ * @returns {Promise<{ok:boolean, wasActive?:boolean}>}
+ */
+export async function restoreRecording(recordingId) {
+    return apiFetch(`/api/recordings/${recordingId}/restore`, { method: 'POST' });
+}
+
+/**
  * Erfassungen abrufen, optional gefiltert.
  * @param {{
  *   period_id?: number,

@@ -134,10 +134,13 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%recordings` (
     `course_number`     CHAR(2)      NOT NULL COMMENT '01-99, immer zweistellig',
     `user_token`        VARCHAR(64)  NULL     COMMENT 'FK zu users.token; NULL für Altdaten',
     `comment`           VARCHAR(500) NULL     COMMENT 'Optionaler Nutzerkommentar (nur bei eigenen Erfassungen editierbar)',
+    `deleted_at`        TIMESTAMP    NULL     DEFAULT NULL
+                                     COMMENT 'Soft-Delete-Zeitpunkt (UTC); NULL = aktiv',
     PRIMARY KEY (`id`),
     KEY `idx_%%PREFIX%%recordings_trip`        (`trip_id`),
     KEY `idx_%%PREFIX%%recordings_service_date` (`service_date`),
     KEY `idx_%%PREFIX%%recordings_user_token`   (`user_token`),
+    KEY `idx_%%PREFIX%%recordings_deleted_at`   (`deleted_at`),
     CONSTRAINT `fk_%%PREFIX%%recordings_trip`
         FOREIGN KEY (`trip_id`) REFERENCES `%%PREFIX%%trips` (`id`)
         ON DELETE RESTRICT ON UPDATE CASCADE,

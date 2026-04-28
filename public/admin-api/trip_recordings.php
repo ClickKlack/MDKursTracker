@@ -45,7 +45,7 @@ $stmt = $pdo->prepare(
      FROM ' . tbl('recordings') . ' r
      JOIN ' . tbl('stops') . ' st ON r.stop_id = st.hafas_id
      LEFT JOIN ' . tbl('users') . ' u ON r.user_token = u.token
-     WHERE r.trip_id = ?
+     WHERE r.trip_id = ? AND r.deleted_at IS NULL
      ORDER BY r.recorded_at DESC'
 );
 $stmt->execute([$resourceId]);

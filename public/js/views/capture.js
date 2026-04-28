@@ -382,9 +382,12 @@ async function submitRecording(data, courseNumber, btnSub, feedback) {
                 Kurs&nbsp;<strong>${escapeHtml(courseNumber)}</strong> gespeichert!
             </div>`;
 
-        // Nach kurzer Anzeige zurück zur Abfahrtstafel – die lädt frische Daten
+        // Nach kurzer Anzeige zurück zur Abfahrtstafel – die lädt frische Daten.
+        // searchStopId ist die HAFAS-Kurz-ID der Haltestelle (Eingabe für /api/departures);
+        // data.stopId ist die Lang-ID des Bahnsteigs (nur für die Erfassung relevant).
+        // Fallback auf data.stopId für ältere pendingCapture-Datensätze.
         setTimeout(() => {
-            const stopId   = data.stopId   ? encodeURIComponent(data.stopId)   : '';
+            const stopId   = encodeURIComponent(data.searchStopId ?? data.stopId ?? '');
             const stopName = data.stopName ? encodeURIComponent(data.stopName) : '';
             window.location.hash = `#departures?stopId=${stopId}&stopName=${stopName}`;
         }, 1200);

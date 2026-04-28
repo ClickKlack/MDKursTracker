@@ -63,7 +63,7 @@ if ($fp['schedule'] !== null) {
              (
                  SELECT r.course_number
                  FROM ' . tbl('recordings') . ' r
-                 WHERE r.trip_id = t.id
+                 WHERE r.trip_id = t.id AND r.deleted_at IS NULL
                  GROUP BY r.course_number
                  ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
                  LIMIT 1

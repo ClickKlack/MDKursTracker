@@ -1,8 +1,10 @@
 <?php
-// GET  /api/recordings               – Erfassungen abrufen (gefiltert)
-// POST /api/recordings               – Neue Kursnummer-Erfassung speichern
-// PUT  /api/recordings/{id}          – Eigene Erfassung bearbeiten (Kursnummer + Kommentar)
-// GET  /api/recordings/{id}/route    – Laufweg einer Erfassung
+// GET    /api/recordings                  – Erfassungen abrufen (gefiltert)
+// POST   /api/recordings                  – Neue Kursnummer-Erfassung speichern
+// PUT    /api/recordings/{id}             – Eigene Erfassung bearbeiten (Kursnummer + Kommentar)
+// DELETE /api/recordings/{id}             – Eigene Erfassung soft-löschen (deleted_at setzen)
+// POST   /api/recordings/{id}/restore     – Soft-Delete rückgängig machen (Undo aus Snackbar)
+// GET    /api/recordings/{id}/route       – Laufweg einer Erfassung
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/lib/response.php';
@@ -12,10 +14,11 @@ require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/user_helpers.php';
 require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
+require_once dirname(__DIR__, 2) . '/lib/recording_helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Sub-Pfad erkennen: /api/recordings/{id}/route oder /api/recordings/{id}
+// Sub-Pfad erkennen: /api/recordings/{id}/route, .../restore oder /api/recordings/{id}
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 if (preg_match('#/api/recordings/(\d+)/route$#', $uri, $m)) {
@@ -25,11 +28,21 @@ if (preg_match('#/api/recordings/(\d+)/route$#', $uri, $m)) {
     handle_get_route((int) $m[1]);
 }
 
-if (preg_match('#/api/recordings/(\d+)$#', $uri, $m)) {
-    if ($method !== 'PUT') {
+if (preg_match('#/api/recordings/(\d+)/restore$#', $uri, $m)) {
+    if ($method !== 'POST') {
         json_error('Methode nicht erlaubt', 405);
     }
-    handle_put_recording((int) $m[1]);
+    handle_restore_recording((int) $m[1]);
+}
+
+if (preg_match('#/api/recordings/(\d+)$#', $uri, $m)) {
+    if ($method === 'PUT') {
+        handle_put_recording((int) $m[1]);
+    }
+    if ($method === 'DELETE') {
+        handle_delete_recording((int) $m[1]);
+    }
+    json_error('Methode nicht erlaubt', 405);
 }
 
 if ($method === 'GET') {
@@ -66,8 +79,8 @@ function handle_get_recordings(): never
     $pdo      = get_db();
     $periodId = isset($_GET['period_id']) ? (int) $_GET['period_id'] : get_active_period_id($pdo);
 
-    // Optionale Filter aufbauen
-    $where  = ['t.period_id = :period_id'];
+    // Optionale Filter aufbauen – soft-deleted Erfassungen niemals mitliefern
+    $where  = ['t.period_id = :period_id', 'r.deleted_at IS NULL'];
     $params = [':period_id' => $periodId];
 
     if (!empty($_GET['line'])) {
@@ -118,7 +131,7 @@ function handle_get_recordings(): never
                  (
                      SELECT r2.course_number
                      FROM ' . tbl('recordings') . ' r2
-                     WHERE r2.trip_id = t.id
+                     WHERE r2.trip_id = t.id AND r2.deleted_at IS NULL
                      GROUP BY r2.course_number
                      ORDER BY COUNT(*) DESC, MIN(r2.recorded_at) ASC
                      LIMIT 1
@@ -429,6 +442,25 @@ function handle_post_recording(): never
         'course'       => $body['courseNumber'],
     ]);
 
+    // Lazy-Cleanup: mit ~1 % Wahrscheinlichkeit soft-deleted Erfassungen
+    // > 30 Tage final entfernen. Fehler nur loggen (Cleanup ist best-effort).
+    try {
+        if (random_int(1, 100) === 1) {
+            $deleted = $pdo->exec(
+                'DELETE FROM ' . tbl('recordings') . '
+                  WHERE deleted_at IS NOT NULL
+                    AND deleted_at < UTC_TIMESTAMP() - INTERVAL 30 DAY'
+            );
+            if ($deleted > 0) {
+                get_logger()->info('Soft-Delete-Cleanup', ['removed' => $deleted]);
+            }
+        }
+    } catch (Throwable $e) {
+        get_logger()->warning('Soft-Delete-Cleanup fehlgeschlagen', [
+            'exception' => $e->getMessage(),
+        ]);
+    }
+
     json_response([
         'recordingId' => $recordingId,
         'tripId'      => $tripId,
@@ -479,29 +511,12 @@ function handle_put_recording(int $recordingId): never
 
     $pdo = get_db();
 
-    // Prüfen ob Erfassung existiert und dem anfragenden User gehört
-    // Außerdem: nur aktive Periode erlaubt (Bearbeitung historischer Daten gesperrt)
-    $stmt = $pdo->prepare(
-        'SELECT r.id, r.user_token, t.period_id
-           FROM ' . tbl('recordings') . ' r
-           JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
-          WHERE r.id = ?'
-    );
-    $stmt->execute([$recordingId]);
-    $rec = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Eigentümer/aktive-Periode-Check via Helper (gemeinsam mit DELETE/RESTORE)
+    $rec = assert_recording_modifiable($pdo, $recordingId, $token);
 
-    if (!$rec) {
-        json_error('Erfassung nicht gefunden', 404);
-    }
-
-    if ($rec['user_token'] !== $token) {
-        json_error('Keine Berechtigung für diese Erfassung', 403);
-    }
-
-    // Nur aktive Periode bearbeitbar
-    $activePeriodId = get_active_period_id($pdo);
-    if ((int) $rec['period_id'] !== $activePeriodId) {
-        json_error('Erfassungen älterer Perioden können nicht bearbeitet werden', 403);
+    // Bereits soft-gelöschte Erfassung kann nicht bearbeitet werden – erst Undo
+    if ($rec['deleted_at'] !== null) {
+        json_error('Erfassung ist gelöscht und kann nicht bearbeitet werden', 409);
     }
 
     // UPDATE zusammenstellen
@@ -525,6 +540,61 @@ function handle_put_recording(int $recordingId): never
         'recording_id' => $recordingId,
         'course'       => $body['courseNumber'] ?? null,
         'has_comment'  => $hasComment,
+    ]);
+
+    json_response(['ok' => true]);
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/recordings/{id}
+// ---------------------------------------------------------------------------
+
+function handle_delete_recording(int $recordingId): never
+{
+    $token = get_request_token();
+    $pdo   = get_db();
+
+    $rec = assert_recording_modifiable($pdo, $recordingId, $token);
+
+    // Bereits soft-gelöscht: idempotent als ok melden, damit der Client
+    // bei Doppelklicks oder Reconnects keinen Fehler sieht.
+    if ($rec['deleted_at'] !== null) {
+        json_response(['ok' => true, 'alreadyDeleted' => true]);
+    }
+
+    $pdo->prepare(
+        'UPDATE ' . tbl('recordings') . ' SET deleted_at = UTC_TIMESTAMP() WHERE id = ?'
+    )->execute([$recordingId]);
+
+    get_logger()->info('Erfassung soft-gelöscht', [
+        'recording_id' => $recordingId,
+    ]);
+
+    json_response(['ok' => true]);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/recordings/{id}/restore  – Undo zur Snackbar
+// ---------------------------------------------------------------------------
+
+function handle_restore_recording(int $recordingId): never
+{
+    $token = get_request_token();
+    $pdo   = get_db();
+
+    $rec = assert_recording_modifiable($pdo, $recordingId, $token);
+
+    if ($rec['deleted_at'] === null) {
+        // Restore auf einen aktiven Datensatz: keine Änderung nötig
+        json_response(['ok' => true, 'wasActive' => true]);
+    }
+
+    $pdo->prepare(
+        'UPDATE ' . tbl('recordings') . ' SET deleted_at = NULL WHERE id = ?'
+    )->execute([$recordingId]);
+
+    get_logger()->info('Erfassung wiederhergestellt', [
+        'recording_id' => $recordingId,
     ]);
 
     json_response(['ok' => true]);

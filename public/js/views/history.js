@@ -8,12 +8,19 @@
  *  4. Kennzeichnung ob Kursnummer manuell übersteuert
  *  5. Eigene Erfassungen hervorheben (isOwn)
  *  6. Eigene Erfassungen nachträglich bearbeiten (Kurs + Kommentar), nur aktive Periode
+ *  7. Eigene Erfassungen löschen (Soft-Delete) mit Undo-Snackbar; gleiche Kriterien wie 6.
  */
 
-import { getRecordings, getPeriods, getRecordingRoute, putRecording } from '../api.js';
+import {
+    getRecordings, getPeriods, getRecordingRoute,
+    putRecording, deleteRecording, restoreRecording,
+} from '../api.js';
 import { formatTime }                from '../utils/format.js';
 import { lineBadgeHtml }             from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix } from '../app.js';
+
+/** Aktive Snackbar samt Auto-Commit-Timer/Pending-Item; verhindert Stacking */
+let activeSnackbar = null;
 
 const DAY_TYPE_LABELS = {
     'MO-FR': 'Mo–Fr',
@@ -55,6 +62,8 @@ export async function render(container, params, context) {
 
 export function destroy() {
     if (filterDebounce) clearTimeout(filterDebounce);
+    // Offene Snackbar beim View-Wechsel sofort committen (Item endgültig entfernen)
+    if (activeSnackbar) activeSnackbar.commit();
     currentPeriodId = null;
     activePeriodId  = null;
     filterDebounce  = null;
@@ -206,13 +215,20 @@ function renderRecordingItem(rec, isActivePeriod) {
         ? `<span class="badge-manual" title="Kursnummer manuell durch Admin übersteuert">M</span>`
         : '';
 
-    // "Eigene" Erfassung: anderer Stil + Bearbeiten-Button (max. 60 Min. nach Erfassung)
-    const ownClass = rec.isOwn ? ' recording-item--own' : '';
-    const ageMs    = rec.recordedAt ? Date.now() - new Date(rec.recordedAt).getTime() : Infinity;
-    const editBtnHtml = (rec.isOwn && isActivePeriod && !isManual && ageMs < 60 * 60 * 1000)
+    // "Eigene" Erfassung: anderer Stil + Bearbeiten-/Löschen-Button (max. 60 Min. nach Erfassung)
+    const ownClass    = rec.isOwn ? ' recording-item--own' : '';
+    const ageMs       = rec.recordedAt ? Date.now() - new Date(rec.recordedAt).getTime() : Infinity;
+    const isMutable   = rec.isOwn && isActivePeriod && !isManual && ageMs < 60 * 60 * 1000;
+    const editBtnHtml = isMutable
         ? `<button class="btn btn-ghost btn-xs btn-edit-recording"
                    aria-label="Diese Erfassung bearbeiten">
                Bearbeiten
+           </button>`
+        : '';
+    const deleteBtnHtml = isMutable
+        ? `<button class="btn btn-ghost btn-xs btn-delete-recording"
+                   aria-label="Diese Erfassung löschen">
+               Löschen
            </button>`
         : '';
 
@@ -260,7 +276,9 @@ function renderRecordingItem(rec, isActivePeriod) {
                 ${differsHtml}
                 ${commentHtml}
             </div>
-            ${editBtnHtml ? `<div class="recording-footer">${editBtnHtml}</div>` : ''}
+            ${editBtnHtml || deleteBtnHtml
+                ? `<div class="recording-footer">${editBtnHtml}${deleteBtnHtml}</div>`
+                : ''}
             <div class="recording-route" hidden></div>
             <div class="recording-edit-panel" hidden></div>
         </li>`;
@@ -297,12 +315,22 @@ function handleListClick(e, container) {
         return;
     }
 
+    // Löschen-Button (Soft-Delete + Undo-Snackbar)
+    const delBtn = e.target.closest('.btn-delete-recording');
+    if (delBtn) {
+        e.stopPropagation();
+        const item = delBtn.closest('.recording-item');
+        if (item) handleDeleteClick(item, container);
+        return;
+    }
+
     // Laufweg-Toggle (bestehend)
     const item = e.target.closest('[data-recording-id]');
     if (!item) return;
 
-    // Klick innerhalb des Edit-Panels nicht weiterleiten
+    // Klick innerhalb des Edit-Panels oder Snackbar nicht weiterleiten
     if (e.target.closest('.recording-edit-panel')) return;
+    if (item.dataset.pendingDelete === '1') return;
 
     handleRouteToggle(item);
 }
@@ -494,6 +522,128 @@ function renderEditPanel(item, panel) {
             saveBtn.disabled = false;
         }
     });
+}
+
+// --- Soft-Delete + Undo-Snackbar --------------------------------------------
+
+async function handleDeleteClick(item, container) {
+    const recordingId = parseInt(item.dataset.recordingId, 10);
+    if (!Number.isFinite(recordingId) || item.dataset.pendingDelete === '1') return;
+
+    // Falls noch eine ältere Snackbar offen ist: deren Item endgültig committen,
+    // bevor wir ein neues Lösch-Pending starten – kein Stacking, keine Race.
+    if (activeSnackbar) activeSnackbar.commit();
+
+    // Optionales offenes Edit-Panel/Laufweg schließen
+    const editPanel = item.querySelector('.recording-edit-panel');
+    if (editPanel && !editPanel.hidden) {
+        editPanel.hidden = true;
+        editPanel.innerHTML = '';
+    }
+    const routeEl = item.querySelector('.recording-route');
+    if (routeEl && !routeEl.hidden) {
+        routeEl.hidden = true;
+        item.setAttribute('aria-expanded', 'false');
+    }
+
+    // Optimistisch ausblenden
+    item.style.display = 'none';
+    item.dataset.pendingDelete = '1';
+
+    try {
+        await deleteRecording(recordingId);
+    } catch (err) {
+        // Rollback der UI bei Backend-Fehler
+        item.style.display = '';
+        delete item.dataset.pendingDelete;
+        showErrorBanner(container, `Löschen fehlgeschlagen: ${err.message}`);
+        return;
+    }
+
+    showUndoSnackbar(
+        container,
+        'Erfassung gelöscht.',
+        async () => {
+            try {
+                await restoreRecording(recordingId);
+                item.style.display = '';
+                delete item.dataset.pendingDelete;
+            } catch (err) {
+                showErrorBanner(container, `Rückgängig fehlgeschlagen: ${err.message}`);
+            }
+        },
+        () => {
+            // Auto-Commit: Item endgültig aus DOM entfernen + Counter pflegen
+            item.remove();
+            decrementCount(container);
+        },
+    );
+}
+
+/**
+ * Zeigt eine Snackbar mit Undo-Button. Ältere Snackbar wird vorher committet.
+ * onUndo: Promise-fähiger Callback. Wenn aufgerufen, wird onCommit nicht ausgelöst.
+ * onCommit: Wird beim Auto-Dismiss (Timeout) aufgerufen.
+ */
+function showUndoSnackbar(container, message, onUndo, onCommit) {
+    const SNACKBAR_MS = 6000;
+
+    const bar = document.createElement('div');
+    bar.className = 'snackbar';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = `
+        <span class="snackbar-text">${escapeHtml(message)}</span>
+        <button type="button" class="snackbar-undo"
+                aria-label="Löschen rückgängig machen">Rückgängig</button>`;
+    container.appendChild(bar);
+
+    let committed = false;
+    const finish = () => {
+        if (committed) return;
+        committed = true;
+        clearTimeout(timer);
+        bar.remove();
+        if (activeSnackbar?.bar === bar) activeSnackbar = null;
+    };
+
+    const timer = setTimeout(() => {
+        if (committed) return;
+        finish();
+        onCommit?.();
+    }, SNACKBAR_MS);
+
+    bar.querySelector('.snackbar-undo')?.addEventListener('click', async () => {
+        if (committed) return;
+        finish();
+        await onUndo?.();
+    });
+
+    activeSnackbar = {
+        bar,
+        commit: () => {
+            if (committed) return;
+            finish();
+            onCommit?.();
+        },
+    };
+}
+
+function decrementCount(container) {
+    const countEl = container.querySelector('.history-count');
+    if (!countEl) return;
+    const next = container.querySelectorAll('.recording-item').length;
+    countEl.innerHTML = `${next}&nbsp;Erfassung${next !== 1 ? 'en' : ''}`;
+}
+
+function showErrorBanner(container, message) {
+    const slot = container.querySelector('#recordings-list');
+    if (!slot) return;
+    const banner = document.createElement('div');
+    banner.className = 'error-box';
+    banner.setAttribute('role', 'alert');
+    banner.textContent = message;
+    slot.prepend(banner);
+    setTimeout(() => banner.remove(), 4000);
 }
 
 // --- Hilfsfunktionen ---------------------------------------------------------

@@ -23,7 +23,7 @@ $stmt = $pdo->query(
          COUNT(r.id) AS recording_count
      FROM ' . tbl('schedule_periods') . ' p
      LEFT JOIN ' . tbl('trips') . ' t ON t.period_id = p.id
-     LEFT JOIN ' . tbl('recordings') . ' r ON r.trip_id = t.id
+     LEFT JOIN ' . tbl('recordings') . ' r ON r.trip_id = t.id AND r.deleted_at IS NULL
      GROUP BY p.id
      ORDER BY p.id DESC'
 );

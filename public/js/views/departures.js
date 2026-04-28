@@ -263,7 +263,11 @@ function handleDepartureSelect(e) {
         serviceNr:             dep.serviceNr,
         line:                  dep.line,
         direction:             dep.direction,
+        // Lang-ID des konkreten Bahnsteigs (Heuristik-Lookup gegen route_stops)
         stopId:                dep.stopId ?? currentStopId,
+        // Kurz-ID der Haltestelle aus der ursprünglichen Suche (HAFAS-departures
+        // braucht diese Form). Wird beim Rücksprung in die Abfahrtstafel benutzt.
+        searchStopId:          currentStopId,
         stopName:              currentStopName,
         serviceDate:           dep.departurePlanned ? getServiceDate(dep.departurePlanned) : '',
         departurePlanned:      dep.departurePlanned,

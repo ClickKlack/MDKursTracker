@@ -57,7 +57,7 @@ $stmtTrips = $pdo->prepare(
              (
                  SELECT r2.course_number
                  FROM ' . tbl('recordings') . ' r2
-                 WHERE r2.trip_id = t.id
+                 WHERE r2.trip_id = t.id AND r2.deleted_at IS NULL
                  GROUP BY r2.course_number
                  ORDER BY COUNT(*) DESC, MIN(r2.recorded_at) ASC
                  LIMIT 1

@@ -1,0 +1,42 @@
+meta {
+  name: Recording – DELETE Soft-Löschen
+  type: http
+  seq: 33
+}
+
+delete {
+  url: {{baseUrl}}/api/recordings/{{lastRecordingId}}
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Soft-Delete einer eigenen Erfassung. Voraussetzung: 07-Recordings-POST mit
+  demselben X-User-Token ausgeführt (lastRecordingId wird dabei gesetzt).
+
+  Gleiche Sichtbarkeits-/Berechtigungs-Kriterien wie PUT (29):
+    Eigene Erfassung, aktive Periode, beliebiges Alter (60-Min-Limit gilt
+    nur im Frontend für die Sichtbarkeit des Löschen-Buttons).
+
+  Wirkung: setzt deleted_at = UTC_TIMESTAMP(); GET /api/recordings filtert
+  diesen Datensatz fortan aus, ebenso die Mehrheits-Kursnummer-Aggregation
+  in /api/trips, /api/trip, /api/departures und Admin-Endpunkten.
+
+  Fehlertest:
+    Kein Token → 401
+    Token gehört zu anderer Erfassung → 403
+    Erfassung in älterer Periode → 403
+    Nicht gefunden → 404
+    Bereits soft-gelöscht → 200 { ok: true, alreadyDeleted: true } (idempotent)
+
+  Anschließend: 34-Recording-RESTORE für den Undo-Pfad.
+}

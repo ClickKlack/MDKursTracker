@@ -1211,27 +1211,42 @@ body {
     font-style: italic;
 }
 
-/* Bearbeiten-Button – immer rechts unten in der Karte */
+/* Bearbeiten-/Löschen-Buttons – immer rechts unten in der Karte */
 
 .recording-footer {
     display: flex;
     justify-content: flex-end;
+    gap: 6px;
     margin-top: 6px;
 }
 
-.btn-edit-recording {
+.btn-edit-recording,
+.btn-delete-recording {
     padding: 3px 10px;
     font-size: 0.75rem;
     border-radius: 12px;
-    border: 1px solid var(--color-primary);
     background: transparent;
-    color: var(--color-primary);
     cursor: pointer;
     flex-shrink: 0;
 }
 
+.btn-edit-recording {
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+}
+
 .btn-edit-recording:hover {
     background: var(--color-primary);
+    color: #fff;
+}
+
+.btn-delete-recording {
+    border: 1px solid var(--color-error);
+    color: var(--color-error);
+}
+
+.btn-delete-recording:hover {
+    background: var(--color-error);
     color: #fff;
 }
 
@@ -1300,4 +1315,57 @@ body {
 /* Stellt sicher dass 5 Nav-Items gleichmäßig aufgeteilt werden */
 #app-nav {
     /* Bereits via grid oder flex im bestehenden CSS – kein Overwrite nötig */
+}
+
+/* --- Undo-Snackbar (Löschen im Verlauf) ----------------------------------- */
+
+.snackbar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0) + 72px);
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    background: var(--color-text);
+    color: var(--color-surface);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    font-size: 0.9rem;
+    max-width: calc(100vw - 32px);
+    z-index: 1000;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .snackbar {
+        animation: snackbar-slide-in 0.18s ease-out;
+    }
+}
+
+@keyframes snackbar-slide-in {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to   { opacity: 1; transform: translate(-50%, 0);    }
+}
+
+.snackbar-text {
+    flex: 1;
+}
+
+.snackbar-undo {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--color-accent);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.snackbar-undo:hover,
+.snackbar-undo:focus-visible {
+    background: var(--color-accent);
+    color: var(--color-text);
+    outline: none;
 }

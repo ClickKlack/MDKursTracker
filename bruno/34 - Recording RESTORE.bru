@@ -1,0 +1,37 @@
+meta {
+  name: Recording – POST Restore (Undo)
+  type: http
+  seq: 34
+}
+
+post {
+  url: {{baseUrl}}/api/recordings/{{lastRecordingId}}/restore
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-Token: {{userToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Soft-Delete rückgängig machen. Wird vom Frontend aus dem "Rückgängig"-Button
+  der Snackbar im Verlauf-View aufgerufen.
+
+  Voraussetzung: 33-Recording-DELETE wurde zuvor für dieselbe lastRecordingId
+  ausgeführt (deleted_at gesetzt). Restore auf bereits aktiven Datensatz ist
+  idempotent: { ok: true, wasActive: true }.
+
+  Fehlertest (analog zu DELETE):
+    Kein Token → 401
+    Token gehört zu anderer Erfassung → 403
+    Erfassung in älterer Periode → 403
+    Nicht gefunden → 404
+
+  Anschließend: 06-Recordings-GET muss den Datensatz wieder enthalten.
+}

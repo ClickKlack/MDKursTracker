@@ -311,6 +311,11 @@ GET /api/recordings?line=6&day_type=MO-FR
 Der optionale Header `X-User-Token` (User-Token aus localStorage) aktiviert das `isOwn`-Feld —
 der Token selbst erscheint nie in der Antwort.
 
+Soft-gelöschte Erfassungen (`deleted_at` gesetzt; siehe `DELETE /api/recordings/{id}`)
+werden in dieser Liste und in allen aggregierten Kursnummer-Berechnungen
+(`/api/trips`, `/api/trip`, `/api/departures`, Admin-Endpunkte) ausgeblendet.
+Endgültig entfernt werden sie via Lazy-Cleanup im POST-Endpunkt nach 30 Tagen.
+
 **Beispiel-Response:**
 ```json
 [
@@ -362,6 +367,64 @@ Nur für Erfassungen der aktiven Periode. Erfordert Header `X-User-Token`.
 **Erfolg (200):**
 ```json
 { "ok": true }
+```
+
+**Fehler-Beispiele:**
+- `401` – `X-User-Token`-Header fehlt oder ungültig
+- `403` – Erfassung gehört einem anderen User
+- `403` – Erfassung liegt in einer abgeschlossenen Periode
+- `404` – Erfassung nicht gefunden
+- `409` – Erfassung ist soft-gelöscht (erst Restore aufrufen)
+
+---
+
+### DELETE `/api/recordings/{id}`
+
+Eigene Erfassung soft-löschen. Setzt `deleted_at = UTC_TIMESTAMP()`; der Datensatz
+verschwindet aus allen Lese-Endpunkten, kann aber via `POST /api/recordings/{id}/restore`
+wiederhergestellt werden (Undo aus der Snackbar im Verlauf-View). Datenbank-Bereinigung
+erfolgt via Lazy-Cleanup im POST-Endpunkt nach 30 Tagen.
+
+Identische Berechtigungsregeln wie `PUT`: nur eigene Erfassung in der aktiven Periode.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Erfolg (200):**
+```json
+{ "ok": true }
+```
+
+Bei bereits soft-gelöschtem Datensatz idempotent:
+```json
+{ "ok": true, "alreadyDeleted": true }
+```
+
+**Fehler-Beispiele:**
+- `401` – `X-User-Token`-Header fehlt oder ungültig
+- `403` – Erfassung gehört einem anderen User
+- `403` – Erfassung liegt in einer abgeschlossenen Periode
+- `404` – Erfassung nicht gefunden
+
+---
+
+### POST `/api/recordings/{id}/restore`
+
+Soft-Delete rückgängig machen (Undo). Wird vom Frontend aus dem
+„Rückgängig"-Button der Snackbar aufgerufen, kann aber auch ein
+versehentlich gelöschtes Recording manuell wiederherstellen.
+
+Identische Berechtigungsregeln wie `DELETE`.
+
+**Request-Header:** `X-User-Token: <token>`
+
+**Erfolg (200):**
+```json
+{ "ok": true }
+```
+
+Auf einen bereits aktiven Datensatz idempotent:
+```json
+{ "ok": true, "wasActive": true }
 ```
 
 **Fehler-Beispiele:**

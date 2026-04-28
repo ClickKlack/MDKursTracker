@@ -73,14 +73,14 @@ function handle_get_trips(): never
                  (
                      SELECT r2.course_number
                      FROM ' . tbl('recordings') . ' r2
-                     WHERE r2.trip_id = t.id
+                     WHERE r2.trip_id = t.id AND r2.deleted_at IS NULL
                      GROUP BY r2.course_number
                      ORDER BY COUNT(*) DESC, MIN(r2.recorded_at) ASC
                      LIMIT 1
                  )
              ) AS active_course_number
          FROM ' . tbl('trips') . ' t
-         LEFT JOIN ' . tbl('recordings') . '  r   ON r.trip_id = t.id
+         LEFT JOIN ' . tbl('recordings') . '  r   ON r.trip_id = t.id AND r.deleted_at IS NULL
          LEFT JOIN ' . tbl('route_stops') . ' rs1 ON rs1.trip_id = t.id AND rs1.sequence = 1
          LEFT JOIN ' . tbl('stops') . '        st1 ON st1.hafas_id = rs1.stop_id
          WHERE t.period_id = ?
@@ -229,7 +229,7 @@ function handle_post_trip_touch(): never
     $courseStmt = $pdo->prepare(
         'SELECT r.course_number
          FROM ' . tbl('recordings') . ' r
-         WHERE r.trip_id = ?
+         WHERE r.trip_id = ? AND r.deleted_at IS NULL
          GROUP BY r.course_number
          ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
          LIMIT 1'
