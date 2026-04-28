@@ -917,8 +917,16 @@ body {
 .info-update-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 12px;
     margin-top: 12px;
+}
+
+/* Erweitert-Karte im Profil: Aktions-Buttons mittig, Erklärungstext bleibt
+   linksbündig lesbar */
+.profile-advanced-actions {
+    text-align: center;
+    margin-top: 8px;
 }
 
 .info-link {

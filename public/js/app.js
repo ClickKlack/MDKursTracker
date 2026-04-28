@@ -247,14 +247,32 @@ async function handleRouteChange() {
     try {
         const mod = await import(viewDef.module);
         currentViewModule = mod;
+        // Erfolgreich geladen → Reload-Sentinel aus früherem Mismatch räumen,
+        // damit künftige Updates wieder einen Selbstheil-Reload bekommen können.
+        sessionStorage.removeItem('mdkt:moduleReloadAttempted');
         await mod.render(main, params, { activePeriod, appConfig });
     } catch (err) {
         // Modul noch nicht implementiert (404) oder Laufzeitfehler
         if (err?.message?.includes('Failed to fetch') || err instanceof TypeError) {
             renderPlaceholder(main, viewDef.title);
-        } else {
-            renderError(main, `View konnte nicht geladen werden: ${err.message}`);
+            console.warn(`View "${view}" nicht ladbar:`, err);
+            return;
         }
+        // SW-Update-Race: ein neu geladenes View-Modul referenziert einen
+        // Export, den die im Tab bereits geladene app.js nicht kennt – passiert,
+        // wenn ein neuer SW mid-session aktiv wird. Einmalig reloaden, damit der
+        // Modulgraph konsistent aus dem aktuellen Cache neu aufgebaut wird.
+        // Sentinel verhindert eine Endlosschleife, falls der Mismatch tatsächlich
+        // serverseitig persistiert.
+        const isModuleMismatch = err instanceof SyntaxError
+            && /export/i.test(err.message ?? '');
+        if (isModuleMismatch && !sessionStorage.getItem('mdkt:moduleReloadAttempted')) {
+            sessionStorage.setItem('mdkt:moduleReloadAttempted', '1');
+            console.warn('Modul-Mismatch erkannt, Seite wird neu geladen:', err);
+            window.location.reload();
+            return;
+        }
+        renderError(main, `View konnte nicht geladen werden: ${err.message}`);
         console.warn(`View "${view}" nicht ladbar:`, err);
     }
 }

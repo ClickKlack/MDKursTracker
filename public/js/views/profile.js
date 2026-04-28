@@ -8,7 +8,7 @@
  */
 
 import { postUserInit, getUserProfile, putUserProfile } from '../api.js';
-import { escapeHtml, swUpdateWaiting, applySwUpdate } from '../app.js';
+import { escapeHtml, swUpdateWaiting, applySwUpdate, showActionSnackbar } from '../app.js';
 
 export async function render(container) {
     const token     = localStorage.getItem('user_token') ?? '';
@@ -64,11 +64,79 @@ export async function render(container) {
                     zu kontaktieren.
                 </p>
             </div>
+            <div class="card profile-advanced-card">
+                <h2 class="section-title">Erweitert</h2>
+                <div class="form-group">
+                    <p class="text-small text-muted profile-id-hint" style="margin-top:0">
+                        Sicherungskopie deines App-Tokens. Falls du Browser-Daten
+                        löschen musst, kannst du den Token später per DevTools wieder
+                        in <code>localStorage.user_token</code> eintragen.
+                    </p>
+                    <div class="profile-advanced-actions">
+                        <button id="btn-copy-token" type="button" class="btn btn-secondary btn-sm">
+                            Token in Zwischenablage kopieren
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <p class="text-small text-muted profile-id-hint" style="margin-top:0">
+                        Setzt Service Worker und Modul-Cache zurück, falls die App
+                        nach einem Update fehlerhaft wirkt. Token, Name und alle
+                        Erfassungen bleiben erhalten.
+                    </p>
+                    <div class="profile-advanced-actions">
+                        <button id="btn-reset-cache" type="button" class="btn btn-secondary btn-sm">
+                            App-Cache zurücksetzen
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>`;
 
     // Update-Button verdrahten
     container.querySelector('#btn-sw-update')?.addEventListener('click', () => {
         applySwUpdate();
+    });
+
+    // Token-Kopieren-Button: liest user_token aus localStorage und schiebt ihn
+    // in die Zwischenablage. Fallback über prompt(), wenn die Clipboard-API
+    // nicht verfügbar ist (z. B. unsicherer Kontext ohne HTTPS).
+    container.querySelector('#btn-copy-token')?.addEventListener('click', async () => {
+        const t = localStorage.getItem('user_token') ?? '';
+        if (!t) {
+            showActionSnackbar('Kein Token vorhanden', /* isError= */ true);
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(t);
+            showActionSnackbar('Token kopiert');
+        } catch {
+            window.prompt('Token (manuell kopieren):', t);
+        }
+    });
+
+    // Cache-Reset: löscht alle SW-Caches und deregistriert den Service Worker,
+    // ohne localStorage anzufassen. Heilung bei mid-session-Modul-Mismatches,
+    // ohne dass der Nutzer seine Identität (user_token) verliert.
+    container.querySelector('#btn-reset-cache')?.addEventListener('click', async () => {
+        const ok = window.confirm(
+            'App-Cache zurücksetzen?\n\nToken und Erfassungen bleiben erhalten. '
+            + 'Die App lädt sich danach neu.'
+        );
+        if (!ok) return;
+        try {
+            if ('caches' in self) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            if (navigator.serviceWorker) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister()));
+            }
+        } catch (err) {
+            console.warn('Cache-Reset teilweise fehlgeschlagen:', err);
+        }
+        window.location.reload();
     });
 
     // Falls das Update erst nach dem Rendern verfügbar wird
