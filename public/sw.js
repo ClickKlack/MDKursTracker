@@ -8,7 +8,7 @@
  *              Navigationsanfragen → App-Shell aus Cache (SPA-Fallback)
  */
 
-const CACHE_VERSION = 'v30';
+const CACHE_VERSION = 'v31';
 const CACHE_NAME = `mdkurstracker-shell-${CACHE_VERSION}`;
 
 /** Ressourcen, die beim Install gecacht werden */
@@ -40,7 +40,23 @@ self.addEventListener('install', event => {
     // Die Seite lädt sich via controllerchange in app.js automatisch neu.
     self.skipWaiting();
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+        caches.open(CACHE_NAME).then(cache =>
+            // Bewusst NICHT cache.addAll(): das nutzt den HTTP-Browser-Cache mit
+            // und kann alte Module mit langem max-age in den neuen SW-Cache
+            // packen – der Cache trägt dann den richtigen Versions-Namen, hat
+            // aber inkonsistenten Inhalt (Android/Chrome-Disk-Cache ist hier
+            // besonders zäh). { cache: 'reload' } erzwingt einen Roundtrip
+            // zum Server und liefert garantiert die deployte Version.
+            Promise.all(APP_SHELL.map(url =>
+                fetch(new Request(url, { cache: 'reload' }))
+                    .then(resp => {
+                        if (!resp.ok) {
+                            throw new Error(`SW install fetch ${url} → ${resp.status}`);
+                        }
+                        return cache.put(url, resp);
+                    })
+            ))
+        )
     );
 });
 
