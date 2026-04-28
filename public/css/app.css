@@ -630,6 +630,58 @@ body {
 
 .departure-course {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Reservierter Platz für den Bestätigen-Button. Wird immer gerendert (auch
+   leer), damit die Kursnummer-Badges in jeder Zeile auf gleicher x-Position
+   sitzen und untereinander bündig sind. Breite muss zur .course-confirm-btn
+   passen. */
+.course-confirm-slot {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Bestätigen-Button: löst eine direkte Erfassung der angezeigten Kursnummer
+   aus, ohne dass die Capture-Maske geöffnet werden muss (Issue #13). */
+.course-confirm-btn {
+    background: transparent;
+    border: 1px solid var(--color-success);
+    color: var(--color-success);
+    border-radius: 999px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s;
+}
+
+.course-confirm-btn:hover,
+.course-confirm-btn:focus-visible {
+    background: var(--color-success);
+    color: #fff;
+    outline: none;
+}
+
+.course-confirm-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.course-confirm-btn.is-pending {
+    background: var(--color-success);
+    color: #fff;
 }
 
 .dep-time {
@@ -1368,4 +1420,22 @@ body {
     background: var(--color-accent);
     color: var(--color-text);
     outline: none;
+}
+
+/* Bestätigungs-Toast (Abfahrtssicht): farbige Snackbar-Variante mit Auto-Dismiss,
+   ohne Undo-Button (Issue #13). */
+.dep-confirm-toast--success {
+    background: var(--color-success);
+    color: #fff;
+}
+
+.dep-confirm-toast--error {
+    background: var(--color-error);
+    color: #fff;
+}
+
+.dep-confirm-toast .dep-confirm-toast-icon {
+    display: inline-block;
+    margin-right: 6px;
+    font-weight: 700;
 }

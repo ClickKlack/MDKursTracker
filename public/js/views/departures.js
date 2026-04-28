@@ -9,7 +9,7 @@
  *  5. Automatische Aktualisierung alle 30 Sekunden
  */
 
-import { getDepartures }                          from '../api.js';
+import { getDepartures, postRecording }           from '../api.js';
 import { formatTime, calcDelay, getServiceDate }  from '../utils/format.js';
 import { lineBadgeHtml }                          from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix }            from '../app.js';
@@ -21,12 +21,16 @@ let refreshTimer = null;
 let currentStopId   = null;
 let currentStopName = null;
 
+/** Aktiver View-Container (für Refresh aus Event-Handlern, die kein Closure haben) */
+let currentContainer = null;
+
 /** Zuletzt geladene Abfahrten (für den Click-Handler via Index) */
 let storedDepartures = [];
 
 export async function render(container, params, context) {
-    currentStopId   = params.get('stopId');
-    currentStopName = params.get('stopName') ?? currentStopId ?? '';
+    currentStopId    = params.get('stopId');
+    currentStopName  = params.get('stopName') ?? currentStopId ?? '';
+    currentContainer = container;
 
     // Kein stopId → direkt zu #nearby weiterleiten
     if (!currentStopId) {
@@ -65,7 +69,11 @@ export function destroy() {
 
     currentStopId    = null;
     currentStopName  = null;
+    currentContainer = null;
     storedDepartures = [];
+
+    // Offene Bestätigungs-Toasts entfernen, sobald die View verlassen wird
+    document.querySelectorAll('.dep-confirm-toast').forEach(t => t.remove());
 }
 
 // --- Laden & Rendern --------------------------------------------------------
@@ -183,7 +191,26 @@ function renderDepartureItem(dep, idx) {
     //   recorded  → blau  (Mehrheit aus Erfassungen)
     //   heuristic → orange (route_stops-Fallback, unsicher)
     //   null      → grau  ("noch nicht erfasst")
-    let courseHtml;
+    // Bestätigen-Button: nur bei nicht-ausgefallenen Fahrten mit bekanntem Kurs.
+    // Der Button löst eine reguläre Erfassung aus (POST /api/recordings),
+    // ohne dass die Capture-Maske geöffnet werden muss. Der Slot-Container
+    // wird immer gerendert (auch leer), damit die Kursnummer-Badges aller
+    // Zeilen vertikal bündig untereinander stehen.
+    const showConfirm = dep.activeCourseNumber && !dep.cancelled;
+    const confirmBtnHtml = showConfirm ? `
+        <button type="button" class="course-confirm-btn"
+                data-confirm-idx="${idx}"
+                aria-label="Kurs ${escapeHtml(dep.activeCourseNumber)} bestätigen"
+                title="Kurs ${escapeHtml(dep.activeCourseNumber)} bestätigen">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="3"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+        </button>` : '';
+    const confirmSlot = `<span class="course-confirm-slot">${confirmBtnHtml}</span>`;
+
+    let badgeHtml;
     if (dep.activeCourseNumber) {
         const source = dep.courseSource ?? 'recorded';
         const cls = source === 'manual'    ? 'manual'
@@ -192,17 +219,18 @@ function renderDepartureItem(dep, idx) {
         const title = source === 'manual'    ? `Manuelle Kursnummer (${dep.activeCourseNumber})`
                     : source === 'heuristic' ? `Vermutete Kursnummer aus Plan-Daten (${dep.activeCourseNumber})`
                     :                          `Bekannte Kursnummer (${dep.activeCourseNumber})`;
-        courseHtml = `
+        badgeHtml = `
             <span class="course-number ${cls}" title="${escapeHtml(title)}">
                 ${escapeHtml(dep.activeCourseNumber)}
             </span>`;
     } else {
-        courseHtml = `
+        badgeHtml = `
             <span class="course-number unknown"
                   title="Kursnummer noch nicht erfasst">
                 ??
             </span>`;
     }
+    const courseHtml = confirmSlot + badgeHtml;
 
     const ariaLabel = [
         `Linie ${dep.line}`,
@@ -243,6 +271,15 @@ function renderDepartureItem(dep, idx) {
 function handleDepartureSelect(e) {
     // Defensiv: View nicht mehr aktiv (z. B. durch Zombie-Timer nach destroy())
     if (!currentStopId) return;
+
+    // Bestätigen-Button hat Vorrang vor dem Capture-Flow der Card.
+    // Klick auf den Button löst eine direkte Erfassung aus, ohne #capture zu öffnen.
+    const confirmBtn = e.target.closest('[data-confirm-idx]');
+    if (confirmBtn) {
+        const dep = storedDepartures[parseInt(confirmBtn.dataset.confirmIdx, 10)];
+        if (dep) handleConfirmCourse(dep, confirmBtn);
+        return;
+    }
 
     const item = e.target.closest('[data-idx]');
     if (!item) return;
@@ -286,4 +323,69 @@ function handleDepartureKeydown(e) {
         e.preventDefault();
         handleDepartureSelect(e);
     }
+}
+
+/**
+ * Direkte Bestätigung der angezeigten Kursnummer (Issue #13).
+ * Sendet eine reguläre Erfassung über POST /api/recordings – das Backend
+ * lädt den Trip selbst, berechnet path-/schedule-Fingerprint und legt
+ * recording + route_stops an. Identisch zum Erfassungs-Flow in capture.js,
+ * nur ohne Zwischenschritt durch die Folgemaske.
+ */
+async function handleConfirmCourse(dep, btnEl) {
+    if (btnEl.disabled) return;
+    btnEl.disabled = true;
+    btnEl.classList.add('is-pending');
+
+    try {
+        await postRecording({
+            hafasTripId:      dep.hafasTripId,
+            serviceNr:        dep.serviceNr,
+            line:             dep.line,
+            direction:        dep.direction,
+            // Lang-ID des konkreten Bahnsteigs (entspricht pendingCapture.stopId)
+            stopId:           dep.stopId ?? currentStopId,
+            serviceDate:      getServiceDate(dep.departurePlanned),
+            departurePlanned: dep.departurePlanned,
+            departureActual:  dep.departureActual ?? null,
+            courseNumber:     dep.activeCourseNumber,
+        });
+
+        // Erfolgs-Toast überlebt den Re-Render, weil er an document.body hängt.
+        // Liste danach leise neu laden – damit eine bisher heuristische Quelle
+        // auf "recorded" wechselt und der Refresh-Timer nicht zwischenfunkt.
+        showConfirmToast(`Kurs ${dep.activeCourseNumber} bestätigt`, /* isError= */ false);
+        if (currentContainer) {
+            await loadAndRender(currentContainer, /* quiet= */ true);
+        }
+    } catch (err) {
+        showConfirmToast(`Bestätigung fehlgeschlagen: ${err.message}`, /* isError= */ true);
+        btnEl.disabled = false;
+        btnEl.classList.remove('is-pending');
+    }
+}
+
+/**
+ * Kurzer Auto-Dismiss-Toast unten am Viewport, im Stil der bestehenden
+ * Snackbar (history.js / .snackbar). Lebt an document.body und bleibt dadurch
+ * sichtbar, auch wenn der View-Container neu gerendert wird.
+ */
+function showConfirmToast(message, isError) {
+    // Nur einen Toast gleichzeitig zeigen
+    document.querySelectorAll('.dep-confirm-toast').forEach(t => t.remove());
+
+    const bar = document.createElement('div');
+    bar.className = 'snackbar dep-confirm-toast '
+                  + (isError ? 'dep-confirm-toast--error' : 'dep-confirm-toast--success');
+    bar.setAttribute('role', isError ? 'alert' : 'status');
+    bar.innerHTML = isError
+        ? `<span class="snackbar-text">${escapeHtml(message)}</span>`
+        : `<span class="snackbar-text">
+               <span class="dep-confirm-toast-icon" aria-hidden="true">✓</span>
+               ${escapeHtml(message)}
+           </span>`;
+    document.body.appendChild(bar);
+
+    const ms = isError ? 4500 : 2800;
+    setTimeout(() => bar.remove(), ms);
 }
