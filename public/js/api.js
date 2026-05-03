@@ -196,15 +196,21 @@ export async function restoreRecording(recordingId) {
 }
 
 /**
- * Erfassungen abrufen, optional gefiltert.
+ * Erfassungen abrufen, optional gefiltert und paginiert.
+ *
+ * Antwort: `{ items, total, limit, offset, hasMore }`. `items` sind die
+ * Datensätze der angefragten Seite (sortiert: neueste zuerst, stabil per id).
+ *
  * @param {{
  *   period_id?: number,
  *   line?:      string,
  *   day_type?:  string,
  *   date_from?: string,
- *   date_to?:   string
+ *   date_to?:   string,
+ *   limit?:     number,
+ *   offset?:    number
  * }} [filters={}]
- * @returns {Promise<Array>}
+ * @returns {Promise<{items:Array, total:number, limit:number, offset:number, hasMore:boolean}>}
  */
 export async function getRecordings(filters = {}) {
     const params = new URLSearchParams(

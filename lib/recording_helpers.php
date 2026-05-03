@@ -42,6 +42,38 @@ function recording_modifiable_reason(?array $row, ?string $token, int $activePer
 }
 
 /**
+ * Reine Logik-Funktion: ermittelt limit/offset für die paginierte
+ * Erfassungs-Liste. Clamped negative Werte und übersteuert das Limit
+ * gegen einen konfigurierbaren Maximalwert. Ungültige Eingaben (nicht-numerisch)
+ * fallen auf die Defaults zurück.
+ *
+ * Ausgelagert für PHPUnit (kein DB-Zugriff nötig).
+ *
+ * @param array<string,mixed> $query    Roher $_GET-ähnlicher Array
+ * @param int                 $default  Default für `limit`, wenn nicht gesetzt
+ * @param int                 $max      Obergrenze für `limit`
+ *
+ * @return array{limit:int, offset:int}
+ */
+function parse_pagination_params(array $query, int $default = 50, int $max = 200): array
+{
+    $limit = $default;
+    if (isset($query['limit']) && is_numeric($query['limit'])) {
+        $limit = (int) $query['limit'];
+        if ($limit < 1)    $limit = 1;
+        if ($limit > $max) $limit = $max;
+    }
+
+    $offset = 0;
+    if (isset($query['offset']) && is_numeric($query['offset'])) {
+        $offset = (int) $query['offset'];
+        if ($offset < 0) $offset = 0;
+    }
+
+    return ['limit' => $limit, 'offset' => $offset];
+}
+
+/**
  * Lädt die Erfassungs-Stammdaten und ruft bei Verstoß json_error() auf.
  * Wird von PUT, DELETE und POST .../restore verwendet.
  *

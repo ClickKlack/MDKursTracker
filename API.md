@@ -303,7 +303,7 @@ fehlt, wenn keine Ersetzung stattfand.
 
 ### GET `/api/recordings`
 
-Alle Erfassungen abrufen, optional gefiltert.
+Erfassungen abrufen, optional gefiltert und paginiert (Infinite Scroll im Verlauf).
 
 **Parameter:**
 
@@ -314,10 +314,12 @@ Alle Erfassungen abrufen, optional gefiltert.
 | `day_type` | string | nein | Filter: MO-FR / SA / SO / SF (FT nur in Altdaten) |
 | `date_from` | string | nein | Datumsfilter von (YYYY-MM-DD) |
 | `date_to` | string | nein | Datumsfilter bis (YYYY-MM-DD) |
+| `limit` | int | nein | 1..200, Default 50 |
+| `offset` | int | nein | >= 0, Default 0 |
 
 **Beispiel-Request:**
 ```
-GET /api/recordings?line=6&day_type=MO-FR
+GET /api/recordings?line=6&day_type=MO-FR&limit=50&offset=0
 ```
 
 Der optionale Header `X-User-Token` (User-Token aus localStorage) aktiviert das `isOwn`-Feld —
@@ -328,34 +330,49 @@ werden in dieser Liste und in allen aggregierten Kursnummer-Berechnungen
 (`/api/trips`, `/api/trip`, `/api/departures`, Admin-Endpunkte) ausgeblendet.
 Endgültig entfernt werden sie via Lazy-Cleanup im POST-Endpunkt nach 30 Tagen.
 
+Die Sortierung ist `recorded_at DESC, id DESC` (stabil — wichtig für die Pagination,
+sonst können Einträge bei gleicher `recorded_at` zwischen zwei Seiten doppelt
+oder gar nicht erscheinen).
+
 **Beispiel-Response:**
 ```json
-[
-  {
-    "id": 142,
-    "recordedAt": "2026-03-24T14:33:45Z",
-    "line": "6",
-    "direction": "Lübecker Str.",
-    "serviceNr": "41058",
-    "dayType": "MO-FR",
-    "serviceDate": "2026-03-24",
-    "stopId": "de:15003:4000",
-    "stop": "Magdeburg, Hauptbahnhof",
-    "departurePlanned": "2026-03-24T14:32:00Z",
-    "departureActual":  "2026-03-24T14:33:00Z",
-    "courseNumber": "07",
-    "activeCourseNumber": "07",
-    "manualCourseNumber": null,
-    "comment": null,
-    "isOwn": false
-  }
-]
+{
+  "items": [
+    {
+      "id": 142,
+      "recordedAt": "2026-03-24T14:33:45Z",
+      "line": "6",
+      "direction": "Lübecker Str.",
+      "serviceNr": "41058",
+      "dayType": "MO-FR",
+      "serviceDate": "2026-03-24",
+      "stopId": "de:15003:4000",
+      "stop": "Magdeburg, Hauptbahnhof",
+      "departurePlanned": "2026-03-24T14:32:00Z",
+      "departureActual":  "2026-03-24T14:33:00Z",
+      "courseNumber": "07",
+      "activeCourseNumber": "07",
+      "manualCourseNumber": null,
+      "comment": null,
+      "isOwn": false
+    }
+  ],
+  "total":   1234,
+  "limit":   50,
+  "offset":  0,
+  "hasMore": true
+}
 ```
 
 | Feld | Typ | Beschreibung |
 |---|---|---|
-| `comment` | string\|null | Kommentar zur Erfassung |
-| `isOwn` | bool | `true` wenn `X-User-Token` mit dem erfassenden User übereinstimmt |
+| `items` | array | Datensätze der aktuellen Seite |
+| `total` | int | Gesamtzahl der Treffer (alle Seiten) |
+| `limit` | int | Tatsächlich angewendetes Limit (geclampt) |
+| `offset` | int | Echo des Request-Offsets |
+| `hasMore` | bool | `(offset + items.length) < total` |
+| `items[].comment` | string\|null | Kommentar zur Erfassung |
+| `items[].isOwn` | bool | `true` wenn `X-User-Token` mit dem erfassenden User übereinstimmt |
 
 ---
 

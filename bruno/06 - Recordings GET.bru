@@ -16,18 +16,24 @@ params:query {
   ~day_type: MO-FR
   ~date_from: 2026-01-01
   ~date_to: 2026-12-31
+  ~limit: 50
+  ~offset: 0
 }
 
 assert {
   res.status: eq 200
-  res.body: isArray
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: isNumber
+  res.body.offset: isNumber
+  res.body.hasMore: isBoolean
 }
 
 script:post-response {
   if (res.status === 200) {
-    console.log("Erfassungen gesamt:", res.body.length);
-    if (res.body.length > 0) {
-      const r = res.body[0];
+    console.log("Total:", res.body.total, "| Geladen:", res.body.items.length, "| hasMore:", res.body.hasMore);
+    if (res.body.items.length > 0) {
+      const r = res.body.items[0];
       console.log("Neueste:", r.line, "→", r.direction, "| Kurs:", r.courseNumber, "| Aktiv:", r.activeCourseNumber);
       console.log("stopId vorhanden:", r.stopId !== undefined);
       bru.setVar("lastRecordingId", r.id);
@@ -36,13 +42,19 @@ script:post-response {
 }
 
 docs {
-  Alle Parameter sind optional (Tilde = deaktiviert in Bruno).
+  Filter sind optional (Tilde = deaktiviert in Bruno).
   Aktiviere einzelne Filter durch Entfernen der Tilde (~).
 
   Filter:
   - period_id  – Periode (Standard: aktive)
   - line       – Linie (z.B. "6")
-  - day_type   – MO-FR | SA | SO | FT | SF
+  - day_type   – MO-FR | SA | SO | SF
   - date_from  – Datum von (YYYY-MM-DD)
   - date_to    – Datum bis (YYYY-MM-DD)
+
+  Pagination:
+  - limit      – 1..200, Default 50
+  - offset     – >= 0, Default 0
+
+  Response: { items, total, limit, offset, hasMore }
 }

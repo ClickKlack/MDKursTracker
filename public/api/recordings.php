@@ -109,6 +109,24 @@ function handle_get_recordings(): never
 
     $whereClause = implode(' AND ', $where);
 
+    // Pagination: limit (default 50, max 200) + offset; clamping in Helper
+    $page = parse_pagination_params($_GET);
+
+    // Total-Count für hasMore/Anzeige – ohne JOIN auf stops, das bremst nur.
+    $countStmt = $pdo->prepare(
+        'SELECT COUNT(*)
+           FROM ' . tbl('recordings') . ' r
+           JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
+          WHERE ' . $whereClause
+    );
+    $countStmt->execute($params);
+    $total = (int) $countStmt->fetchColumn();
+
+    // Page-SELECT mit stabilem Sort: r.id DESC als Tiebreaker bei gleicher recorded_at.
+    $pageParams = $params;
+    $pageParams[':limit']  = $page['limit'];
+    $pageParams[':offset'] = $page['offset'];
+
     $stmt = $pdo->prepare(
         'SELECT
              r.id,
@@ -141,17 +159,26 @@ function handle_get_recordings(): never
          JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
          JOIN ' . tbl('stops') . ' s ON r.stop_id = s.hafas_id
          WHERE ' . $whereClause . '
-         ORDER BY r.recorded_at DESC'
+         ORDER BY r.recorded_at DESC, r.id DESC
+         LIMIT :limit OFFSET :offset'
     );
-    $stmt->execute($params);
+    // limit/offset müssen als Integer gebunden werden (sonst quoted PDO sie als String)
+    foreach ($pageParams as $key => $value) {
+        if ($key === ':limit' || $key === ':offset') {
+            $stmt->bindValue($key, (int) $value, PDO::PARAM_INT);
+        } else {
+            $stmt->bindValue($key, $value);
+        }
+    }
+    $stmt->execute();
 
     // Eigenen Token für isOwn-Vergleich – Token nie im JSON ausgeben
     $ownToken = get_request_token();
 
-    $rows   = $stmt->fetchAll();
-    $result = [];
+    $rows  = $stmt->fetchAll();
+    $items = [];
     foreach ($rows as $row) {
-        $result[] = [
+        $items[] = [
             'id'                 => (int) $row['id'],
             'recordedAt'         => mysql_to_iso($row['recorded_at']),
             'line'               => $row['line'],
@@ -172,7 +199,13 @@ function handle_get_recordings(): never
         ];
     }
 
-    json_response($result);
+    json_response([
+        'items'   => $items,
+        'total'   => $total,
+        'limit'   => $page['limit'],
+        'offset'  => $page['offset'],
+        'hasMore' => ($page['offset'] + count($items)) < $total,
+    ]);
 }
 
 // ---------------------------------------------------------------------------

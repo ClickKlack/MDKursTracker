@@ -705,6 +705,21 @@ body {
     margin-bottom: 8px;
 }
 
+/* Sentinel + Loader fürs Nachladen am Listenende (Infinite Scroll) */
+.history-sentinel {
+    min-height: 1px;
+}
+
+.history-sentinel-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    padding: 16px 0;
+}
+
 /* Erfassungs-Karte */
 .recording-item {
     display: flex;

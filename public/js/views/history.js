@@ -29,12 +29,29 @@ const DAY_TYPE_LABELS = {
     'SF':    'Schulferien',
 };
 
+/** Page-Size für Infinite Scroll */
+const PAGE_SIZE = 50;
+
 /** ID der angezeigten Periode */
 let currentPeriodId = null;
 /** ID der wirklich aktiven (neuesten) Periode */
 let activePeriodId  = null;
 /** Debounce-Timer für Filtereingaben */
 let filterDebounce  = null;
+
+// --- Pagination-State -------------------------------------------------------
+/** Nächster Offset, der geladen wird */
+let currentOffset    = 0;
+/** Gesamtzahl der Erfassungen laut Server (für Header-Counter) */
+let totalCount       = 0;
+/** Gibt es noch weitere Seiten? */
+let hasMore          = false;
+/** Lock gegen parallele Sentinel-Trigger */
+let isLoadingMore    = false;
+/** IDs aller bereits gerenderten Items – schützt vor Duplikaten */
+let loadedIds        = new Set();
+/** IntersectionObserver am Sentinel */
+let scrollObserver   = null;
 
 export async function render(container, params, context) {
     activePeriodId  = context.activePeriod?.id ?? null;
@@ -57,16 +74,25 @@ export async function render(container, params, context) {
 
     container.innerHTML = buildShell(periods);
     attachListeners(container);
-    await loadAndRender(container);
+    await resetAndLoadFirstPage(container);
 }
 
 export function destroy() {
     if (filterDebounce) clearTimeout(filterDebounce);
     // Offene Snackbar beim View-Wechsel sofort committen (Item endgültig entfernen)
     if (activeSnackbar) activeSnackbar.commit();
+    if (scrollObserver) {
+        scrollObserver.disconnect();
+        scrollObserver = null;
+    }
     currentPeriodId = null;
     activePeriodId  = null;
     filterDebounce  = null;
+    currentOffset   = 0;
+    totalCount      = 0;
+    hasMore         = false;
+    isLoadingMore   = false;
+    loadedIds       = new Set();
 }
 
 // --- Shell aufbauen ----------------------------------------------------------
@@ -126,9 +152,37 @@ function updateReadOnlyBanner(container) {
 
 // --- Laden & Rendern ---------------------------------------------------------
 
-async function loadAndRender(container) {
+/** Filter aus den Eingabefeldern in ein API-Filter-Objekt übersetzen. */
+function buildFilters(container) {
+    const line    = container.querySelector('#filter-line')?.value.trim() ?? '';
+    const dayType = container.querySelector('#filter-daytype')?.value     ?? '';
+    const date    = container.querySelector('#filter-date')?.value        ?? '';
+
+    const filters = {};
+    if (currentPeriodId != null) filters.period_id = currentPeriodId;
+    if (line)    filters.line     = line;
+    if (dayType) filters.day_type = dayType;
+    if (date)    { filters.date_from = date; filters.date_to = date; }
+    return filters;
+}
+
+/**
+ * Komplettes Reset: erste Seite frisch laden. Wird bei View-Render,
+ * Periodenwechsel und Filteränderungen aufgerufen.
+ */
+async function resetAndLoadFirstPage(container) {
     const listEl = container.querySelector('#recordings-list');
     if (!listEl) return;
+
+    if (scrollObserver) {
+        scrollObserver.disconnect();
+        scrollObserver = null;
+    }
+    currentOffset = 0;
+    totalCount    = 0;
+    hasMore       = false;
+    isLoadingMore = false;
+    loadedIds     = new Set();
 
     listEl.innerHTML = `
         <div class="loading-indicator" aria-live="polite">
@@ -136,19 +190,9 @@ async function loadAndRender(container) {
             <p>Erfassungen werden geladen…</p>
         </div>`;
 
-    const line    = container.querySelector('#filter-line')?.value.trim()  ?? '';
-    const dayType = container.querySelector('#filter-daytype')?.value      ?? '';
-    const date    = container.querySelector('#filter-date')?.value         ?? '';
-
-    const filters = {};
-    if (currentPeriodId != null) filters.period_id = currentPeriodId;
-    if (line)                    filters.line       = line;
-    if (dayType)                 filters.day_type   = dayType;
-    if (date)                    { filters.date_from = date; filters.date_to = date; }
-
-    let recordings;
+    let response;
     try {
-        recordings = await getRecordings(filters);
+        response = await getRecordings({ ...buildFilters(container), limit: PAGE_SIZE, offset: 0 });
     } catch (err) {
         listEl.innerHTML = `
             <div class="error-box" role="alert">
@@ -160,11 +204,16 @@ async function loadAndRender(container) {
                 </button>
             </div>`;
         listEl.querySelector('#btn-retry-hist')
-            ?.addEventListener('click', () => loadAndRender(container));
+            ?.addEventListener('click', () => resetAndLoadFirstPage(container));
         return;
     }
 
-    if (recordings.length === 0) {
+    totalCount    = response.total;
+    hasMore       = response.hasMore;
+    currentOffset = response.offset + response.items.length;
+    response.items.forEach(rec => loadedIds.add(rec.id));
+
+    if (totalCount === 0) {
         listEl.innerHTML = `
             <div class="empty-state">
                 <p>Keine Erfassungen für die gewählten Filter.</p>
@@ -172,22 +221,114 @@ async function loadAndRender(container) {
         return;
     }
 
-    // isEditable: eigene Erfassungen + aktive Periode
     const isActivePeriod = currentPeriodId === activePeriodId;
 
     listEl.innerHTML = `
         <p class="text-small text-muted history-count">
-            ${recordings.length}&nbsp;Erfassung${recordings.length !== 1 ? 'en' : ''}
+            ${formatCount(totalCount)}
         </p>
         <ul class="card-list" role="list" aria-label="Erfassungen">
-            ${recordings.map(rec => renderRecordingItem(rec, isActivePeriod)).join('')}
-        </ul>`;
+            ${response.items.map(rec => renderRecordingItem(rec, isActivePeriod)).join('')}
+        </ul>
+        <div class="history-sentinel" aria-hidden="true"></div>`;
 
     const ul = listEl.querySelector('ul');
     ul.addEventListener('click',   e => handleListClick(e, container));
     ul.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleListClick(e, container); }
     });
+
+    installSentinelObserver(container);
+}
+
+/** Hängt die nächste Seite an. */
+async function loadNextPage(container) {
+    if (isLoadingMore || !hasMore) return;
+    isLoadingMore = true;
+
+    const listEl    = container.querySelector('#recordings-list');
+    const sentinel  = listEl?.querySelector('.history-sentinel');
+    const ul        = listEl?.querySelector('ul.card-list');
+    if (!listEl || !sentinel || !ul) {
+        isLoadingMore = false;
+        return;
+    }
+
+    sentinel.innerHTML = `
+        <div class="history-sentinel-loading" role="status" aria-live="polite">
+            <span class="spinner-small" aria-hidden="true"></span>
+            Weitere Erfassungen werden geladen…
+        </div>`;
+
+    let response;
+    try {
+        response = await getRecordings({
+            ...buildFilters(container),
+            limit:  PAGE_SIZE,
+            offset: currentOffset,
+        });
+    } catch (err) {
+        sentinel.innerHTML = `
+            <div class="error-box" role="alert">
+                Nachladen fehlgeschlagen: ${escapeHtml(err.message)}
+                <button class="btn btn-secondary btn-sm mt-8" id="btn-retry-more">Erneut versuchen</button>
+            </div>`;
+        sentinel.querySelector('#btn-retry-more')?.addEventListener('click', () => {
+            isLoadingMore = false;
+            loadNextPage(container);
+        });
+        return;
+    }
+
+    // Server-Total kann sich zwischen Seiten ändern (parallele Lösch-/Neu-Erfassungen)
+    totalCount = response.total;
+    updateCountDisplay(container);
+
+    const isActivePeriod = currentPeriodId === activePeriodId;
+    const newItems = response.items.filter(rec => !loadedIds.has(rec.id));
+    if (newItems.length > 0) {
+        const html = newItems.map(rec => renderRecordingItem(rec, isActivePeriod)).join('');
+        ul.insertAdjacentHTML('beforeend', html);
+        newItems.forEach(rec => loadedIds.add(rec.id));
+    }
+
+    currentOffset = response.offset + response.items.length;
+    hasMore       = response.hasMore;
+    sentinel.innerHTML = '';
+
+    if (!hasMore && scrollObserver) {
+        scrollObserver.disconnect();
+        scrollObserver = null;
+    }
+
+    isLoadingMore = false;
+}
+
+/** IntersectionObserver am Sentinel installieren – mit Vorlauf via rootMargin. */
+function installSentinelObserver(container) {
+    if (!hasMore) return;
+    const sentinel = container.querySelector('.history-sentinel');
+    if (!sentinel) return;
+
+    if (scrollObserver) scrollObserver.disconnect();
+    scrollObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+            if (entry.isIntersecting) {
+                loadNextPage(container);
+                break;
+            }
+        }
+    }, { rootMargin: '400px 0px' });
+    scrollObserver.observe(sentinel);
+}
+
+function formatCount(n) {
+    return `${n}&nbsp;Erfassung${n !== 1 ? 'en' : ''}`;
+}
+
+function updateCountDisplay(container) {
+    const countEl = container.querySelector('.history-count');
+    if (countEl) countEl.innerHTML = formatCount(totalCount);
 }
 
 // --- Einzelne Erfassung rendern ----------------------------------------------
@@ -290,12 +431,12 @@ function attachListeners(container) {
     container.querySelector('#period-select')?.addEventListener('change', async e => {
         currentPeriodId = parseInt(e.target.value, 10);
         updateReadOnlyBanner(container);
-        await loadAndRender(container);
+        await resetAndLoadFirstPage(container);
     });
 
     const debouncedLoad = () => {
         if (filterDebounce) clearTimeout(filterDebounce);
-        filterDebounce = setTimeout(() => loadAndRender(container), 300);
+        filterDebounce = setTimeout(() => resetAndLoadFirstPage(container), 300);
     };
 
     container.querySelector('#filter-line')?.addEventListener('input',  debouncedLoad);
@@ -560,6 +701,10 @@ async function handleDeleteClick(item, container) {
         return;
     }
 
+    // Counter sofort dekrementieren (Server hat soft-deleted)
+    if (totalCount > 0) totalCount -= 1;
+    updateCountDisplay(container);
+
     showUndoSnackbar(
         container,
         'Erfassung gelöscht.',
@@ -568,14 +713,16 @@ async function handleDeleteClick(item, container) {
                 await restoreRecording(recordingId);
                 item.style.display = '';
                 delete item.dataset.pendingDelete;
+                totalCount += 1;
+                updateCountDisplay(container);
             } catch (err) {
                 showErrorBanner(container, `Rückgängig fehlgeschlagen: ${err.message}`);
             }
         },
         () => {
-            // Auto-Commit: Item endgültig aus DOM entfernen + Counter pflegen
+            // Auto-Commit: Item endgültig aus DOM entfernen
+            loadedIds.delete(recordingId);
             item.remove();
-            decrementCount(container);
         },
     );
 }
@@ -626,13 +773,6 @@ function showUndoSnackbar(container, message, onUndo, onCommit) {
             onCommit?.();
         },
     };
-}
-
-function decrementCount(container) {
-    const countEl = container.querySelector('.history-count');
-    if (!countEl) return;
-    const next = container.querySelectorAll('.recording-item').length;
-    countEl.innerHTML = `${next}&nbsp;Erfassung${next !== 1 ? 'en' : ''}`;
 }
 
 function showErrorBanner(container, message) {

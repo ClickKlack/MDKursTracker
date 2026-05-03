@@ -1,0 +1,52 @@
+meta {
+  name: Recordings GET – Pagination (limit=2)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/recordings?limit=2&offset=0
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.limit: eq 2
+  res.body.offset: eq 0
+  res.body.total: isNumber
+  res.body.hasMore: isBoolean
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const total   = res.body.total;
+    const items   = res.body.items;
+    const hasMore = res.body.hasMore;
+
+    if (items.length > 2) {
+      throw new Error("limit=2 wurde nicht respektiert: " + items.length + " items");
+    }
+
+    const expectedHasMore = items.length < total;
+    if (hasMore !== expectedHasMore) {
+      throw new Error("hasMore inkonsistent: " + hasMore + " vs erwartet " + expectedHasMore);
+    }
+
+    if (items.length >= 1) {
+      bru.setVar("paginationFirstId", items[0].id);
+    }
+
+    console.log("Pagination ok: total=" + total + " items=" + items.length + " hasMore=" + hasMore);
+  }
+}
+
+docs {
+  Verifiziert das Pagination-Verhalten von GET /api/recordings:
+    - `limit` wird respektiert
+    - `total` ist immer die Gesamtzahl (unabhängig von limit/offset)
+    - `hasMore` ist konsistent mit (offset + items.length) < total
+
+  Voraussetzung: mindestens eine Erfassung in der aktiven Periode.
+}

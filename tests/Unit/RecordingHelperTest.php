@@ -67,4 +67,56 @@ class RecordingHelperTest extends TestCase
         $row = ['user_token' => 'tok', 'period_id' => '5'];
         $this->assertNull(recording_modifiable_reason($row, 'tok', 5));
     }
+
+    // -----------------------------------------------------------------------
+    // parse_pagination_params – Limit/Offset für GET /api/recordings
+    // -----------------------------------------------------------------------
+
+    public function test_pagination_defaults_when_missing(): void
+    {
+        $r = parse_pagination_params([]);
+        $this->assertSame(['limit' => 50, 'offset' => 0], $r);
+    }
+
+    public function test_pagination_uses_explicit_values(): void
+    {
+        $r = parse_pagination_params(['limit' => '25', 'offset' => '100']);
+        $this->assertSame(['limit' => 25, 'offset' => 100], $r);
+    }
+
+    public function test_pagination_clamps_limit_to_max(): void
+    {
+        $r = parse_pagination_params(['limit' => '999']);
+        $this->assertSame(200, $r['limit']);
+    }
+
+    public function test_pagination_clamps_limit_to_minimum(): void
+    {
+        $r = parse_pagination_params(['limit' => '0']);
+        $this->assertSame(1, $r['limit']);
+
+        $r = parse_pagination_params(['limit' => '-5']);
+        $this->assertSame(1, $r['limit']);
+    }
+
+    public function test_pagination_clamps_offset_to_zero(): void
+    {
+        $r = parse_pagination_params(['offset' => '-10']);
+        $this->assertSame(0, $r['offset']);
+    }
+
+    public function test_pagination_ignores_non_numeric_input(): void
+    {
+        $r = parse_pagination_params(['limit' => 'abc', 'offset' => 'xyz']);
+        $this->assertSame(['limit' => 50, 'offset' => 0], $r);
+    }
+
+    public function test_pagination_respects_custom_default_and_max(): void
+    {
+        $r = parse_pagination_params([], 100, 500);
+        $this->assertSame(100, $r['limit']);
+
+        $r = parse_pagination_params(['limit' => '600'], 100, 500);
+        $this->assertSame(500, $r['limit']);
+    }
 }
