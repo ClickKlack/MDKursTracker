@@ -65,6 +65,15 @@ function buildHtml(cfg, activeSwVersion) {
                     </button>
                     <span id="info-update-msg" class="text-small text-muted" aria-live="polite"></span>
                 </div>
+                <p class="text-small text-muted info-action-hint">
+                    Bei Anzeigeproblemen nach einem Update: Cache leeren.
+                    Token und Erfassungen bleiben erhalten.
+                </p>
+                <div class="info-update-row">
+                    <button id="btn-reset-cache" class="btn btn-secondary btn-sm">
+                        App-Cache zurücksetzen
+                    </button>
+                </div>
             </section>
 
             <section class="info-section card">
@@ -109,18 +118,42 @@ function buildHtml(cfg, activeSwVersion) {
 function attachListeners(container) {
     const btn = container.querySelector('#btn-check-update');
     const msg = container.querySelector('#info-update-msg');
-    if (!btn || !msg) return;
+    if (btn && msg) {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            msg.textContent = 'Wird geprüft…';
+            await checkForSwUpdate();
+            // Nach dem Check neu auslesen – wenn ein neues SW sofort übernommen hat,
+            // hat die Seite sich bereits neu geladen. Andernfalls Stand aktualisieren.
+            const active = await getActiveSwVersion();
+            if (!container.isConnected) return;
+            btn.disabled = false;
+            msg.textContent = active ? `Aktiv: ${active}` : 'Kein Update gefunden.';
+        });
+    }
 
-    btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        msg.textContent = 'Wird geprüft…';
-        await checkForSwUpdate();
-        // Nach dem Check neu auslesen – wenn ein neues SW sofort übernommen hat,
-        // hat die Seite sich bereits neu geladen. Andernfalls Stand aktualisieren.
-        const active = await getActiveSwVersion();
-        if (!container.isConnected) return;
-        btn.disabled = false;
-        msg.textContent = active ? `Aktiv: ${active}` : 'Kein Update gefunden.';
+    // Cache-Reset: löscht alle SW-Caches und deregistriert den Service Worker,
+    // ohne localStorage anzufassen. Heilung bei mid-session-Modul-Mismatches,
+    // ohne dass der Nutzer seine Identität (user_token) verliert.
+    container.querySelector('#btn-reset-cache')?.addEventListener('click', async () => {
+        const ok = window.confirm(
+            'App-Cache zurücksetzen?\n\nToken und Erfassungen bleiben erhalten. '
+            + 'Die App lädt sich danach neu.'
+        );
+        if (!ok) return;
+        try {
+            if ('caches' in self) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            if (navigator.serviceWorker) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister()));
+            }
+        } catch (err) {
+            console.warn('Cache-Reset teilweise fehlgeschlagen:', err);
+        }
+        window.location.reload();
     });
 }
 

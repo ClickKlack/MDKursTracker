@@ -80,13 +80,14 @@ export async function render(container) {
                 </div>
                 <div class="form-group">
                     <p class="text-small text-muted profile-id-hint" style="margin-top:0">
-                        Setzt Service Worker und Modul-Cache zurück, falls die App
-                        nach einem Update fehlerhaft wirkt. Token, Name und alle
-                        Erfassungen bleiben erhalten.
+                        Identität von einem anderen Gerät übernehmen: kopiere dort
+                        zuerst den Token in die Zwischenablage und tippe dann hier
+                        auf den Button. Deine aktuelle Identität auf diesem Gerät
+                        wird dabei ersetzt.
                     </p>
                     <div class="profile-advanced-actions">
-                        <button id="btn-reset-cache" type="button" class="btn btn-secondary btn-sm">
-                            App-Cache zurücksetzen
+                        <button id="btn-paste-token" type="button" class="btn btn-secondary btn-sm">
+                            Token aus Zwischenablage einfügen
                         </button>
                     </div>
                 </div>
@@ -115,27 +116,43 @@ export async function render(container) {
         }
     });
 
-    // Cache-Reset: löscht alle SW-Caches und deregistriert den Service Worker,
-    // ohne localStorage anzufassen. Heilung bei mid-session-Modul-Mismatches,
-    // ohne dass der Nutzer seine Identität (user_token) verliert.
-    container.querySelector('#btn-reset-cache')?.addEventListener('click', async () => {
+    // Token-Einfügen-Button: übernimmt eine andere Identität. Liest aus
+    // Zwischenablage (Fallback prompt()), validiert, zeigt die Ziel-Display-ID
+    // zur Bestätigung und lädt nach dem Schreiben neu, damit alle Views den
+    // neuen Token verwenden.
+    container.querySelector('#btn-paste-token')?.addEventListener('click', async () => {
+        let raw = '';
+        try {
+            raw = (await navigator.clipboard.readText()) ?? '';
+        } catch {
+            // Clipboard verweigert (kein HTTPS, keine Erlaubnis): manuell erfragen
+        }
+        if (!raw) {
+            raw = window.prompt('Token einfügen:', '') ?? '';
+        }
+
+        const normalized = normalizeToken(raw);
+        if (!normalized) {
+            showActionSnackbar('Kein gültiger Token', /* isError= */ true);
+            return;
+        }
+
+        const currentToken = localStorage.getItem('user_token') ?? '';
+        if (normalized === currentToken) {
+            showActionSnackbar('Token ist bereits aktiv');
+            return;
+        }
+
+        const newDisplayId = await deriveDisplayId(normalized);
         const ok = window.confirm(
-            'App-Cache zurücksetzen?\n\nToken und Erfassungen bleiben erhalten. '
-            + 'Die App lädt sich danach neu.'
+            `Identität wechseln zu ID ${newDisplayId}?\n\n`
+            + 'Der bisherige Token auf diesem Gerät wird ersetzt. '
+            + 'Stelle sicher, dass du den alten Token notiert hast, '
+            + 'falls du zurückwechseln möchtest.'
         );
         if (!ok) return;
-        try {
-            if ('caches' in self) {
-                const keys = await caches.keys();
-                await Promise.all(keys.map(k => caches.delete(k)));
-            }
-            if (navigator.serviceWorker) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                await Promise.all(regs.map(r => r.unregister()));
-            }
-        } catch (err) {
-            console.warn('Cache-Reset teilweise fehlgeschlagen:', err);
-        }
+
+        localStorage.setItem('user_token', normalized);
         window.location.reload();
     });
 
@@ -156,6 +173,18 @@ export function destroy() {
     // Event-Listener aufräumen, falls View verlassen wird
     const container = document.getElementById('app-main');
     container?._removeUpdateListener?.();
+}
+
+// --- Token-Validierung (spiegelt get_request_token() im Backend) ------------
+
+/**
+ * Normalisiert einen rohen Token-String: trimmt Whitespace, entfernt
+ * Bindestriche, lowercased – und gibt ihn nur zurück, wenn er danach
+ * 32 Hex-Zeichen lang ist. Sonst null.
+ */
+function normalizeToken(raw) {
+    const cleaned = String(raw).trim().replace(/-/g, '').toLowerCase();
+    return /^[0-9a-f]{32}$/.test(cleaned) ? cleaned : null;
 }
 
 // --- Display-ID client-seitig berechnen (SHA-256 → Base36) ------------------

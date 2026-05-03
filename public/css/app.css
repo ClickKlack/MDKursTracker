@@ -937,6 +937,12 @@ body {
     margin-top: 12px;
 }
 
+.info-action-hint {
+    margin-top: 16px;
+    text-align: center;
+    line-height: 1.4;
+}
+
 /* Erweitert-Karte im Profil: Aktions-Buttons mittig, Erklärungstext bleibt
    linksbündig lesbar */
 .profile-advanced-actions {
