@@ -44,7 +44,6 @@ class CalendarTest extends TestCase
             ['2026-01-01', 'Neujahr'],
             ['2026-01-06', 'Heilige Drei Könige'],
             ['2026-05-01', 'Tag der Arbeit'],
-            ['2026-05-08', 'Weltfriedenstag'],
             ['2026-10-03', 'Tag der deutschen Einheit'],
             ['2026-12-25', '1. Weihnachtstag'],
             ['2026-12-26', '2. Weihnachtstag'],
@@ -134,6 +133,15 @@ class CalendarTest extends TestCase
         $this->assertSame('MO-FR', getDayType($date, $this->mockPdoNoHolidays()));
     }
 
+    public function test_eighth_of_may_is_not_a_holiday_in_saxony_anhalt(): void
+    {
+        // Regression: Der 8. Mai (Weltfriedenstag) ist in Sachsen-Anhalt
+        // KEIN gesetzlicher Feiertag (anders als in MV oder Berlin 2025).
+        $date = new DateTimeImmutable('2026-05-08'); // Freitag
+        $this->assertSame('MO-FR', getDayType($date, $this->mockPdoNoHolidays()));
+        $this->assertNull(get_public_holiday_name($date));
+    }
+
     public static function holidayOnWeekdayProvider(): array
     {
         return [
@@ -142,7 +150,6 @@ class CalendarTest extends TestCase
             ['2026-04-03', 'Karfreitag (Fr)'],
             ['2026-04-06', 'Ostermontag (Mo)'],
             ['2026-05-01', 'Tag der Arbeit (Fr)'],
-            ['2026-05-08', 'Weltfriedenstag (Fr)'],
             ['2026-05-14', 'Christi Himmelfahrt (Do)'],
             ['2026-05-25', 'Pfingstmontag (Mo)'],
             ['2026-12-25', '1. Weihnachtstag (Fr)'],
@@ -199,7 +206,6 @@ class CalendarTest extends TestCase
             ['2026-01-01', 'Neujahr'],
             ['2026-01-06', 'Heilige Drei Könige'],
             ['2026-05-01', 'Tag der Arbeit'],
-            ['2026-05-08', 'Weltfriedenstag'],
             ['2026-10-03', 'Tag der deutschen Einheit'],
             ['2026-10-31', 'Reformationstag'],
             ['2026-12-25', '1. Weihnachtstag'],

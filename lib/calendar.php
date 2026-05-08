@@ -52,7 +52,6 @@ function get_public_holidays(int $year): array
         "$year-01-01", // Neujahr
         "$year-01-06", // Heilige Drei Könige (Sachsen-Anhalt)
         "$year-05-01", // Tag der Arbeit
-        "$year-05-08", // Weltfriedenstag (Sachsen-Anhalt, seit 2025)
         "$year-10-03", // Tag der deutschen Einheit
         "$year-10-31", // Reformationstag (Sachsen-Anhalt)
         "$year-12-25", // 1. Weihnachtstag
@@ -109,7 +108,6 @@ function get_public_holiday_names(int $year): array
         "$year-01-01" => 'Neujahr',
         "$year-01-06" => 'Heilige Drei Könige',
         "$year-05-01" => 'Tag der Arbeit',
-        "$year-05-08" => 'Weltfriedenstag',
         "$year-10-03" => 'Tag der deutschen Einheit',
         "$year-10-31" => 'Reformationstag',
         "$year-12-25" => '1. Weihnachtstag',
