@@ -1,6 +1,7 @@
 <?php
 // Wochentagstyp-Berechnung für die Kalenderlogik.
-// Feiertage Sachsen-Anhalt sind statisch hinterlegt.
+// Gesetzliche Feiertage kommen aus public_holidays.json (gepflegt im Repo),
+// die aktive Region wird aus config.php gelesen (Schlüssel 'active_region').
 // Schulferien werden aus der DB gelesen (gecacht pro Request).
 
 /**
@@ -8,8 +9,8 @@
  *
  * Rückgabewerte: 'MO-FR' | 'SA' | 'SO' | 'SF'
  *
- * Feiertage (Sachsen-Anhalt) werden als 'SO' behandelt, da sie nach
- * Sonntagsfahrplan fahren und gemeinsam mit Sonntagen ausgewertet werden.
+ * Feiertage werden als 'SO' behandelt, da sie nach Sonntagsfahrplan fahren
+ * und gemeinsam mit Sonntagen ausgewertet werden.
  */
 function getDayType(DateTimeInterface $date, PDO $db): string
 {
@@ -29,40 +30,65 @@ function getDayType(DateTimeInterface $date, PDO $db): string
 }
 
 /**
- * Prüft, ob das Datum ein gesetzlicher Feiertag in Sachsen-Anhalt ist.
+ * Prüft, ob das Datum ein gesetzlicher Feiertag in der aktiven Region ist.
  */
 function is_public_holiday(DateTimeInterface $date): bool
 {
     $holidays = get_public_holidays((int) $date->format('Y'));
-    $dateStr = $date->format('Y-m-d');
+    $dateStr  = $date->format('Y-m-d');
 
     return in_array($dateStr, $holidays, true);
 }
 
 /**
- * Berechnet alle gesetzlichen Feiertage in Sachsen-Anhalt für ein Jahr.
- * Gibt ein Array von Datumsstrings im Format 'Y-m-d' zurück.
+ * Gibt alle gesetzlichen Feiertage für ein Jahr zurück (Y-m-d-Strings).
+ *
+ * Ohne $region wird die aktive Region aus config.php genutzt (Default 'ST').
+ * Der Parameter erlaubt Tests, ohne den statischen Cache zu manipulieren.
  */
-function get_public_holidays(int $year): array
+function get_public_holidays(int $year, ?string $region = null): array
 {
+    return array_keys(get_public_holiday_names($year, $region));
+}
+
+/**
+ * Gibt den Namen des gesetzlichen Feiertags zurück, oder null falls kein Feiertag.
+ */
+function get_public_holiday_name(DateTimeInterface $date): ?string
+{
+    $names = get_public_holiday_names((int) $date->format('Y'));
+    return $names[$date->format('Y-m-d')] ?? null;
+}
+
+/**
+ * Gibt ein Mapping von Datum → Feiertagsname für ein Jahr und eine Region zurück.
+ *
+ * Single Source of Truth: aus dieser Funktion baut get_public_holidays() seine Liste.
+ * Die Daten kommen aus public_holidays.json, die Region aus config.php (Default 'ST').
+ */
+function get_public_holiday_names(int $year, ?string $region = null): array
+{
+    $config = load_public_holiday_config();
+    $region = $region ?? get_active_region();
+
+    $result = [];
+
+    // Feste Feiertage (Monat/Tag)
+    foreach ($config['fixed'] as $entry) {
+        if (!holiday_applies_to_region($entry, $region)) continue;
+        $date = sprintf('%04d-%02d-%02d', $year, $entry['month'], $entry['day']);
+        $result[$date] = $entry['name'];
+    }
+
+    // Bewegliche Feiertage (Offset relativ zum Ostersonntag)
     $easter = get_easter($year);
+    foreach ($config['easter'] as $entry) {
+        if (!holiday_applies_to_region($entry, $region)) continue;
+        $date = $easter->modify(sprintf('%+d days', $entry['offset']))->format('Y-m-d');
+        $result[$date] = $entry['name'];
+    }
 
-    return [
-        // Feste Feiertage
-        "$year-01-01", // Neujahr
-        "$year-01-06", // Heilige Drei Könige (Sachsen-Anhalt)
-        "$year-05-01", // Tag der Arbeit
-        "$year-10-03", // Tag der deutschen Einheit
-        "$year-10-31", // Reformationstag (Sachsen-Anhalt)
-        "$year-12-25", // 1. Weihnachtstag
-        "$year-12-26", // 2. Weihnachtstag
-
-        // Bewegliche Feiertage (berechnet aus Ostersonntag)
-        $easter->modify('-2 days')->format('Y-m-d'), // Karfreitag
-        $easter->modify('+1 days')->format('Y-m-d'), // Ostermontag
-        $easter->modify('+39 days')->format('Y-m-d'), // Christi Himmelfahrt
-        $easter->modify('+50 days')->format('Y-m-d'), // Pfingstmontag
-    ];
+    return $result;
 }
 
 /**
@@ -89,34 +115,57 @@ function get_easter(int $year): DateTimeImmutable
 }
 
 /**
- * Gibt den Namen des gesetzlichen Feiertags zurück, oder null falls kein Feiertag.
+ * Lädt public_holidays.json einmal pro Request und cached das Ergebnis.
  */
-function get_public_holiday_name(DateTimeInterface $date): ?string
+function load_public_holiday_config(): array
 {
-    $names = get_public_holiday_names((int) $date->format('Y'));
-    return $names[$date->format('Y-m-d')] ?? null;
+    static $cache = null;
+
+    if ($cache === null) {
+        $path = dirname(__DIR__) . '/public_holidays.json';
+        $raw  = @file_get_contents($path);
+        if ($raw === false) {
+            throw new RuntimeException("Feiertagskonfiguration nicht gefunden: $path");
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded) || !isset($decoded['fixed'], $decoded['easter'])) {
+            throw new RuntimeException("Feiertagskonfiguration ist ungültig: $path");
+        }
+        $cache = $decoded;
+    }
+
+    return $cache;
 }
 
 /**
- * Gibt ein Mapping von Datum → Feiertagsname für ein Jahr zurück.
+ * Liest die aktive Region (Bundesland-Code) aus config.php.
+ * Default 'ST' (Sachsen-Anhalt), wenn der Schlüssel nicht gesetzt ist.
  */
-function get_public_holiday_names(int $year): array
+function get_active_region(): string
 {
-    $easter = get_easter($year);
+    static $region = null;
 
-    return [
-        "$year-01-01" => 'Neujahr',
-        "$year-01-06" => 'Heilige Drei Könige',
-        "$year-05-01" => 'Tag der Arbeit',
-        "$year-10-03" => 'Tag der deutschen Einheit',
-        "$year-10-31" => 'Reformationstag',
-        "$year-12-25" => '1. Weihnachtstag',
-        "$year-12-26" => '2. Weihnachtstag',
-        $easter->modify('-2 days')->format('Y-m-d')  => 'Karfreitag',
-        $easter->modify('+1 days')->format('Y-m-d')  => 'Ostermontag',
-        $easter->modify('+39 days')->format('Y-m-d') => 'Christi Himmelfahrt',
-        $easter->modify('+50 days')->format('Y-m-d') => 'Pfingstmontag',
-    ];
+    if ($region === null) {
+        $configPath = getenv('APP_ENV') === 'test'
+            ? dirname(__DIR__) . '/config.test.php'
+            : dirname(__DIR__) . '/config.php';
+        $config = is_file($configPath) ? require $configPath : [];
+        $region = isset($config['active_region']) && is_string($config['active_region'])
+            ? $config['active_region']
+            : 'ST';
+    }
+
+    return $region;
+}
+
+/**
+ * Prüft, ob ein Feiertagseintrag in der angegebenen Region gilt.
+ * 'ALL' ist Wildcard für alle Bundesländer.
+ */
+function holiday_applies_to_region(array $entry, string $region): bool
+{
+    $regions = $entry['regions'] ?? [];
+    return in_array('ALL', $regions, true) || in_array($region, $regions, true);
 }
 
 /**

@@ -1,0 +1,23 @@
+{
+  "_comment": "Stammdaten der gesetzlichen Feiertage in Deutschland. Aktive Region wird über config.php (Schlüssel 'active_region', Default 'ST') gewählt. 'ALL' ist Wildcard für alle Bundesländer. Bewegliche Feiertage werden über offset (Tage relativ zum Ostersonntag) berechnet.",
+  "fixed": [
+    { "month": 1,  "day": 1,  "name": "Neujahr",                    "regions": ["ALL"] },
+    { "month": 1,  "day": 6,  "name": "Heilige Drei Könige",        "regions": ["BW", "BY", "ST"] },
+    { "month": 3,  "day": 8,  "name": "Internationaler Frauentag",  "regions": ["BE", "MV"] },
+    { "month": 5,  "day": 1,  "name": "Tag der Arbeit",             "regions": ["ALL"] },
+    { "month": 8,  "day": 15, "name": "Mariä Himmelfahrt",          "regions": ["BY", "SL"] },
+    { "month": 9,  "day": 20, "name": "Weltkindertag",              "regions": ["TH"] },
+    { "month": 10, "day": 3,  "name": "Tag der deutschen Einheit",  "regions": ["ALL"] },
+    { "month": 10, "day": 31, "name": "Reformationstag",            "regions": ["BB", "HB", "HH", "MV", "NI", "SH", "SN", "ST", "TH"] },
+    { "month": 11, "day": 1,  "name": "Allerheiligen",              "regions": ["BW", "BY", "NW", "RP", "SL"] },
+    { "month": 12, "day": 25, "name": "1. Weihnachtstag",           "regions": ["ALL"] },
+    { "month": 12, "day": 26, "name": "2. Weihnachtstag",           "regions": ["ALL"] }
+  ],
+  "easter": [
+    { "offset": -2, "name": "Karfreitag",          "regions": ["ALL"] },
+    { "offset":  1, "name": "Ostermontag",         "regions": ["ALL"] },
+    { "offset": 39, "name": "Christi Himmelfahrt", "regions": ["ALL"] },
+    { "offset": 50, "name": "Pfingstmontag",       "regions": ["ALL"] },
+    { "offset": 60, "name": "Fronleichnam",        "regions": ["BW", "BY", "HE", "NW", "RP", "SL"] }
+  ]
+}

@@ -41,6 +41,11 @@ return [
     // Beispiel: 'stop_name_prefix' => 'Magdeburg, '  →  "Magdeburg, ZOB/Adelheidring" → "ZOB/Adelheidring"
     // 'stop_name_prefix' => 'Magdeburg, ',
 
+    // Aktive Region für gesetzliche Feiertage (zweistelliger Bundesland-Code, optional; Standard: 'ST').
+    // Die Feiertagsliste kommt aus public_holidays.json, gefiltert auf diese Region.
+    // Erlaubte Werte: BW, BY, BE, BB, HB, HH, HE, MV, NI, NW, RP, SL, SN, ST, SH, TH
+    // 'active_region' => 'ST',
+
     // HAFAS-Cache-Verzeichnis (optional; Standard: <projektroot>/cache/hafas/)
     // Muss außerhalb des Webroots liegen und für den Webserver-Prozess schreibbar sein.
     // 'cache_dir' => '/var/cache/mdkurstracker/hafas',

@@ -238,4 +238,47 @@ class CalendarTest extends TestCase
         $dt = new DateTimeImmutable('2026-03-28');
         $this->assertNull(get_public_holiday_name($dt));
     }
+
+    // -----------------------------------------------------------------------
+    // Region-spezifische Feiertage (über public_holidays.json konfigurierbar)
+    // -----------------------------------------------------------------------
+
+    public function test_default_region_st_has_eleven_holidays_per_year(): void
+    {
+        // Sanity-Check: Sachsen-Anhalt hat 11 Feiertage (7 fest + 4 osterbasiert).
+        // Stellt sicher, dass die JSON-basierte Liste deckungsgleich zur alten
+        // hartkodierten Liste ist.
+        $this->assertCount(11, get_public_holidays(2026));
+    }
+
+    public function test_fronleichnam_only_in_catholic_regions(): void
+    {
+        // Fronleichnam 2026 = 04.06.2026 (60 Tage nach Ostern, Ostern = 05.04.)
+        $this->assertNotContains('2026-06-04', get_public_holidays(2026, 'ST'));
+        $this->assertContains('2026-06-04', get_public_holidays(2026, 'BY'));
+        $this->assertContains('2026-06-04', get_public_holidays(2026, 'NW'));
+    }
+
+    public function test_internationaler_frauentag_only_in_be_and_mv(): void
+    {
+        $this->assertNotContains('2026-03-08', get_public_holidays(2026, 'ST'));
+        $this->assertContains('2026-03-08', get_public_holidays(2026, 'BE'));
+        $this->assertContains('2026-03-08', get_public_holidays(2026, 'MV'));
+    }
+
+    public function test_reformationstag_only_in_protestant_regions(): void
+    {
+        // Reformationstag ist in ST Feiertag, in NRW (NW) und Bayern aber nicht.
+        $this->assertContains('2026-10-31', get_public_holidays(2026, 'ST'));
+        $this->assertNotContains('2026-10-31', get_public_holidays(2026, 'NW'));
+        $this->assertNotContains('2026-10-31', get_public_holidays(2026, 'BY'));
+    }
+
+    public function test_get_public_holiday_names_returns_region_specific_name(): void
+    {
+        // Über die explizite Region-Variante: Fronleichnam in BY benannt
+        $names = get_public_holiday_names(2026, 'BY');
+        $this->assertSame('Fronleichnam', $names['2026-06-04'] ?? null);
+        $this->assertSame('Mariä Himmelfahrt', $names['2026-08-15'] ?? null);
+    }
 }
