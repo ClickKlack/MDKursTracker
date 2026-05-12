@@ -16,6 +16,9 @@ logs/
 # Lokale Skripte (nicht im Repo)
 local_scripts/
 
+# Einmalige Datenreparaturen (lokal ausführen, Prod-SQL extra)
+data_migrations/
+
 # HAFAS-Cache (Dateisystem-Cache, kein Repo-Inhalt)
 cache/hafas/
 
