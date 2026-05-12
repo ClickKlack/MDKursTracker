@@ -38,6 +38,43 @@ Das Frontend entfernt diesen Präfix vor der Anzeige von Haltestellennamen.
 
 ---
 
+### GET `/api/notices`
+
+Liefert alle aktuell anzuzeigenden Nachrichten und den Wartungsstatus.
+Öffentlich (keine Authentifizierung). Das Frontend pollt diesen Endpunkt
+beim App-Start, periodisch alle 60 s und bei `visibilitychange`.
+
+**Erfolg (200):**
+```json
+{
+  "announcements": [
+    {
+      "id": 7,
+      "body": "App-Update verfügbar",
+      "expiresAt": "2026-05-20T22:00:00Z"
+    },
+    {
+      "id": 5,
+      "body": "Sonntags Schienenersatzverkehr Linie 6",
+      "expiresAt": "2026-05-18T23:59:00Z"
+    }
+  ],
+  "maintenance": {
+    "id": 3,
+    "message": "Wartungsarbeiten – Erfassen, Bearbeiten und Löschen sind gerade nicht möglich.",
+    "startedAt": "2026-05-12T18:30:00Z"
+  }
+}
+```
+
+`announcements` ist immer ein Array – alle Nachrichten mit `expires_at > now`,
+sortiert `id DESC`. Das Frontend zeigt die jüngste an, die der User noch nicht
+weggeklickt hat (Dismissal pro ID im localStorage); klickt er sie weg, rückt
+die nächst-jüngere nach. `maintenance` ist gesetzt, solange eine Wartung läuft
+(Zeile mit `ended_at IS NULL`), sonst `null`.
+
+---
+
 ## 2. HAFAS-Proxy-Endpunkte
 
 ### GET `/api/nearby`
@@ -241,6 +278,11 @@ GET /api/calendar?date=2026-12-25
 ---
 
 ## 3. Erfassungs-Endpunkte
+
+> **Wartung:** Solange eine Wartung läuft (siehe `GET /api/notices.maintenance`),
+> antworten alle schreibenden Endpunkte (POST/PUT/DELETE auf `/api/recordings*`)
+> mit HTTP `503` und `{"error":"Wartung läuft – <Hinweistext>"}`. GET-Endpunkte
+> bleiben unverändert verfügbar.
 
 ### POST `/api/recordings`
 
@@ -957,3 +999,144 @@ GET /admin-api/trip-group-detail?trip_ids=1,2,3
 Kanonische Stop-Liste ist leer, wenn kein Trip gespeicherte `route_stops` hat.
 
 **Fehler:** `400` – `trip_ids` fehlt oder ungültig | `401` – keine Admin-Session
+
+---
+
+### GET `/admin-api/announcements`
+
+Liste aller Nachrichten (für die Admin-UI; abgelaufene werden mitgeliefert,
+das Filtern auf die aktuelle übernimmt `GET /api/notices`).
+
+**Erfolg (200):** Array von Objekten, sortiert `created_at DESC`:
+```json
+[
+  {
+    "id": 7,
+    "body": "Heute Abend kein Spätbetrieb",
+    "expiresAt": "2026-05-20T22:00:00Z",
+    "createdAt": "2026-05-12T18:00:00Z"
+  }
+]
+```
+
+**Fehler:** `401` – keine Admin-Session
+
+---
+
+### POST `/admin-api/announcements`
+
+Neue Nachricht anlegen.
+
+**Request-Body:**
+```json
+{
+  "body":      "Heute Abend kein Spätbetrieb",
+  "expiresAt": "2026-05-20T22:00:00Z"
+}
+```
+
+`expiresAt` muss ein gültiges ISO-8601-Datum sein (UTC; das Frontend
+konvertiert die lokale Eingabe).
+
+**Erfolg (201):** `{ "id": 7 }`
+
+**Fehler:** `400` – Pflichtfeld fehlt / ungültiges Datum | `401` – keine Admin-Session
+
+---
+
+### PUT `/admin-api/announcements/:id`
+
+Nachricht aktualisieren.
+
+**Request-Body:** wie POST. Beide Felder sind Pflicht.
+
+**Erfolg (200):** `{ "ok": true }`
+
+**Fehler:** `400` – Pflichtfeld fehlt | `401` – keine Admin-Session | `404` – Nachricht nicht gefunden
+
+---
+
+### DELETE `/admin-api/announcements/:id`
+
+Nachricht löschen.
+
+**Erfolg (200):** `{ "ok": true }`
+
+**Fehler:** `401` – keine Admin-Session | `404` – Nachricht nicht gefunden
+
+---
+
+### GET `/admin-api/maintenance`
+
+Aktuellen Wartungsstatus + Historie der letzten 20 Wartungsfenster abrufen.
+
+**Erfolg (200):**
+```json
+{
+  "active": {
+    "id": 3,
+    "message": "Wartungsarbeiten – Erfassen, Bearbeiten und Löschen sind gerade nicht möglich.",
+    "startedAt": "2026-05-12T18:30:00Z"
+  },
+  "history": [
+    {
+      "id": 3,
+      "message": "Wartungsarbeiten – ...",
+      "startedAt": "2026-05-12T18:30:00Z",
+      "endedAt": null
+    },
+    {
+      "id": 2,
+      "message": "Datenbank-Update",
+      "startedAt": "2026-05-05T20:00:00Z",
+      "endedAt": "2026-05-05T20:42:00Z"
+    }
+  ]
+}
+```
+
+`active` ist `null`, wenn gerade keine Wartung läuft.
+
+**Fehler:** `401` – keine Admin-Session
+
+---
+
+### POST `/admin-api/maintenance`
+
+Wartung starten. Setzt eine Zeile mit `started_at = UTC_TIMESTAMP()` und
+`ended_at = NULL`. Solange diese Zeile existiert, blockiert das Backend
+schreibende `/api/recordings*`-Aufrufe mit HTTP `503`.
+
+**Request-Body:**
+```json
+{ "message": "Datenbank-Upgrade läuft, ca. 30 Minuten" }
+```
+
+`message`: 1–500 Zeichen, Pflichtfeld. Wird im Wartungs-Banner der App
+angezeigt.
+
+**Erfolg (201):**
+```json
+{
+  "id": 4,
+  "active": {
+    "id": 4,
+    "message": "Datenbank-Upgrade läuft, ca. 30 Minuten",
+    "startedAt": "2026-05-12T18:30:12Z"
+  }
+}
+```
+
+**Fehler:** `400` – Pflichtfeld fehlt / zu lang | `401` – keine Admin-Session |
+`409` – Es läuft bereits eine Wartung (Response enthält `active`-Payload der
+laufenden)
+
+---
+
+### POST `/admin-api/maintenance/end`
+
+Aktive Wartung beenden. Setzt `ended_at = UTC_TIMESTAMP()` für die offene Zeile.
+
+**Erfolg (200):** `{ "ok": true }`
+
+**Fehler:** `401` – keine Admin-Session | `404` – keine aktive Wartung vorhanden

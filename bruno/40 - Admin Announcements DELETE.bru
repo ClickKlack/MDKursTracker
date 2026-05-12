@@ -1,0 +1,24 @@
+meta {
+  name: Admin – Nachrichten DELETE
+  type: http
+  seq: 40
+}
+
+delete {
+  url: {{baseUrl}}/admin-api/announcements/{{announcementId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 38-Admin-Announcements-POST.
+  Löscht die Test-Nachricht. Zweiter Aufruf mit gleicher ID → 404.
+
+  Hinweis: 41 (Notices) prüft die Sichtbarkeit zuvor; deshalb erst danach
+  hier löschen, sonst zeigt 41 null statt der Test-Nachricht.
+}

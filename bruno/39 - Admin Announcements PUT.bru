@@ -1,0 +1,27 @@
+meta {
+  name: Admin – Nachrichten PUT
+  type: http
+  seq: 39
+}
+
+put {
+  url: {{baseUrl}}/admin-api/announcements/{{announcementId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "body": "Bruno-Test-Nachricht (aktualisiert)",
+    "expiresAt": "2099-12-31T23:59:00Z"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 38-Admin-Announcements-POST (setzt announcementId).
+}

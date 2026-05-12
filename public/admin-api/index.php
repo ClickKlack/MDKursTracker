@@ -32,6 +32,14 @@ if ($resource === 'trips'
     return;
 }
 
+// Muster: /maintenance/end → maintenance.php (Aktion ohne :id)
+$action = null;
+if ($resource === 'maintenance' && isset($segments[1]) && $segments[1] === 'end') {
+    $action = 'end';
+    require __DIR__ . '/maintenance.php';
+    return;
+}
+
 // Muster: /:resource/:id  (z.B. /school-holidays/5, /periods/3)
 if (isset($segments[1]) && ctype_digit($segments[1])) {
     $resourceId = (int) $segments[1];
@@ -46,6 +54,8 @@ $routes = [
     'hafas-log'          => 'hafas_log.php',
     'hafas-cache'        => 'hafas_cache.php',
     'trip-group-detail'  => 'trip_group_detail.php',
+    'announcements'      => 'announcements.php',
+    'maintenance'        => 'maintenance.php',
 ];
 
 if ($resource !== '' && isset($routes[$resource])) {

@@ -1,0 +1,38 @@
+meta {
+  name: Notices – öffentlich
+  type: http
+  seq: 41
+}
+
+get {
+  url: {{baseUrl}}/api/notices
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.announcements: isDefined
+  res.body.maintenance: isDefined
+}
+
+script:post-response {
+  if (!Array.isArray(res.body.announcements)) {
+    throw new Error("Erwartet: announcements ist ein Array");
+  }
+  console.log("announcements:", JSON.stringify(res.body.announcements));
+  console.log("maintenance: ", JSON.stringify(res.body.maintenance));
+}
+
+docs {
+  Öffentlicher Endpunkt, kein Login nötig.
+  announcements ist immer ein Array (kann leer sein), sortiert id DESC.
+  Das Frontend wählt davon die jüngste, die der User noch nicht
+  weggeklickt hat.
+
+  Reihenfolge zur Validierung:
+    - Nach 38-POST: announcements enthält die Test-Nachricht
+    - Nach 40-DELETE: announcements ist leer (sofern keine andere existiert)
+    - Nach 42-Maintenance-POST: maintenance ist gesetzt
+    - Nach 45-Maintenance-end: maintenance ist null
+}

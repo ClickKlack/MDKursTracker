@@ -271,6 +271,18 @@ export async function getConfig() {
     return apiFetch('/api/config');
 }
 
+/**
+ * Aktuelle Anzeige-Hinweise: alle aktiven Nachrichten (id DESC) + Wartungsstatus.
+ * announcements ist immer ein Array (kann leer sein); maintenance kann null sein.
+ * @returns {Promise<{
+ *   announcements: Array<{id:number, body:string, expiresAt:string}>,
+ *   maintenance:   {id:number, message:string, startedAt:string}|null
+ * }>}
+ */
+export async function getNotices() {
+    return apiFetch('/api/notices');
+}
+
 // =============================================================================
 // User-Endpunkte
 // =============================================================================

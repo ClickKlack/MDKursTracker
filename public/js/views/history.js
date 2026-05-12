@@ -17,7 +17,8 @@ import {
 } from '../api.js';
 import { formatTime }                from '../utils/format.js';
 import { lineBadgeHtml }             from '../utils/lines.js';
-import { escapeHtml, stripStopPrefix } from '../app.js';
+import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
+import { isMaintenanceActive } from '../notices.js';
 
 /** Aktive Snackbar samt Auto-Commit-Timer/Pending-Item; verhindert Stacking */
 let activeSnackbar = null;
@@ -451,6 +452,10 @@ function handleListClick(e, container) {
     const editBtn = e.target.closest('.btn-edit-recording');
     if (editBtn) {
         e.stopPropagation();
+        if (isMaintenanceActive()) {
+            showActionSnackbar('Wartung läuft – Bearbeiten gerade nicht möglich', true);
+            return;
+        }
         const item = editBtn.closest('.recording-item');
         if (item) toggleEditPanel(item);
         return;
@@ -460,6 +465,10 @@ function handleListClick(e, container) {
     const delBtn = e.target.closest('.btn-delete-recording');
     if (delBtn) {
         e.stopPropagation();
+        if (isMaintenanceActive()) {
+            showActionSnackbar('Wartung läuft – Löschen gerade nicht möglich', true);
+            return;
+        }
         const item = delBtn.closest('.recording-item');
         if (item) handleDeleteClick(item, container);
         return;

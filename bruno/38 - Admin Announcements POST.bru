@@ -1,0 +1,40 @@
+meta {
+  name: Admin – Nachrichten POST
+  type: http
+  seq: 38
+}
+
+post {
+  url: {{baseUrl}}/admin-api/announcements
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "body": "Bruno-Test-Nachricht",
+    "expiresAt": "2099-12-31T23:59:00Z"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("announcementId", res.body.id);
+    console.log("Nachricht angelegt, id:", res.body.id);
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login.
+  Legt eine Nachricht mit fernem Ablaufdatum an, damit sie in 41 sicher
+  als aktuelle Nachricht ausgespielt wird. id wird als announcementId für
+  PUT/DELETE gespeichert.
+
+  Fehlertest – Pflichtfeld fehlt:
+    {"body": "..."} ohne expiresAt → 400
+}

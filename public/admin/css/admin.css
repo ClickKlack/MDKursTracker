@@ -188,9 +188,11 @@ body {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
     font-size: 0.95rem;
+    font-family: inherit;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     padding: 8px 11px;
@@ -200,8 +202,15 @@ body {
     -webkit-appearance: none;
 }
 
+.form-group textarea {
+    resize: vertical;
+    min-height: 72px;
+    line-height: 1.4;
+}
+
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
     outline: 2px solid var(--color-primary);
     outline-offset: 1px;
     border-color: var(--color-primary);
@@ -326,6 +335,23 @@ body {
     flex-wrap: wrap;
 }
 
+.edit-inline-form input,
+.edit-inline-form textarea {
+    font-size: 0.95rem;
+    font-family: inherit;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+.edit-inline-form textarea {
+    resize: vertical;
+    min-height: 60px;
+    line-height: 1.4;
+}
+
 /* --- Fehlermeldung / Erfolg ------------------------------------------------ */
 
 .error-box {
@@ -359,6 +385,32 @@ body {
     padding: 32px 16px;
     color: var(--color-text-muted);
     font-size: 0.92rem;
+}
+
+/* --- Wartung-/Nachrichten-Spezifika --------------------------------------- */
+
+.maint-message {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin: 4px 0 12px;
+    white-space: pre-wrap;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.notice--maintenance {
+    background: #fff4cc;
+    color: #5a4500;
+    border-left: 4px solid #d49a00;
+    padding: 10px 14px;
+}
+
+.ann-body-cell {
+    max-width: 480px;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* --- Ladeindikator --------------------------------------------------------- */

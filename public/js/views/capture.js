@@ -13,6 +13,7 @@ import { postRecording, getTrip, postTouchTrip } from '../api.js';
 import { formatTime, calcDelay }   from '../utils/format.js';
 import { lineBadgeHtml }           from '../utils/lines.js';
 import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
+import { isMaintenanceActive } from '../notices.js';
 
 /** Anzahl Schnellbuttons (01–40, 5 Zeilen à 8) */
 const QUICK_COUNT = 40;
@@ -57,7 +58,10 @@ export async function render(container, _params, _context) {
 }
 
 export function destroy() {
-    // Keine Timer o.Ä. zu bereinigen – nur DOM-basierte Listener
+    if (captureMaintenanceListener) {
+        document.removeEventListener('maintenancechange', captureMaintenanceListener);
+        captureMaintenanceListener = null;
+    }
 }
 
 // --- HTML aufbauen -----------------------------------------------------------
@@ -131,9 +135,21 @@ function buildQuickButtons() {
 function attachListeners(container, data) {
     const input  = container.querySelector('#course-input');
     const btnSub = container.querySelector('#btn-submit');
+    const ORIGINAL_LABEL = btnSub.textContent;
 
     /** Aktuell gewählte Kursnummer (zweistellig, z.B. "07") oder null */
     let selectedCourse = null;
+
+    /** Submit-Button-Status aus Auswahl + Wartung ableiten. */
+    function refreshSubmitState() {
+        if (isMaintenanceActive()) {
+            btnSub.disabled    = true;
+            btnSub.textContent = 'Wartung läuft – nicht möglich';
+        } else {
+            btnSub.disabled    = selectedCourse === null;
+            btnSub.textContent = ORIGINAL_LABEL;
+        }
+    }
 
     /**
      * Kursnummer setzen, Buttons und Input synchronisieren.
@@ -144,7 +160,7 @@ function attachListeners(container, data) {
         highlightButton(container, nr);
         // Input-Wert ohne führende Null darstellen (natürlicher als "07")
         input.value = String(parseInt(nr, 10));
-        btnSub.disabled = false;
+        refreshSubmitState();
     }
 
     // Schnellbuttons (Klick auf Grid via Event Delegation)
@@ -172,12 +188,11 @@ function attachListeners(container, data) {
             selectedCourse = null;
             const padded = (!isNaN(n) && n >= 0 && n <= 99) ? String(n).padStart(2, '0') : null;
             highlightButton(container, padded);
-            btnSub.disabled = true;
         } else {
             selectedCourse = String(n).padStart(2, '0');
             highlightButton(container, selectedCourse);
-            btnSub.disabled = false;
         }
+        refreshSubmitState();
     });
 
     // Absenden per Button-Klick
@@ -194,7 +209,15 @@ function attachListeners(container, data) {
         }
     });
 
+    // Wartungsstatus initial anwenden und auf Änderungen reagieren.
+    refreshSubmitState();
+    document.addEventListener('maintenancechange', refreshSubmitState);
+    // Beim View-Wechsel räumt destroy() den Listener wieder ab.
+    captureMaintenanceListener = refreshSubmitState;
 }
+
+/** Modul-globaler Handle für den Listener, damit destroy() ihn entfernen kann. */
+let captureMaintenanceListener = null;
 
 // --- Vorschlags-Badge --------------------------------------------------------
 

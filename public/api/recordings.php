@@ -15,6 +15,7 @@ require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/user_helpers.php';
 require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
 require_once dirname(__DIR__, 2) . '/lib/recording_helpers.php';
+require_once dirname(__DIR__, 2) . '/lib/maintenance.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -265,6 +266,7 @@ function handle_post_recording(): never
     }
 
     $pdo      = get_db();
+    require_no_maintenance($pdo);
     $periodId = get_active_period_id($pdo);
 
     // Vollständigen Laufweg über HAFAS laden (vor Trip-Anlage, da Fingerprint daraus berechnet wird)
@@ -588,6 +590,7 @@ function handle_put_recording(int $recordingId): never
     }
 
     $pdo = get_db();
+    require_no_maintenance($pdo);
 
     // Eigentümer/aktive-Periode-Check via Helper (gemeinsam mit DELETE/RESTORE)
     $rec = assert_recording_modifiable($pdo, $recordingId, $token);
@@ -631,6 +634,7 @@ function handle_delete_recording(int $recordingId): never
 {
     $token = get_request_token();
     $pdo   = get_db();
+    require_no_maintenance($pdo);
 
     $rec = assert_recording_modifiable($pdo, $recordingId, $token);
 
@@ -659,6 +663,7 @@ function handle_restore_recording(int $recordingId): never
 {
     $token = get_request_token();
     $pdo   = get_db();
+    require_no_maintenance($pdo);
 
     $rec = assert_recording_modifiable($pdo, $recordingId, $token);
 

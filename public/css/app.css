@@ -19,8 +19,9 @@
     --color-error:         #c62828;
     --color-known-course:  #1b5e20;
 
-    --header-height: 56px;
-    --nav-height:    60px;
+    --header-height:   56px;
+    --nav-height:      60px;
+    --notices-height:  0px;   /* wird von js/notices.js gesetzt, sobald Banner aktiv sind */
 
     --radius-sm: 6px;
     --radius-md: 10px;
@@ -99,10 +100,67 @@ body {
     display: none;
 }
 
+/* --- Notice-Banner (zwischen Header und Main) ----------------------------- */
+.app-notices {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    z-index: 99;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-notices:empty {
+    display: none;
+}
+
+.notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+}
+
+.notice-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.notice-close {
+    flex-shrink: 0;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+.notice-close:hover { opacity: 1; }
+
+.notice--info {
+    background: #e8f0fb;
+    color: #133d78;
+    border-bottom: 1px solid #b9cfeb;
+}
+
+.notice--maintenance {
+    background: #fff4cc;
+    color: #5a4500;
+    border-bottom: 2px solid #d49a00;
+    font-weight: 600;
+}
+
 /* --- Main / View-Container ------------------------------------------------ */
 #app-main {
     position: fixed;
-    top: var(--header-height);
+    top: calc(var(--header-height) + var(--notices-height));
     bottom: var(--nav-height);
     left: 0;
     right: 0;
@@ -963,7 +1021,8 @@ body {
     }
 
     #app-header,
-    #app-nav {
+    #app-nav,
+    #app-notices {
         max-width: 480px;
         left: 50%;
         transform: translateX(-50%);

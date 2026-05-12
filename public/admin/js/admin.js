@@ -13,6 +13,8 @@ import { renderPeriods }        from './periods.js';
 import { renderOverride }       from './override.js';
 import { renderHafasLog }       from './hafas_log.js';
 import { renderTrips }          from './trips.js';
+import { renderAnnouncements }  from './announcements.js';
+import { renderMaintenance }    from './maintenance.js';
 
 // =============================================================================
 // API-Helfer (Admin-Kontext; nutzt dieselben Fetch-Konventionen wie api.js)
@@ -116,6 +118,8 @@ const TABS = {
     'periods':         renderPeriods,
     'override':        renderOverride,
     'hafas-log':       renderHafasLog,
+    'maintenance':     renderMaintenance,
+    'announcements':   renderAnnouncements,
 };
 
 let activeTab = 'trips';

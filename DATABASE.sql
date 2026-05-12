@@ -219,6 +219,41 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%hafas_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%announcements
+-- Vom Admin gepflegte Nachrichten mit Ablaufdatum. Die jüngste, noch nicht
+-- abgelaufene Zeile wird per GET /api/notices an die App ausgeliefert und dort
+-- unterhalb des Headers angezeigt. Nutzer kann sie pro id lokal wegklicken
+-- (localStorage); serverseitig keine User-spezifische Sicht.
+-- -----------------------------------------------------------------------------
+-- Hinweis Datentyp: DATETIME statt TIMESTAMP, sonst belegt MariaDB die erste
+-- NOT-NULL-Spalte implizit mit ON UPDATE CURRENT_TIMESTAMP.
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%announcements` (
+    `id`         INT      NOT NULL AUTO_INCREMENT,
+    `body`       TEXT     NOT NULL                    COMMENT 'Nachrichtentext, wird unterhalb des App-Headers angezeigt',
+    `expires_at` DATETIME NOT NULL                    COMMENT 'UTC; ab diesem Zeitpunkt wird die Nachricht nicht mehr ausgeliefert',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
+    PRIMARY KEY (`id`),
+    KEY `idx_%%PREFIX%%announcements_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%maintenance_windows
+-- Wartungsmodus inkl. Historie. Während ended_at IS NULL gilt: schreibende
+-- API-Aufrufe (/api/recordings POST/PUT/DELETE) liefern HTTP 503, und das
+-- Frontend zeigt einen nicht-dismissbaren Warn-Banner.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%maintenance_windows` (
+    `id`         INT          NOT NULL AUTO_INCREMENT,
+    `message`    VARCHAR(500) NOT NULL                    COMMENT 'Hinweistext für den Wartungs-Banner',
+    `started_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC, Realzeit',
+    `ended_at`   DATETIME     NULL     DEFAULT NULL       COMMENT 'UTC; NULL = Wartung läuft noch',
+    PRIMARY KEY (`id`),
+    KEY `idx_%%PREFIX%%maintenance_windows_ended_at` (`ended_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================

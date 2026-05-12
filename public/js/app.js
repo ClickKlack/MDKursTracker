@@ -9,6 +9,7 @@
  */
 
 import { getPeriods, getConfig, postUserInit } from './api.js';
+import { initNotices } from './notices.js';
 
 // =============================================================================
 // Globaler State
@@ -388,6 +389,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // User-Token initialisieren (synchron – kein await, da Backend-Call silent)
     initUserToken();
+
+    // Notice-Banner starten (eigenes Polling-Modul, kein await – läuft im Hintergrund)
+    initNotices();
 
     // Config und Periode parallel laden – beide werden vor dem ersten Render benötigt
     await Promise.all([loadConfig(), loadActivePeriod()]);

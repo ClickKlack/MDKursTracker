@@ -1,0 +1,32 @@
+meta {
+  name: Admin – Wartung History
+  type: http
+  seq: 47
+}
+
+get {
+  url: {{baseUrl}}/admin-api/maintenance
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.history: isDefined
+}
+
+script:post-response {
+  if (!Array.isArray(res.body.history) || res.body.history.length === 0) {
+    throw new Error("Erwartet: history enthält mindestens die soeben beendete Wartung");
+  }
+  const lastEnded = res.body.history.find(h => h.endedAt !== null);
+  if (!lastEnded) {
+    throw new Error("Erwartet: mindestens ein History-Eintrag mit endedAt ≠ null");
+  }
+  console.log("Letzte beendete Wartung:", lastEnded.startedAt, "→", lastEnded.endedAt);
+}
+
+docs {
+  Voraussetzung: Vorher 42-Maintenance-POST und 45-Maintenance-end.
+  Prüft Protokollierung der echten Start- und Endzeit.
+}

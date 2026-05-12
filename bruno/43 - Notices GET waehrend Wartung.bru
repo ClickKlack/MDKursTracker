@@ -1,0 +1,28 @@
+meta {
+  name: Notices – während Wartung
+  type: http
+  seq: 43
+}
+
+get {
+  url: {{baseUrl}}/api/notices
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  if (!res.body.maintenance) {
+    throw new Error("Erwartet: maintenance ≠ null während aktiver Wartung");
+  }
+  console.log("maintenance.message:", res.body.maintenance.message);
+  console.log("maintenance.startedAt:", res.body.maintenance.startedAt);
+}
+
+docs {
+  Voraussetzung: Vorher 42-Admin-Maintenance-POST.
+  Prüft, dass /api/notices die laufende Wartung an die App ausliefert.
+}

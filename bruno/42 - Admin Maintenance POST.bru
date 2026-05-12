@@ -1,0 +1,39 @@
+meta {
+  name: Admin – Wartung starten
+  type: http
+  seq: 42
+}
+
+post {
+  url: {{baseUrl}}/admin-api/maintenance
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "message": "Bruno-Test: Wartung läuft, kurz Geduld."
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+  res.body.active.startedAt: isDefined
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("maintenanceId", res.body.id);
+    console.log("Wartung gestartet, id:", res.body.id);
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login.
+  Startet eine neue Wartung. Solange diese läuft, gibt POST /api/recordings
+  HTTP 503 zurück (siehe 44).
+
+  Fehlertest – schon eine aktive Wartung:
+    Zweiter Aufruf ohne vorheriges /end → 409 mit res.body.active gesetzt.
+}

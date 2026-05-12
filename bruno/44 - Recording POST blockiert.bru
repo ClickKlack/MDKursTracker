@@ -1,0 +1,46 @@
+meta {
+  name: Recordings POST – während Wartung → 503
+  type: http
+  seq: 44
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+}
+
+body:json {
+  {
+    "hafasTripId":      "dummy",
+    "serviceNr":        "0",
+    "line":             "1",
+    "direction":        "Test",
+    "stopId":           "1",
+    "serviceDate":      "2026-05-12",
+    "departurePlanned": "2026-05-12T10:00:00Z",
+    "courseNumber":     "07"
+  }
+}
+
+assert {
+  res.status: eq 503
+}
+
+script:post-response {
+  console.log("Body:", res.body);
+  if (!String(res.body.error || "").startsWith("Wartung läuft")) {
+    throw new Error("Erwartet: Fehlertext beginnt mit 'Wartung läuft'");
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 42-Admin-Maintenance-POST.
+  Bestätigt, dass schreibende Erfassungs-Endpunkte während Wartung mit
+  HTTP 503 abbrechen. Die HAFAS-Abfrage wird gar nicht erst durchgeführt,
+  weil require_no_maintenance() direkt nach get_db() greift.
+}

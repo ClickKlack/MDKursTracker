@@ -1,0 +1,24 @@
+meta {
+  name: Admin – Wartung beenden
+  type: http
+  seq: 45
+}
+
+post {
+  url: {{baseUrl}}/admin-api/maintenance/end
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Voraussetzung: Vorher 42-Admin-Maintenance-POST.
+  Beendet die laufende Wartung (ended_at = UTC_TIMESTAMP).
+
+  Fehlertest – keine Wartung aktiv:
+    Zweiter Aufruf hintereinander → 404
+}

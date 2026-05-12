@@ -1,0 +1,44 @@
+meta {
+  name: Recordings POST – nach Wartung (Sperre weg)
+  type: http
+  seq: 46
+}
+
+post {
+  url: {{baseUrl}}/api/recordings
+  body: json
+  auth: none
+}
+
+headers {
+  X-User-Token: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+}
+
+body:json {
+  {
+    "hafasTripId":      "dummy",
+    "serviceNr":        "0",
+    "line":             "1",
+    "direction":        "Test",
+    "stopId":           "1",
+    "serviceDate":      "2026-05-12",
+    "departurePlanned": "2026-05-12T10:00:00Z",
+    "courseNumber":     "07"
+  }
+}
+
+script:post-response {
+  // Nach 45-end darf die Wartung nicht mehr greifen – 503 hier wäre ein Bug.
+  if (res.status === 503) {
+    throw new Error("Wartungssperre noch aktiv – /end hat nicht gegriffen.");
+  }
+  console.log("Status:", res.status, "Body:", String(res.body.error || ""));
+}
+
+docs {
+  Voraussetzung: Vorher 45-Admin-Maintenance-end.
+  Bestätigt, dass die Wartungssperre nach /end aufgehoben ist. Der Body
+  ist absichtlich Dummy – wir erwarten einen anderen Fehler (HAFAS 5xx,
+  trip nicht gefunden o.Ä.) oder im seltenen Glücksfall 201, aber NICHT
+  503 mit "Wartung läuft".
+}

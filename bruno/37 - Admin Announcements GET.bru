@@ -1,0 +1,21 @@
+meta {
+  name: Admin – Nachrichten GET
+  type: http
+  seq: 37
+}
+
+get {
+  url: {{baseUrl}}/admin-api/announcements
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login ausführen.
+  Liefert ein Array aller Nachrichten (auch abgelaufene). Sortiert nach
+  created_at DESC. Bei frischem System: leeres Array.
+}
