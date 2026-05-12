@@ -534,6 +534,25 @@ body {
     font-weight: 600;
 }
 
+/* "Live"-Markierung: erscheint bei jeder Abfahrt, zu der HAFAS Echtzeit-Daten
+   geliefert hat – also auch bei +N-Verspätung oder −N-Frühfahrt. Trennt den
+   Fall "Echtzeit verfügbar" vom Default "keine Echtzeit verfügbar", in dem
+   die Sollzeit neutral und ohne Badge dargestellt wird. */
+.dep-live-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-success);
+    padding: 1px 5px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 4px;
+    vertical-align: middle;
+    opacity: 0.5;
+}
+
 /* --- Ausgefallene Abfahrten ----------------------------------------------- */
 .departure-item.departure-cancelled {
     cursor: default;

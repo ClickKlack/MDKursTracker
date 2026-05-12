@@ -177,7 +177,7 @@ GET /api/departures?stopId=de:15003:4000
 | `cancelled` | bool | `true` = Fahrt (isCncl) oder Halt (dCncl) ist ausgefallen; Erfassung gesperrt |
 | `stopId` | string | Lang-ID des konkreten Bahnsteigs (extId aus HAFAS locL); enthält die Steig-Stelle. Frontend nutzt sie für `pendingCapture.stopId`, damit der Heuristik-Lookup gegen `route_stops.stop_id` matchen kann. |
 | `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
-| `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit |
+| `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit (klar von "pünktlich" unterschieden — pünktlich heißt `departureActual == departurePlanned`, das Frontend zeigt dafür ein "Live"-Badge) |
 | `journeyStart` | string\|null | Name der Starthaltestelle; `null` = nicht im Response verfügbar |
 | `journeyStartTime` | string\|null | Abfahrtszeit an der Starthaltestelle (ISO 8601 UTC) |
 | `journeyEnd` | string\|null | Name der Endhaltestelle |

@@ -161,8 +161,16 @@ function renderDepartureItem(dep, idx) {
     const delay     = calcDelay(dep.departurePlanned, dep.departureActual);
     const isDelayed = delay !== null && delay > 0;
     const isEarly   = delay !== null && delay < 0;
+    // Echtzeit-Daten liegen nur vor, wenn HAFAS dTimeR geliefert hat (departureActual != null).
+    // Ohne Echtzeit darf die Sollzeit nicht als "pünktlich" gerendert werden.
+    const hasRealtime = dep.departureActual != null;
+    // Live-Badge wird bei jeder Abfahrt mit Echtzeit ganz hinten angefügt
+    // (pünktlich, verspätet, zu früh). Bei Ausfall und ohne Echtzeit weglassen.
+    const liveBadgeHtml = (hasRealtime && !dep.cancelled)
+        ? `<span class="dep-live-badge" aria-label="Live-Daten verfügbar">Live</span>`
+        : '';
 
-    // Zeitanzeige: Sollzeit + ggf. Verspätung oder Frühfahrt
+    // Zeitanzeige: Sollzeit + ggf. Verspätung/Frühfahrt + Live-Badge
     let timeHtml;
     if (dep.cancelled) {
         // Ausgefallene Fahrt: Sollzeit rot und durchgestrichen, dahinter Ausfall-Badge
@@ -172,15 +180,19 @@ function renderDepartureItem(dep, idx) {
         timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
            <span class="dep-delay time-delayed" aria-label="Verspätung ${delay} Minute${delay !== 1 ? 'n' : ''}">
                +${delay}
-           </span>`;
+           </span>${liveBadgeHtml}`;
     } else if (isEarly) {
         const absDelay = Math.abs(delay);
         timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>
            <span class="dep-delay time-early" aria-label="${absDelay} Minute${absDelay !== 1 ? 'n' : ''} zu früh">
                −${absDelay}
-           </span>`;
+           </span>${liveBadgeHtml}`;
+    } else if (hasRealtime) {
+        // Echtzeit liegt vor und Fahrt ist pünktlich → Sollzeit grün + Live-Badge
+        timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>${liveBadgeHtml}`;
     } else {
-        timeHtml = `<span class="dep-time time-ontime">${escapeHtml(planned)}</span>`;
+        // Keine Live-Daten → neutrale Sollzeit, kein "pünktlich"-Stil
+        timeHtml = `<span class="dep-time">${escapeHtml(planned)}</span>`;
     }
 
     // Kursnummer-Badge – Quelle bestimmt Stil und Tooltip:
@@ -233,7 +245,11 @@ function renderDepartureItem(dep, idx) {
         `Linie ${dep.line}`,
         `nach ${dep.direction}`,
         dep.cancelled ? 'Fahrt ausgefallen' : `ab ${planned}`,
-        !dep.cancelled && (isDelayed ? `+${delay} Min. Verspätung` : isEarly ? `${Math.abs(delay)} Min. zu früh` : 'pünktlich'),
+        !dep.cancelled && (isDelayed
+            ? `+${delay} Min. Verspätung`
+            : isEarly
+                ? `${Math.abs(delay)} Min. zu früh`
+                : hasRealtime ? 'pünktlich (Live)' : 'planmäßig'),
         !dep.cancelled && (dep.activeCourseNumber
             ? (dep.courseSource === 'heuristic' ? `Kurs ${dep.activeCourseNumber} (vermutet)` : `Kurs ${dep.activeCourseNumber}`)
             : 'Kurs unbekannt'),
