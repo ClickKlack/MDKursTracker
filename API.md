@@ -326,15 +326,19 @@ abweicht, im Log vermerkt und durch den abgeleiteten Wert ersetzt.
 ```
 
 **Korrektur-Erkennung:** Erfasst derselbe Nutzer (Match per `X-User-Token`)
-am gleichen Betriebstag (`serviceDate`), an derselben Haltestelle (`stopId`)
-und für dieselbe Plan-Abfahrt (`departurePlanned`) erneut, werden seine
-älteren aktiven Erfassungen für genau diese Kombination automatisch
-soft-gelöscht (`deleted_at` gesetzt) – das fängt typische Erfassungsfehler
-ab, etwa eine korrigierte Kursnummer. Die `course_number` ist bewusst
-**kein** Match-Kriterium, sonst würde das Korrigieren gerade nicht greifen.
-Anonyme Erfassungen ohne `X-User-Token` werden nicht ersetzt. Die IDs der
-ersetzten Erfassungen erscheinen im Feld `replacedRecordingIds`; das Feld
-fehlt, wenn keine Ersetzung stattfand.
+für dieselbe Fahrt (intern aufgelöste `trip_id`) am gleichen Betriebstag
+(`serviceDate`), an derselben Haltestelle (`stopId`) und für dieselbe
+Plan-Abfahrt (`departurePlanned`) erneut, werden seine älteren aktiven
+Erfassungen für genau diese Kombination automatisch soft-gelöscht
+(`deleted_at` gesetzt) – das fängt typische Erfassungsfehler ab, etwa eine
+korrigierte Kursnummer. Die `course_number` ist bewusst **kein** Match-
+Kriterium, sonst würde das Korrigieren gerade nicht greifen. `trip_id` ist
+dagegen Pflicht, damit an Umsteigeknoten (z.B. Hasselbachplatz, vier Linien
+auf derselben Plattform) zwei verschiedene Fahrten mit identischer Abfahrts-
+minute nicht versehentlich als Korrektur voneinander gelten. Anonyme
+Erfassungen ohne `X-User-Token` werden nicht ersetzt. Die IDs der ersetzten
+Erfassungen erscheinen im Feld `replacedRecordingIds`; das Feld fehlt, wenn
+keine Ersetzung stattfand.
 
 **Fehler-Beispiele:**
 - `400` – Kursnummer nicht im Format `01`–`99`

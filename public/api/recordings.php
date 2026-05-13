@@ -399,18 +399,25 @@ function handle_post_recording(): never
             ->execute([$recordingStopId, $recordingStopName]);
 
         // Korrektur-Erkennung: Erfasst derselbe Nutzer am selben Betriebstag,
-        // an derselben Haltestelle und für dieselbe Plan-Abfahrt erneut, ist
-        // das fast immer eine Korrektur einer falsch erfassten Kursnummer
-        // (Match bewusst ohne course_number). Die ältere Erfassung wird soft-
-        // gelöscht; Lazy-Cleanup entfernt sie nach 30 Tagen final.
+        // an derselben Haltestelle und für dieselbe Plan-Abfahrt derselben
+        // Fahrt erneut, ist das fast immer eine Korrektur einer falsch
+        // erfassten Kursnummer (Match bewusst ohne course_number). Die ältere
+        // Erfassung wird soft-gelöscht; Lazy-Cleanup entfernt sie nach 30
+        // Tagen final.
+        // trip_id ist Pflicht im Match: an Umsteigeknoten (z.B. Hasselbach-
+        // platz) teilen sich bis zu vier Linien dieselbe Plattform, und zwei
+        // verschiedene Fahrten können zur selben Minute abfahren. Ohne trip_id
+        // würden sie sich gegenseitig als "Korrektur" überschreiben.
         // Anonyme Erfassungen (kein User-Token) bleiben außen vor – sonst
         // würden sich fremde Erfassungen gegenseitig löschen.
+        // Spiegelt das Predikat recording_dedup_match() in lib/recording_helpers.php.
         $departurePlannedMysql = iso_to_mysql($body['departurePlanned']);
         $replacedIds = [];
         if ($userToken !== null) {
             $dupStmt = $pdo->prepare(
                 'SELECT id FROM ' . tbl('recordings') . '
                   WHERE user_token = ?
+                    AND trip_id = ?
                     AND service_date = ?
                     AND stop_id = ?
                     AND departure_planned = ?
@@ -418,6 +425,7 @@ function handle_post_recording(): never
             );
             $dupStmt->execute([
                 $userToken,
+                $tripId,
                 $body['serviceDate'],
                 $recordingStopId,
                 $departurePlannedMysql,

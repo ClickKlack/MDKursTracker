@@ -55,6 +55,41 @@ function recording_modifiable_reason(?array $row, ?string $token, int $activePer
  *
  * @return array{limit:int, offset:int}
  */
+/**
+ * Predikat: Gilt eine neu eingehende Erfassung als Korrektur einer bestehenden?
+ *
+ * Match-Schlüssel: (user_token, trip_id, service_date, stop_id, departure_planned).
+ * Bewusst OHNE course_number – sonst würde gerade die Korrektur einer falsch
+ * erfassten Kursnummer (häufigster Fehlerfall) nicht greifen.
+ *
+ * trip_id ist Pflicht im Match, sonst würden an Stops mit mehreren Linien zur
+ * selben Minute (Umsteigeknoten wie Hasselbachplatz) zwei verschiedene Fahrten
+ * sich gegenseitig als "Korrektur" überschreiben.
+ *
+ * Anonyme Erfassungen (user_token === null) werden nie verglichen – sonst
+ * würden sich fremde Erfassungen gegenseitig löschen.
+ *
+ * Spiegelt die WHERE-Klausel in handle_post_recording wider; Unit-Test sichert
+ * die Regel gegen Regression ab.
+ *
+ * @param array<string,mixed> $existing  Bestehende Erfassung aus DB
+ * @param array<string,mixed> $candidate Eingehende Erfassung
+ */
+function recording_dedup_match(array $existing, array $candidate): bool
+{
+    $userToken = $candidate['user_token'] ?? null;
+    if ($userToken === null || $userToken === '') {
+        return false;
+    }
+    $keys = ['user_token', 'trip_id', 'service_date', 'stop_id', 'departure_planned'];
+    foreach ($keys as $key) {
+        if (($existing[$key] ?? null) !== ($candidate[$key] ?? null)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function parse_pagination_params(array $query, int $default = 50, int $max = 200): array
 {
     $limit = $default;

@@ -119,4 +119,83 @@ class RecordingHelperTest extends TestCase
         $r = parse_pagination_params(['limit' => '600'], 100, 500);
         $this->assertSame(500, $r['limit']);
     }
+
+    // -----------------------------------------------------------------------
+    // recording_dedup_match – Korrektur-Erkennung für POST /api/recordings
+    // -----------------------------------------------------------------------
+
+    private static function baseRecording(array $overrides = []): array
+    {
+        return array_merge([
+            'user_token'        => 'tok-jörg',
+            'trip_id'           => 817,
+            'service_date'      => '2026-05-13',
+            'stop_id'           => '300733002',
+            'departure_planned' => '2026-05-13 13:33:00',
+        ], $overrides);
+    }
+
+    public function test_dedup_matches_identical_keys(): void
+    {
+        $existing  = self::baseRecording();
+        $candidate = self::baseRecording();
+        $this->assertTrue(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_ignores_course_number(): void
+    {
+        // course_number ist bewusst kein Match-Kriterium (Korrektur-Fall).
+        $existing  = self::baseRecording(['course_number' => '02']);
+        $candidate = self::baseRecording(['course_number' => '07']);
+        $this->assertTrue(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_different_trip_does_not_match(): void
+    {
+        // Hasselbachplatz: Linie 8 (Trip 817) und Linie 13 (Trip 818) fahren
+        // 13:33 vom selben Stop 300733002 – dürfen sich NICHT überschreiben.
+        $existing  = self::baseRecording(['trip_id' => 817]);
+        $candidate = self::baseRecording(['trip_id' => 818]);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_different_user_does_not_match(): void
+    {
+        $existing  = self::baseRecording(['user_token' => 'tok-jörg']);
+        $candidate = self::baseRecording(['user_token' => 'tok-steffi']);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_different_stop_does_not_match(): void
+    {
+        $existing  = self::baseRecording(['stop_id' => '300733001']);
+        $candidate = self::baseRecording(['stop_id' => '300733002']);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_different_departure_does_not_match(): void
+    {
+        $existing  = self::baseRecording(['departure_planned' => '2026-05-13 13:33:00']);
+        $candidate = self::baseRecording(['departure_planned' => '2026-05-13 13:34:00']);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_different_service_date_does_not_match(): void
+    {
+        // Trip kann periodisch wiederkehren – andere Betriebstag → keine Korrektur.
+        $existing  = self::baseRecording(['service_date' => '2026-05-13']);
+        $candidate = self::baseRecording(['service_date' => '2026-05-14']);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
+
+    public function test_dedup_anonymous_candidate_never_matches(): void
+    {
+        // Ohne user_token würden anonyme Erfassungen sich gegenseitig löschen.
+        $existing  = self::baseRecording(['user_token' => null]);
+        $candidate = self::baseRecording(['user_token' => null]);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+
+        $candidate = self::baseRecording(['user_token' => '']);
+        $this->assertFalse(recording_dedup_match($existing, $candidate));
+    }
 }

@@ -37,11 +37,20 @@ assert {
 
 script:post-response {
   if (res.status === 201) {
-    const expected = parseInt(bru.getVar("firstReplaceRecordingId"), 10);
-    const got      = res.body.replacedRecordingIds?.[0];
+    const expected      = parseInt(bru.getVar("firstReplaceRecordingId"), 10);
+    const expectedTrip  = parseInt(bru.getVar("firstReplaceTripId"), 10);
+    const got           = res.body.replacedRecordingIds?.[0];
     if (got !== expected) {
       throw new Error(
         `replacedRecordingIds[0] erwartet ${expected}, erhalten ${got}`
+      );
+    }
+    // trip_id ist Match-Pflicht: Wäre die zweite Erfassung versehentlich auf
+    // einen anderen Trip aufgelöst worden, hätte der Replace nicht greifen
+    // dürfen. Gleicher tripId beweist, dass Replace korrekt war.
+    if (res.body.tripId !== expectedTrip) {
+      throw new Error(
+        `tripId erwartet ${expectedTrip}, erhalten ${res.body.tripId} – Replace hätte nicht greifen dürfen`
       );
     }
     console.log("Replace verifiziert:", expected, "→ soft-deleted, neu:", res.body.recordingId);
@@ -50,18 +59,21 @@ script:post-response {
 }
 
 docs {
-  Erwartet: derselbe Nutzer (X-User-Token) erfasst dieselbe (serviceDate,
-  stopId, departurePlanned)-Kombination wie in Test 35, aber mit anderer
-  Kursnummer (08 statt 07). Der Backend-Replace soll greifen:
+  Erwartet: derselbe Nutzer (X-User-Token) erfasst dieselbe (tripId,
+  serviceDate, stopId, departurePlanned)-Kombination wie in Test 35, aber
+  mit anderer Kursnummer (08 statt 07). Der Backend-Replace soll greifen:
     - Die Setup-Erfassung aus 35 wird soft-gelöscht.
     - Antwort enthält `replacedRecordingIds: [<setup-id>]`.
     - Eine neue, aktive Erfassung mit Kurs 08 entsteht.
 
   Match-Kriterium ist bewusst ohne course_number — sonst würde gerade die
   Korrektur einer falsch erfassten Kursnummer (häufigster Fehlerfall) nicht
-  greifen.
+  greifen. trip_id muss dagegen übereinstimmen, sonst würden an Umsteige-
+  knoten (z.B. Hasselbachplatz, vier Linien auf derselben Plattform) zwei
+  verschiedene Fahrten mit identischer Abfahrtsminute sich gegenseitig als
+  "Korrektur" überschreiben.
 
   Voraussetzungen: 02-Departures, 23-User-Init, 35-Replace-Setup wurden in
-  dieser Reihenfolge ausgeführt (Variablen userToken und
-  firstReplaceRecordingId müssen gesetzt sein).
+  dieser Reihenfolge ausgeführt (Variablen userToken,
+  firstReplaceRecordingId und firstReplaceTripId müssen gesetzt sein).
 }

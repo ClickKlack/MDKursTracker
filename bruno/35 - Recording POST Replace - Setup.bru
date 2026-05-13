@@ -37,16 +37,17 @@ assert {
 script:post-response {
   if (res.status === 201) {
     bru.setVar("firstReplaceRecordingId", res.body.recordingId);
-    console.log("Setup-Erfassung angelegt, ID:", res.body.recordingId);
+    bru.setVar("firstReplaceTripId", res.body.tripId);
+    console.log("Setup-Erfassung angelegt, ID:", res.body.recordingId, "trip:", res.body.tripId);
   }
 }
 
 docs {
   Setup für den Replace-Trigger-Test (36). Legt eine eigene Erfassung mit
-  X-User-Token für eine konkrete (serviceDate, stopId, departurePlanned)-
-  Kombination an. Der nachfolgende Test 36 erfasst dieselbe Kombination
-  erneut mit anderer Kursnummer und erwartet, dass diese ID hier in
-  `replacedRecordingIds` zurückgemeldet wird.
+  X-User-Token für eine konkrete (tripId, serviceDate, stopId,
+  departurePlanned)-Kombination an. Der nachfolgende Test 36 erfasst
+  dieselbe Kombination erneut mit anderer Kursnummer und erwartet, dass
+  diese ID hier in `replacedRecordingIds` zurückgemeldet wird.
 
   Voraussetzungen (in dieser Reihenfolge):
     01-Nearby, 02-Departures (setzt hafasTripId / stopId / serviceDate /
