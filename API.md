@@ -380,6 +380,14 @@ Die Sortierung ist `recorded_at DESC, id DESC` (stabil — wichtig für die Pagi
 sonst können Einträge bei gleicher `recorded_at` zwischen zwei Seiten doppelt
 oder gar nicht erscheinen).
 
+`line` und `direction` beziehen sich auf den **konkreten Halteabschnitt** der
+Erfassung, nicht zwingend auf den Trip-Stammsatz. Bei durchgebundenen Fahrten
+(z. B. Magdeburg, in der die Tram die Wendung am Hauptbahnhof als Linienwechsel
+fährt: erst Linie 13 → City Carré, ab dort Linie 2 → Westerhüsen) liefert die API
+für eine Erfassung im zweiten Abschnitt also `"line": "2"`,
+`"direction": "Westerhüsen (Betriebshof)"`. Der `line`-Filter wirkt analog auf
+die effektive Linie an der Halteposition.
+
 **Beispiel-Response:**
 ```json
 {

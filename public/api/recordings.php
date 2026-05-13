@@ -85,7 +85,12 @@ function handle_get_recordings(): never
     $params = [':period_id' => $periodId];
 
     if (!empty($_GET['line'])) {
-        $where[]         = 't.line = :line';
+        // Filter über die effektive Linie an der Erfassungs-Haltestelle.
+        // Bei durchgebundenen Fahrten (z. B. 13 → 2) kann sich die im Trip-
+        // Stammsatz hinterlegte Linie von der Linie am konkreten Halt
+        // unterscheiden; ohne COALESCE würde "Linie 2" den Linie-2-Teil eines
+        // 13/2-Trips übersehen.
+        $where[]         = 'COALESCE(rs_eff.line, t.line) = :line';
         $params[':line'] = $_GET['line'];
     }
 
@@ -110,14 +115,25 @@ function handle_get_recordings(): never
 
     $whereClause = implode(' AND ', $where);
 
+    // route_stops-Join wird nur benötigt, wenn der Linienfilter aktiv ist
+    // (effektive Linie an der Erfassungs-Halteposition).
+    $needsRouteJoin = !empty($_GET['line']);
+    $routeJoinSql = $needsRouteJoin
+        ? ' LEFT JOIN ' . tbl('route_stops') . ' rs_eff
+                  ON rs_eff.trip_id = r.trip_id
+                 AND rs_eff.stop_id = r.stop_id
+                 AND TIME(rs_eff.departure_planned) = TIME(r.departure_planned)'
+        : '';
+
     // Pagination: limit (default 50, max 200) + offset; clamping in Helper
     $page = parse_pagination_params($_GET);
 
-    // Total-Count für hasMore/Anzeige – ohne JOIN auf stops, das bremst nur.
+    // Total-Count für hasMore/Anzeige – Stops-Join bleibt weg, das bremst nur.
     $countStmt = $pdo->prepare(
         'SELECT COUNT(*)
            FROM ' . tbl('recordings') . ' r
-           JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
+           JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id'
+        . $routeJoinSql . '
           WHERE ' . $whereClause
     );
     $countStmt->execute($params);
@@ -128,12 +144,31 @@ function handle_get_recordings(): never
     $pageParams[':limit']  = $page['limit'];
     $pageParams[':offset'] = $page['offset'];
 
+    // line/direction werden aus route_stops abgeleitet, sobald der Halt zu
+    // einem durchgebundenen Linienabschnitt gehört (Beispiel: Trip steht in
+    // trips als "Linie 13 → City Carré", der Wagen ist an der konkreten
+    // Halteposition aber bereits "Linie 2 → Westerhüsen"). Match-Schlüssel ist
+    // (trip_id, stop_id, Uhrzeit) – das Datum in route_stops.departure_planned
+    // kommt aus dem ursprünglichen HAFAS-Abruf und kann älter als der
+    // Erfassungstag sein. Direction ist der Endhalt des Linienabschnitts.
     $stmt = $pdo->prepare(
         'SELECT
              r.id,
              r.recorded_at,
-             t.line,
-             t.direction,
+             COALESCE(rs_eff.line, t.line) AS line,
+             CASE
+                 WHEN rs_eff.line IS NOT NULL AND rs_eff.line <> t.line THEN (
+                     SELECT st_dir.name
+                       FROM ' . tbl('route_stops') . ' rs_dir
+                       JOIN ' . tbl('stops')        . ' st_dir
+                         ON st_dir.hafas_id = rs_dir.stop_id
+                      WHERE rs_dir.trip_id = t.id
+                        AND rs_dir.line    = rs_eff.line
+                      ORDER BY rs_dir.sequence DESC
+                      LIMIT 1
+                 )
+                 ELSE t.direction
+             END AS direction,
              t.service_nr,
              t.day_type,
              r.service_date,
@@ -159,6 +194,10 @@ function handle_get_recordings(): never
          FROM ' . tbl('recordings') . ' r
          JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
          JOIN ' . tbl('stops') . ' s ON r.stop_id = s.hafas_id
+         LEFT JOIN ' . tbl('route_stops') . ' rs_eff
+                ON rs_eff.trip_id = r.trip_id
+               AND rs_eff.stop_id = r.stop_id
+               AND TIME(rs_eff.departure_planned) = TIME(r.departure_planned)
          WHERE ' . $whereClause . '
          ORDER BY r.recorded_at DESC, r.id DESC
          LIMIT :limit OFFSET :offset'
@@ -176,14 +215,25 @@ function handle_get_recordings(): never
     // Eigenen Token für isOwn-Vergleich – Token nie im JSON ausgeben
     $ownToken = get_request_token();
 
+    // Stadt-Präfix für Direction-Strings, die aus stops.name abgeleitet werden
+    // (Endhalt des effektiven Linienabschnitts bei durchgebundenen Fahrten).
+    // trips.direction ist bereits ohne Präfix, also nur dort strippen, wo
+    // der Wert mit dem Präfix beginnt.
+    $cfg          = require dirname(__DIR__, 2) . '/config.php';
+    $stopPrefix   = $cfg['stop_name_prefix'] ?? '';
+
     $rows  = $stmt->fetchAll();
     $items = [];
     foreach ($rows as $row) {
+        $direction = (string) $row['direction'];
+        if ($stopPrefix !== '' && str_starts_with($direction, $stopPrefix)) {
+            $direction = substr($direction, strlen($stopPrefix));
+        }
         $items[] = [
             'id'                 => (int) $row['id'],
             'recordedAt'         => mysql_to_iso($row['recorded_at']),
             'line'               => $row['line'],
-            'direction'          => $row['direction'],
+            'direction'          => $direction,
             'serviceNr'          => $row['service_nr'],
             'dayType'            => $row['day_type'],
             'serviceDate'        => $row['service_date'],
