@@ -156,6 +156,11 @@ Beide Fingerprints werden aus dem vollständigen Laufweg einer Fahrt berechnet
 | `path_fingerprint` | SHA-256(`stopId1\|stopId2\|...`) | Identifiziert den Linienverlauf unabhängig von Zeiten |
 | `schedule_fingerprint` | SHA-256(`stopId1_HH:MM\|stopId2_HH:MM\|...`, UTC) | Identifiziert die konkrete Fahrtinstanz (Fahrplanmuster) |
 
+Die `stopId` wird vor dem Hashen via `normalize_stop_id()` auf Haltestellen-Ebene
+normalisiert (letzte zwei Steig-Ziffern entfernt). HAFAS liefert für dieselbe
+Fahrt am selben Halt gelegentlich abweichende Steig-IDs (z. B. Olvenstedter Platz
+`300738901` vs. `300738903`); ohne Normalisierung entstünden daraus Duplikat-Trips.
+
 Halte ohne Zeitangabe werden in `schedule_fingerprint` übersprungen. Letzter Halt:
 HAFAS liefert dort die Ankunftszeit als `departurePlanned` (aTimeS-Fallback).
 

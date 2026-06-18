@@ -127,6 +127,65 @@ class FingerprintTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // normalize_stop_id – Steig → Haltestelle (letzte 2 Ziffern entfernen)
+    // -----------------------------------------------------------------------
+
+    public function test_normalize_strips_last_two_digits_of_numeric_id(): void
+    {
+        // Olvenstedter Platz: zwei Steige derselben Haltestelle
+        $this->assertSame('3007389', normalize_stop_id('300738901'));
+        $this->assertSame('3007389', normalize_stop_id('300738903'));
+    }
+
+    public function test_normalize_leaves_non_numeric_ids_unchanged(): void
+    {
+        $this->assertSame('de:15003:4000', normalize_stop_id('de:15003:4000'));
+    }
+
+    public function test_normalize_leaves_very_short_ids_unchanged(): void
+    {
+        $this->assertSame('12', normalize_stop_id('12'));
+        $this->assertSame('7', normalize_stop_id('7'));
+    }
+
+    public function test_platform_variants_yield_same_schedule_fingerprint(): void
+    {
+        // Kernfall des "grauen Problems": dieselbe Fahrt, an einem Zwischenhalt
+        // ein abweichender Steig (…901 vs. …903) → muss denselben Fingerprint
+        // ergeben, damit kein Duplikat-Trip entsteht.
+        $a = [
+            ['stopId' => '300730901', 'departurePlanned' => '2026-05-11T13:52:00Z'],
+            ['stopId' => '300738901', 'departurePlanned' => '2026-05-11T14:02:00Z'],
+            ['stopId' => '300449305', 'departurePlanned' => '2026-05-11T14:11:00Z'],
+        ];
+        $b = $a;
+        $b[1]['stopId'] = '300738903'; // anderer Steig am selben Halt
+        $this->assertSame(
+            compute_schedule_fingerprint($a),
+            compute_schedule_fingerprint($b)
+        );
+        $this->assertSame(
+            compute_path_fingerprint($a),
+            compute_path_fingerprint($b)
+        );
+    }
+
+    public function test_different_station_still_changes_fingerprint(): void
+    {
+        // Abweichung in den Stations-Ziffern (nicht nur im Steig) bleibt relevant.
+        $a = [
+            ['stopId' => '300730901', 'departurePlanned' => '2026-05-11T13:52:00Z'],
+            ['stopId' => '300738901', 'departurePlanned' => '2026-05-11T14:02:00Z'],
+        ];
+        $b = $a;
+        $b[1]['stopId'] = '300739001'; // andere Haltestelle (3007390 ≠ 3007389)
+        $this->assertNotSame(
+            compute_schedule_fingerprint($a),
+            compute_schedule_fingerprint($b)
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // extract_utc_hhmm
     // -----------------------------------------------------------------------
 

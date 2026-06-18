@@ -24,17 +24,39 @@ function compute_fingerprints(array $stops): array
 }
 
 /**
- * Hash über die geordnete Folge der Stop-IDs.
- * Identifiziert den Linienverlauf unabhängig von Abfahrtszeiten.
+ * Normalisiert eine HAFAS-Stop-ID auf Haltestellen-Ebene, indem die letzten
+ * zwei Ziffern (der Bahnsteig/Steig) entfernt werden.
+ *
+ * Hintergrund: HAFAS liefert für dieselbe reale Fahrt am selben Halt mal den
+ * einen, mal den anderen Steig (z. B. Olvenstedter Platz 300738901 vs.
+ * 300738903). Hashte der Fingerprint die rohen Stop-IDs, entstand pro Variante
+ * ein eigener Trip-Datensatz ("graues Problem"). Die Haltestellen-ID ist über
+ * die Steige hinweg stabil.
+ *
+ * Konvention identisch zum Abfahrts-Filter in lib/hafas.php (substr(extId,0,-2));
+ * sie gilt netzweit für die 9-stelligen INSA-Stop-IDs. Nur rein numerische IDs
+ * mit ausreichender Länge werden gekürzt – unerwartete Formate bleiben unverändert.
+ */
+function normalize_stop_id(string $stopId): string
+{
+    if (ctype_digit($stopId) && strlen($stopId) > 2) {
+        return substr($stopId, 0, -2);
+    }
+    return $stopId;
+}
+
+/**
+ * Hash über die geordnete Folge der (auf Haltestellen-Ebene normalisierten)
+ * Stop-IDs. Identifiziert den Linienverlauf unabhängig von Abfahrtszeiten.
  */
 function compute_path_fingerprint(array $stops): string
 {
-    $ids = array_map(fn($s) => (string) $s['stopId'], $stops);
+    $ids = array_map(fn($s) => normalize_stop_id((string) $s['stopId']), $stops);
     return hash('sha256', implode('|', $ids));
 }
 
 /**
- * Hash über Stop-ID + UTC-HH:MM-Paare aller Halte mit Zeitangabe.
+ * Hash über normalisierte Stop-ID + UTC-HH:MM-Paare aller Halte mit Zeitangabe.
  * Identifiziert eine konkrete Fahrtinstanz (Plan-Fahrplan-Muster).
  * Gibt null zurück, wenn weniger als 2 Halte Zeitangaben haben.
  */
@@ -46,7 +68,7 @@ function compute_schedule_fingerprint(array $stops): ?string
         if ($time === null) {
             continue;
         }
-        $parts[] = $s['stopId'] . '_' . $time;
+        $parts[] = normalize_stop_id((string) $s['stopId']) . '_' . $time;
     }
 
     if (count($parts) < 2) {
