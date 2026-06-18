@@ -188,7 +188,7 @@ GET /api/departures?stopId=de:15003:4000
 | `journeyEnd` | string\|null | Name der Endhaltestelle |
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
 | `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
-| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (eindeutiger route_stops-Treffer) oder `null` |
+| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer; bei mehreren Trips am selben Halt/Zeit-Schlüssel nur, wenn alle dieselbe Kursnummer tragen) oder `null` |
 | `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 ---
@@ -552,8 +552,10 @@ Capture-View aufgerufen, damit die Abfahrtstafel die zugeordnete
 Kursnummer auch dann anzeigt, wenn HAFAS für dieselbe Fahrt eine neue
 `tripId`/`serviceNr` ausgibt. Legt **keinen** neuen Trip an. Bei fehlendem
 Fingerprint-Match (`reason: "no_trip"`) wird zusätzlich ein heuristischer
-Lookup über `route_stops` versucht; bei eindeutigem Treffer enthält die
-Antwort `heuristicCourseNumber` als Vorschlag für die Capture-View.
+Lookup über `route_stops` versucht; matchen mehrere Trips denselben Halt/Zeit-
+Schlüssel (Duplikate derselben Fahrt durch instabile Steig-IDs), enthält die
+Antwort `heuristicCourseNumber` nur, wenn sich alle auf dieselbe Kursnummer
+einigen. Sonst kein Vorschlag.
 
 **Request-Body:**
 ```json

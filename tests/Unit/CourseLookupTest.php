@@ -119,4 +119,78 @@ class CourseLookupTest extends TestCase
         $spec = self::spec(['serviceNr' => 'ABC', 'line' => '9', 'dayType' => 'SO']);
         $this->assertSame('42', pick_course_for_departure($maps, $spec)['number']);
     }
+
+    // -------------------------------------------------------------------------
+    // agree_course_from_trips() – Einigung mehrerer Trips am selben Schlüssel.
+    // Deckt das "graue Problem" ab: Duplikat-Trips derselben Fahrt (instabile
+    // Steig-IDs) sollen ihre gemeinsame Kursnummer trotzdem liefern.
+    // -------------------------------------------------------------------------
+
+    public function test_agree_returns_null_for_no_trips(): void
+    {
+        $this->assertNull(agree_course_from_trips([]));
+    }
+
+    public function test_agree_single_trip_recorded(): void
+    {
+        $result = agree_course_from_trips([
+            ['course' => '02', 'manual' => false],
+        ]);
+        $this->assertSame(['number' => '02', 'source' => 'heuristic'], $result);
+    }
+
+    public function test_agree_single_trip_manual_keeps_manual_source(): void
+    {
+        $result = agree_course_from_trips([
+            ['course' => '02', 'manual' => true],
+        ]);
+        $this->assertSame(['number' => '02', 'source' => 'manual'], $result);
+    }
+
+    public function test_agree_two_duplicates_with_same_course(): void
+    {
+        // Kernfall: zwei Duplikat-Trips, beide Kurs 02 → 02 statt "??".
+        $result = agree_course_from_trips([
+            ['course' => '02', 'manual' => false],
+            ['course' => '02', 'manual' => false],
+        ]);
+        $this->assertSame(['number' => '02', 'source' => 'heuristic'], $result);
+    }
+
+    public function test_agree_manual_override_wins_source_when_values_match(): void
+    {
+        $result = agree_course_from_trips([
+            ['course' => '07', 'manual' => false],
+            ['course' => '07', 'manual' => true],
+        ]);
+        $this->assertSame(['number' => '07', 'source' => 'manual'], $result);
+    }
+
+    public function test_agree_returns_null_on_conflict(): void
+    {
+        $result = agree_course_from_trips([
+            ['course' => '02', 'manual' => false],
+            ['course' => '05', 'manual' => false],
+        ]);
+        $this->assertNull($result);
+    }
+
+    public function test_agree_ignores_trips_without_course(): void
+    {
+        // Nur eine Variante des Duplikats ist erfasst – die andere blockiert nicht.
+        $result = agree_course_from_trips([
+            ['course' => null, 'manual' => false],
+            ['course' => '02', 'manual' => false],
+        ]);
+        $this->assertSame(['number' => '02', 'source' => 'heuristic'], $result);
+    }
+
+    public function test_agree_returns_null_when_all_courses_unknown(): void
+    {
+        $result = agree_course_from_trips([
+            ['course' => null, 'manual' => false],
+            ['course' => null, 'manual' => false],
+        ]);
+        $this->assertNull($result);
+    }
 }
