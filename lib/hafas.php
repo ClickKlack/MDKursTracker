@@ -317,6 +317,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
     }
 
     $result = array_column(array_values($best), 'entry');
+    $result = hafas_sort_departures($result); // nach Live-Zeit sortieren (Fallback Soll-Zeit)
 
     hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_DEPARTURES);
 
@@ -758,6 +759,34 @@ function hafas_deduplicate_departures(array $entries): array
         }
     }
     return array_column(array_values($best), 1);
+}
+
+/**
+ * Sortiert Abfahrts-Einträge aufsteigend nach der effektiven Abfahrtszeit:
+ * Echtzeit (`departureActual`), falls vorhanden, sonst Soll-Zeit
+ * (`departurePlanned`). So spiegelt die Reihenfolge die real erwartete
+ * Abfahrt wider – eine verspätete Fahrt rutscht hinter eine planmäßig
+ * spätere, aber pünktliche Fahrt.
+ *
+ * Verglichen werden die ISO-8601-UTC-Strings direkt (Format
+ * "YYYY-MM-DDTHH:MM:SSZ" ist lexikografisch == chronologisch). Einträge ganz
+ * ohne Zeit landen am Ende. usort ist seit PHP 8.0 stabil, daher bleibt bei
+ * gleicher effektiver Zeit die bisherige Reihenfolge erhalten.
+ *
+ * @param  array<array{departurePlanned: ?string, departureActual: ?string}> $entries
+ * @return array Nach effektiver Abfahrtszeit aufsteigend sortierte Liste
+ * @internal Ausgelagert für Unit-Tests ohne HAFAS-HTTP-Aufruf.
+ */
+function hafas_sort_departures(array $entries): array
+{
+    // Einträge ohne jede Zeit ans Ende stellen (\xFF sortiert nach jedem ISO-String)
+    $effective = static fn(array $e): string =>
+        $e['departureActual'] ?? $e['departurePlanned'] ?? "\xFF";
+
+    usort($entries, static fn(array $a, array $b): int =>
+        strcmp($effective($a), $effective($b)));
+
+    return $entries;
 }
 
 /**

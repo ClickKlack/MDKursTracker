@@ -299,4 +299,54 @@ class HafasHelperTest extends TestCase
         $result = hafas_deduplicate_departures($entries);
         $this->assertCount(2, $result);
     }
+
+    // -----------------------------------------------------------------------
+    // hafas_sort_departures – Sortierung nach effektiver Abfahrtszeit
+    // -----------------------------------------------------------------------
+
+    /** Verspätete Fahrt rutscht hinter eine planmäßig spätere, pünktliche Fahrt */
+    public function test_sort_uses_actual_time_over_planned(): void
+    {
+        // A: Soll 17:40, Echtzeit 17:50 (10 Min Verspätung)
+        // B: Soll 17:45, ohne Echtzeit → fährt real vor A
+        $a = ['departurePlanned' => '2026-04-21T17:40:00Z', 'departureActual' => '2026-04-21T17:50:00Z', '_label' => 'A'];
+        $b = ['departurePlanned' => '2026-04-21T17:45:00Z', 'departureActual' => null, '_label' => 'B'];
+
+        $result = hafas_sort_departures([$a, $b]);
+        $this->assertSame('B', $result[0]['_label']);
+        $this->assertSame('A', $result[1]['_label']);
+    }
+
+    /** Ohne Echtzeit wird nach Soll-Zeit sortiert */
+    public function test_sort_falls_back_to_planned(): void
+    {
+        $late  = ['departurePlanned' => '2026-04-21T18:03:00Z', 'departureActual' => null, '_label' => 'spät'];
+        $early = ['departurePlanned' => '2026-04-21T17:43:00Z', 'departureActual' => null, '_label' => 'früh'];
+
+        $result = hafas_sort_departures([$late, $early]);
+        $this->assertSame('früh', $result[0]['_label']);
+        $this->assertSame('spät', $result[1]['_label']);
+    }
+
+    /** Eintrag ganz ohne Zeit landet am Ende */
+    public function test_sort_entries_without_time_go_last(): void
+    {
+        $withTime = ['departurePlanned' => '2026-04-21T17:43:00Z', 'departureActual' => null, '_label' => 'mitZeit'];
+        $noTime   = ['departurePlanned' => null, 'departureActual' => null, '_label' => 'ohneZeit'];
+
+        $result = hafas_sort_departures([$noTime, $withTime]);
+        $this->assertSame('mitZeit', $result[0]['_label']);
+        $this->assertSame('ohneZeit', $result[1]['_label']);
+    }
+
+    /** Gleiche effektive Zeit → stabile Reihenfolge (Eingabereihenfolge bleibt) */
+    public function test_sort_is_stable_for_equal_times(): void
+    {
+        $first  = ['departurePlanned' => '2026-04-21T17:43:00Z', 'departureActual' => null, '_label' => 'erster'];
+        $second = ['departurePlanned' => '2026-04-21T17:43:00Z', 'departureActual' => null, '_label' => 'zweiter'];
+
+        $result = hafas_sort_departures([$first, $second]);
+        $this->assertSame('erster', $result[0]['_label']);
+        $this->assertSame('zweiter', $result[1]['_label']);
+    }
 }

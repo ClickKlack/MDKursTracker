@@ -134,6 +134,11 @@ GET /api/nearby?name=Hauptbahnhof
 
 Nächste Straßenbahn-Abfahrten an einer Haltestelle.
 
+Die Abfahrten sind aufsteigend nach der **effektiven Abfahrtszeit** sortiert:
+Echtzeit (`departureActual`), falls vorhanden, sonst Soll-Zeit
+(`departurePlanned`). Eine verspätete Fahrt erscheint dadurch hinter einer
+planmäßig späteren, aber pünktlichen Fahrt.
+
 **Parameter:**
 
 | Name | Typ | Pflicht | Beschreibung |
