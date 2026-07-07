@@ -65,4 +65,46 @@ class DbHelperTest extends TestCase
         $original = '2026-06-15 09:45:30';
         $this->assertSame($original, iso_to_mysql(mysql_to_iso($original)));
     }
+
+    // -----------------------------------------------------------------------
+    // select_active_period_id
+    // -----------------------------------------------------------------------
+
+    /**
+     * Perioden absteigend nach start_date, id sortiert – wie von der Query geliefert.
+     */
+    private static function periods(): array
+    {
+        return [
+            ['id' => 3, 'start_date' => '2026-07-09'], // Zukunft (heute = 07.07.)
+            ['id' => 2, 'start_date' => '2026-06-01'],
+            ['id' => 1, 'start_date' => '2026-01-01'],
+        ];
+    }
+
+    public function test_future_period_is_not_active_yet(): void
+    {
+        // Kern des Bugs: Periode #3 gilt ab 09.07., heute ist der 07.07.
+        $this->assertSame(2, select_active_period_id(self::periods(), '2026-07-07'));
+    }
+
+    public function test_future_period_becomes_active_on_start_date(): void
+    {
+        $this->assertSame(3, select_active_period_id(self::periods(), '2026-07-09'));
+    }
+
+    public function test_future_period_active_after_start_date(): void
+    {
+        $this->assertSame(3, select_active_period_id(self::periods(), '2026-08-01'));
+    }
+
+    public function test_falls_back_to_oldest_when_all_periods_are_future(): void
+    {
+        $this->assertSame(1, select_active_period_id(self::periods(), '2025-12-31'));
+    }
+
+    public function test_returns_zero_for_empty_list(): void
+    {
+        $this->assertSame(0, select_active_period_id([], '2026-07-07'));
+    }
 }

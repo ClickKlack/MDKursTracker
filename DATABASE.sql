@@ -72,7 +72,9 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%school_holidays` (
 -- -----------------------------------------------------------------------------
 -- Tabelle: %%PREFIX%%schedule_periods
 -- Jede Zeile repräsentiert einen abgegrenzten Fahrplanzeitraum.
--- Die aktive Periode ist immer die mit dem höchsten id-Wert.
+-- Die aktive Periode ist die neueste, deren start_date bereits erreicht ist
+-- (heute in deutscher Zeit); Perioden mit zukünftigem start_date werden erst
+-- ab ihrem Gültigkeitstag aktiv. Fallback: älteste Periode.
 -- Beim ersten API-Aufruf wird automatisch eine initiale Periode angelegt
 -- (name "Fahrplan (initial)", start_date = aktuelles Datum).
 -- -----------------------------------------------------------------------------
@@ -260,8 +262,9 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Nützliche Abfragen (Kommentare, kein ausführbarer Code)
 -- =============================================================================
 --
--- Aktive Periode ermitteln:
---   SELECT * FROM %%PREFIX%%schedule_periods ORDER BY id DESC LIMIT 1;
+-- Aktive Periode ermitteln (neueste, deren start_date bereits erreicht ist):
+--   SELECT * FROM %%PREFIX%%schedule_periods
+--   WHERE start_date <= CURDATE() ORDER BY start_date DESC, id DESC LIMIT 1;
 --
 -- Aktive Kursnummer je Fahrt berechnen (Mehrheitsregel, Gleichstand: ältester):
 --   SELECT

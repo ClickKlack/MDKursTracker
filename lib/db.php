@@ -77,15 +77,48 @@ function init_period(PDO $pdo): void
 }
 
 /**
- * Gibt die ID der aktiven (neuesten) Fahrplanperiode zurück.
+ * Bestimmt "heute" als Kalendertag in deutscher Zeitzone (Europe/Berlin).
+ * Wird für die Perioden-Gültigkeit benötigt, damit der Wechsel exakt zum
+ * Kalendertag in lokaler Zeit erfolgt und nicht an der UTC-Tagesgrenze.
+ */
+function current_schedule_date(): string
+{
+    return (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
+}
+
+/**
+ * Wählt aus einer absteigend (start_date DESC, id DESC) sortierten Perioden-Liste
+ * die aktive Periode: die neueste, deren start_date <= $today liegt.
+ * Fallback: die älteste Periode, falls alle Perioden noch in der Zukunft liegen.
+ *
+ * @param array<int,array{id:int|string,start_date:string}> $periods
+ */
+function select_active_period_id(array $periods, string $today): int
+{
+    foreach ($periods as $period) {
+        // Datumsstrings im Format "YYYY-MM-DD" sind lexikografisch vergleichbar.
+        if ($period['start_date'] <= $today) {
+            return (int) $period['id'];
+        }
+    }
+
+    // Alle Perioden liegen in der Zukunft → älteste (= letztes Element) als Fallback.
+    $oldest = end($periods);
+
+    return $oldest ? (int) $oldest['id'] : 0;
+}
+
+/**
+ * Gibt die ID der aktuell gültigen Fahrplanperiode zurück:
+ * die neueste Periode, deren start_date bereits erreicht ist (deutsche Zeit).
  */
 function get_active_period_id(PDO $pdo): int
 {
-    $row = $pdo->query(
-        'SELECT id FROM ' . tbl('schedule_periods') . ' ORDER BY id DESC LIMIT 1'
-    )->fetch();
+    $rows = $pdo->query(
+        'SELECT id, start_date FROM ' . tbl('schedule_periods') . ' ORDER BY start_date DESC, id DESC'
+    )->fetchAll();
 
-    return (int) $row['id'];
+    return select_active_period_id($rows, current_schedule_date());
 }
 
 /**
