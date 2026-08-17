@@ -189,6 +189,7 @@ GET /api/departures?stopId=de:15003:4000
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
 | `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
 | `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer) oder `null` |
+| `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 Zur `heuristic`-Quelle: Fallen mehrere Trips auf denselben Halt/Zeit-Schlüssel,
 wird die Kursnummer nur geliefert, wenn alle dieselbe tragen. Widersprechen sie
@@ -196,7 +197,6 @@ sich, engt der Server die Kandidaten zuerst über die Richtung und danach über
 `journeyStartTime`/`journeyEndTime` der Abfahrt ein. Das trennt Fahrten, die
 sich innerhalb einer Fahrplanperiode nur im Laufweg unterscheiden (z. B. eine
 eingekürzte Linie). Bleibt es uneindeutig, ist `activeCourseNumber` `null`.
-| `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 ---
 
@@ -1181,3 +1181,94 @@ Aktive Wartung beenden. Setzt `ended_at = UTC_TIMESTAMP()` für die offene Zeile
 **Erfolg (200):** `{ "ok": true }`
 
 **Fehler:** `401` – keine Admin-Session | `404` – keine aktive Wartung vorhanden
+
+---
+
+### GET `/admin-api/diagnostics`
+
+Diagnose der Kursnummer-Heuristik für eine Fahrplanperiode. Grundlage des
+Admin-Reiters „Diagnose" und des täglichen Reports (`cron/diagnostics_report.php`).
+
+**Parameter:**
+
+| Name | Typ | Pflicht | Beschreibung |
+|---|---|---|---|
+| `period_id` | int | nein | Standard: aktive Periode |
+
+**Beispiel-Response:**
+```json
+{
+  "period":  { "id": 3, "name": "Baunetz 09.07.", "startDate": "2026-07-09" },
+  "summary": {
+    "routeChanges": 4, "scheduleDrift": 4, "courseConflicts": 0,
+    "heuristicMisses": 1, "missHits": 7
+  },
+  "routeChanges": [
+    {
+      "line": "2", "dayType": "SF",
+      "anchor": "start", "changedSide": "end",
+      "slotStopId": "300739302", "slotStopName": "Magdeburg, Hauptbahnhof/Willy-Brandt-Platz",
+      "slotHhmm": "15:47", "changedOn": "2026-07-30", "shortened": true,
+      "from": { "movedStopId": "300754003", "movedStopName": "Magdeburg, Westerhüsen (Betriebshof)",
+                "stopCount": 24, "lastSeen": "2026-07-15", "observedDays": 1,
+                "courses": ["01"], "tripIds": [1628] },
+      "to":   { "movedStopId": "300741403", "movedStopName": "Magdeburg, Buckau (Wasserwerk)",
+                "stopCount": 12, "firstSeen": "2026-07-30", "observedDays": 1,
+                "courses": ["05"], "tripIds": [1751] }
+    }
+  ],
+  "scheduleDrift": [
+    {
+      "line": "2", "dayType": "SF", "changedOn": "2026-07-29",
+      "affectedKeys": 24,
+      "from": { "endStopId": "300754003", "endStopName": "Magdeburg, Westerhüsen (Betriebshof)",
+                "stopCount": 24, "lastSeen": "2026-07-15", "tripCount": 2, "tripIds": [1628] },
+      "to":   { "endStopId": "300741403", "endStopName": "Magdeburg, Buckau (Wasserwerk)",
+                "stopCount": 12, "firstSeen": "2026-07-29", "tripCount": 2, "tripIds": [1751] },
+      "examples": [
+        { "routeKey": "300739302|2|SF|15:47", "stopName": "Magdeburg, Hauptbahnhof/Willy-Brandt-Platz",
+          "hhmm": "15:47", "oldCourse": "01", "newCourse": "05" }
+      ]
+    }
+  ],
+  "courseConflicts": [],
+  "heuristicMisses": []
+}
+```
+
+**Befundarten:**
+
+`routeChanges` – Der Laufweg einer *konkreten Fahrt* hat sich geändert. „Fahrt"
+ist hier der Slot aus Linie, Tagestyp, Haltestelle und Soll-Zeit – also
+umgangssprachlich „die Fahrt um 21 Uhr". Der Slot wird zweimal gebildet, einmal
+am Fahrtanfang verankert (`anchor: "start"`, erkennt Änderungen am Ziel) und
+einmal am Fahrtende (`anchor: "end"`, erkennt Änderungen am Start); `changedSide`
+nennt die Seite, die sich bewegt hat, `from.movedStopName`/`to.movedStopName` den
+alten und neuen Halt dieser Seite. `shortened: true` heißt, dass der neue Halt
+auf dem bisherigen Laufweg liegt – also eine Verkürzung statt eines echten
+Zielwechsels; verglichen wird dabei auf Haltestellen-, nicht auf Steig-Ebene.
+
+Anders als `scheduleDrift` verlangt dieser Befund **keine** widersprüchlichen
+Kursnummern und schlägt deshalb auch an, wenn die Fahrt ihre Kursnummer behält.
+Linien, deren Kurse abwechselnd weiterfahren, lösen nichts aus: Die Kurzläufer
+haben eigene Soll-Zeiten und damit eigene Slots. Ebenso wenig gemeldet werden
+Varianten, deren Beobachtungszeiträume sich überlappen.
+
+`scheduleDrift` – Fahrplanwechsel innerhalb der laufenden Periode. Erkannt an
+Trips mit *verschiedenen* Kursnummern am selben Route-Schlüssel, deren
+Erfassungszeiträume sich nicht überlappen: Der eine hört auf, wo der andere
+anfängt. Dauerhaft nebeneinander bestehende Varianten (Verstärker-,
+Einrückfahrten) überlappen und gelten nicht als Befund. Handlung: neue
+Fahrplanperiode zum Datum `changedOn` anlegen.
+
+`courseConflicts` – Route-Schlüssel, an denen sich Kandidaten widersprechen und
+weder Richtung noch Laufwegzeiten sie trennen (siehe
+`narrow_course_candidates()`). Diese Abfahrten liefern dauerhaft
+`activeCourseNumber: null`. Handlung: `manual_course_number` am Trip setzen.
+
+`heuristicMisses` – im laufenden Betrieb protokollierte Aussetzer aus
+`%%PREFIX%%heuristic_misses`, absteigend nach `hitCount`. Zeigt, welche
+Konflikte Nutzer tatsächlich zu sehen bekommen. Geschrieben wird nur, wenn eine
+echte Abfahrtsanfrage ohne Kursnummer bleibt, obwohl Kandidaten vorlagen.
+
+**Fehler:** `401` – keine Admin-Session | `404` – Fahrplanperiode nicht gefunden

@@ -1,0 +1,72 @@
+meta {
+  name: Admin Diagnostics GET – Diagnose der Kursnummer-Heuristik
+  type: http
+  seq: 49
+}
+
+get {
+  url: {{baseUrl}}/admin-api/diagnostics
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.period.id: isDefined
+  res.body.summary.routeChanges: isNumber
+  res.body.summary.scheduleDrift: isNumber
+  res.body.summary.courseConflicts: isNumber
+  res.body.summary.heuristicMisses: isNumber
+  res.body.routeChanges: isArray
+  res.body.scheduleDrift: isArray
+  res.body.courseConflicts: isArray
+  res.body.heuristicMisses: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const s = res.body.summary;
+    console.log("Periode:", res.body.period.id, "–", res.body.period.name);
+    console.log("  Laufweg-Änderungen:", s.routeChanges);
+    console.log("  Fahrplanwechsel:  ", s.scheduleDrift);
+    console.log("  Kurskonflikte:    ", s.courseConflicts);
+    console.log("  Aussetzer:        ", s.heuristicMisses, `(${s.missHits} Treffer)`);
+
+    for (const c of res.body.routeChanges.slice(0, 3)) {
+      const side = c.changedSide === "end" ? "Ziel" : "Start";
+      console.log(`  ⚠ Linie ${c.line} (${c.dayType}) ${c.slotHhmm} ab ${c.slotStopName}: `
+                + `${side} ${c.from.movedStopName} → ${c.to.movedStopName}, ab ${c.changedOn}`
+                + (c.shortened ? " (Verkürzung)" : ""));
+    }
+    for (const d of res.body.scheduleDrift.slice(0, 3)) {
+      console.log(`  ⚠ Linie ${d.line} (${d.dayType}) ab ${d.changedOn}: `
+                + `${d.from.endStopName} → ${d.to.endStopName}, ${d.affectedKeys} Schlüssel`);
+    }
+    for (const c of res.body.courseConflicts.slice(0, 3)) {
+      console.log(`  ✖ Linie ${c.line} (${c.dayType}) ${c.hhmm} ${c.stopName}: Kurse ${c.courses.join("/")}`);
+    }
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login ausführen (Session-Cookie).
+
+  Liefert die Diagnose der Kursnummer-Heuristik für die aktive Periode.
+  Optional ?period_id=N für eine bestimmte Periode.
+
+  Vier Befundarten:
+    routeChanges    – Laufweg einer konkreten Fahrt (Linie, Tagestyp, Halt,
+                      Soll-Zeit) hat sich geändert. Greift auch bei gleicher
+                      Kursnummer. Abwechselnd weiterfahrende Kurse lösen
+                      nichts aus, sie haben eigene Soll-Zeiten.
+    scheduleDrift   – Fahrplanwechsel innerhalb der laufenden Periode.
+                      Handlung: neue Periode zum Datum changedOn anlegen.
+    courseConflicts – Route-Schlüssel, die weder über Richtung noch über
+                      Laufwegzeiten auflösbar sind. Diese Abfahrten zeigen
+                      dauerhaft "??". Handlung: Override am Trip setzen.
+    heuristicMisses – im Betrieb protokollierte Aussetzer mit Trefferzähler.
+
+  Leere Arrays sind der Normalfall und kein Fehler.
+
+  Fehler: 401 ohne Admin-Session, 404 bei unbekannter period_id.
+}

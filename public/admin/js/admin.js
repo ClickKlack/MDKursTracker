@@ -15,6 +15,7 @@ import { renderHafasLog }       from './hafas_log.js';
 import { renderTrips }          from './trips.js';
 import { renderAnnouncements }  from './announcements.js';
 import { renderMaintenance }    from './maintenance.js';
+import { renderDiagnostics }    from './diagnostics.js';
 
 // =============================================================================
 // API-Helfer (Admin-Kontext; nutzt dieselben Fetch-Konventionen wie api.js)
@@ -120,6 +121,7 @@ const TABS = {
     'hafas-log':       renderHafasLog,
     'maintenance':     renderMaintenance,
     'announcements':   renderAnnouncements,
+    'diagnostics':     renderDiagnostics,
 };
 
 let activeTab = 'trips';

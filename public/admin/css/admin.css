@@ -749,3 +749,36 @@ body {
     font-size: 0.85rem;
     color: var(--color-text-muted, #888);
 }
+
+/* ── Diagnose-Tab: Übersichtskacheln ───────────────────────────────────────── */
+.diag-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.diag-tile {
+    flex: 1 1 180px;
+    padding: 14px 16px;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 8px;
+    background: var(--color-bg-subtle, #fafafa);
+}
+/* Befunde vorhanden – hebt die Kachel farblich hervor */
+.diag-tile--warn {
+    border-color: #e0a800;
+    background: #fff8e5;
+}
+.diag-tile-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.diag-tile-label {
+    font-weight: 600;
+    margin-top: 2px;
+}
+.diag-tile-hint {
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #888);
+    margin-top: 2px;
+}

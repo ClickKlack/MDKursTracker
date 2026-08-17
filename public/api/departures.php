@@ -10,6 +10,7 @@ require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/course_lookup.php';
+require_once dirname(__DIR__, 2) . '/lib/diagnostics.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Methode nicht erlaubt', 405);
@@ -102,6 +103,7 @@ $byRouteStop = build_route_stop_candidate_map($pdo, $periodId);
 // Abfahrten mit activeCourseNumber + courseSource anreichern
 $maps   = ['byJourney' => $byJourney, 'byServiceNr' => $byServiceNr, 'byRouteStop' => $byRouteStop];
 $result = [];
+$misses = []; // Heuristik-Aussetzer dieses Requests, je Schlüssel einmal
 foreach ($departures as $dep) {
     $dateStr = $dep['departurePlanned'] !== null
         ? substr($dep['departurePlanned'], 0, 10)
@@ -132,10 +134,30 @@ foreach ($departures as $dep) {
         'journeyEnd'   => $journeyEnd,
     ]);
 
+    // Blieb die Abfahrt ohne Kurs, obwohl widersprüchliche Kandidaten vorlagen,
+    // ist das ein echter Aussetzer der Heuristik – für die Admin-Diagnose
+    // festhalten. Je Schlüssel nur einmal pro Request.
+    if ($pick['number'] === null) {
+        $conflict = describe_unresolved_conflict($maps, [
+            'stopId'  => $dep['stopId'] ?? $stopId,
+            'line'    => $dep['line'],
+            'dayType' => $dayType,
+            'hhmm'    => $hhmm,
+        ]);
+        if ($conflict !== null) {
+            $conflict['direction'] = $dep['direction'] ?? '';
+            $misses[$conflict['routeKey'] . '|' . $conflict['direction']] = $conflict;
+        }
+    }
+
     $result[] = array_merge($dep, [
         'activeCourseNumber' => $pick['number'],
         'courseSource'       => $pick['source'],
     ]);
 }
+
+// Best-effort und nach dem Aufbau der Antwort – im Normalfall ist $misses leer
+// und es entsteht kein Schreibzugriff.
+record_heuristic_misses($pdo, $periodId, array_values($misses));
 
 json_response($result);

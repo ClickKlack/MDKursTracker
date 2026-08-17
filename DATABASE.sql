@@ -255,6 +255,34 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%maintenance_windows` (
     KEY `idx_%%PREFIX%%maintenance_windows_ended_at` (`ended_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%heuristic_misses
+-- Diagnose der Kursnummer-Heuristik: Route-Schlüssel, an denen eine echte
+-- Abfahrtsanfrage ohne Kursnummer blieb, obwohl widersprüchliche Kandidaten
+-- vorlagen. Wiederholungen zählen hit_count hoch statt neue Zeilen anzulegen –
+-- so zeigt die Tabelle, wie oft Nutzer den Aussetzer tatsächlich sehen.
+-- Ausgewertet im Admin-Bereich unter "Diagnose" und im täglichen Cron-Report
+-- (cron/diagnostics_report.php).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%heuristic_misses` (
+    `id`         INT          NOT NULL AUTO_INCREMENT,
+    `period_id`  INT          NOT NULL                    COMMENT 'Fahrplanperiode, in der der Aussetzer auftrat',
+    `route_key`  VARCHAR(120) NOT NULL                    COMMENT 'stopId|line|dayType|HH:MM',
+    `direction`  VARCHAR(100) NOT NULL DEFAULT ''         COMMENT 'Richtungstext der Abfahrt; leer = nicht mitgeliefert',
+    `stop_id`    VARCHAR(20)  NOT NULL,
+    `line`       VARCHAR(10)  NOT NULL,
+    `day_type`   ENUM('MO-FR','SA','SO','FT','SF') NOT NULL,
+    `hhmm`       CHAR(5)      NOT NULL                    COMMENT 'Soll-Abfahrtszeit UTC',
+    `courses`    VARCHAR(100) NOT NULL DEFAULT ''         COMMENT 'Widersprüchliche Kursnummern, z.B. "01,05"',
+    `trip_ids`   VARCHAR(255) NOT NULL DEFAULT ''         COMMENT 'Beteiligte Trip-IDs, kommasepariert',
+    `hit_count`  INT          NOT NULL DEFAULT 1          COMMENT 'Wie oft Nutzer diese Abfahrt ohne Kurs gesehen haben',
+    `first_seen` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
+    `last_seen`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_%%PREFIX%%heuristic_misses_key` (`period_id`, `route_key`, `direction`),
+    KEY `idx_%%PREFIX%%heuristic_misses_last_seen` (`last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 SET FOREIGN_KEY_CHECKS = 1;
 

@@ -56,6 +56,7 @@ $routes = [
     'trip-group-detail'  => 'trip_group_detail.php',
     'announcements'      => 'announcements.php',
     'maintenance'        => 'maintenance.php',
+    'diagnostics'        => 'diagnostics.php',
 ];
 
 if ($resource !== '' && isset($routes[$resource])) {

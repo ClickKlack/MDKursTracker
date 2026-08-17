@@ -49,4 +49,19 @@ return [
     // HAFAS-Cache-Verzeichnis (optional; Standard: <projektroot>/cache/hafas/)
     // Muss außerhalb des Webroots liegen und für den Webserver-Prozess schreibbar sein.
     // 'cache_dir' => '/var/cache/mdkurstracker/hafas',
+
+    // Telegram-Kanal für den täglichen Diagnose-Report (optional).
+    // Beide Werte müssen gesetzt sein, sonst wird nichts versendet – der Report
+    // läuft dann trotzdem und schreibt seine Befunde auf stdout.
+    //
+    // Bot-Token: über @BotFather anlegen.
+    // Chat-ID:   Bot in den Kanal aufnehmen, dann
+    //            https://api.telegram.org/bot<TOKEN>/getUpdates aufrufen.
+    //            Kanäle haben eine negative ID, z.B. -1001234567890.
+    //
+    // Cron-Eintrag (einmal täglich, hier 06:15):
+    //   15 6 * * * php /pfad/zum/tracker/cron/diagnostics_report.php >/dev/null 2>&1
+    //
+    // 'telegram_bot_token' => '123456789:AA...',
+    // 'telegram_chat_id'   => '-1001234567890',
 ];

@@ -344,6 +344,51 @@ class CourseLookupTest extends TestCase
         $this->assertNull($result);
     }
 
+    // -------------------------------------------------------------------------
+    // describe_unresolved_conflict() – Grundlage der Betriebs-Diagnose.
+    // Unterscheidet "keine Daten" von "widersprüchliche Daten".
+    // -------------------------------------------------------------------------
+
+    public function test_conflict_description_null_when_no_candidates(): void
+    {
+        $this->assertNull(describe_unresolved_conflict(['byRouteStop' => []], self::spec()));
+    }
+
+    public function test_conflict_description_null_when_candidates_agree(): void
+    {
+        $maps = ['byRouteStop' => ['de:15003:4000|6|MO-FR|14:32' => [
+            self::cand(['course' => '07', 'tripId' => 1]),
+            self::cand(['course' => '07', 'tripId' => 2]),
+        ]]];
+        $this->assertNull(describe_unresolved_conflict($maps, self::spec()));
+    }
+
+    public function test_conflict_description_reports_conflicting_courses(): void
+    {
+        $maps = ['byRouteStop' => ['de:15003:4000|6|MO-FR|14:32' => self::conflictingPair()]];
+        $result = describe_unresolved_conflict($maps, self::spec());
+        $this->assertSame('de:15003:4000|6|MO-FR|14:32', $result['routeKey']);
+        $this->assertSame(['01', '05'], $result['courses']);
+        $this->assertSame([1628, 1751], $result['tripIds']);
+    }
+
+    public function test_conflict_description_ignores_unknown_courses(): void
+    {
+        // Ein Kandidat ohne Kursnummer ist kein Widerspruch.
+        $maps = ['byRouteStop' => ['de:15003:4000|6|MO-FR|14:32' => [
+            self::cand(['course' => null, 'tripId' => 1]),
+            self::cand(['course' => '07', 'tripId' => 2]),
+        ]]];
+        $this->assertNull(describe_unresolved_conflict($maps, self::spec()));
+    }
+
+    public function test_conflict_description_skipped_without_stop_or_time(): void
+    {
+        $maps = ['byRouteStop' => ['de:15003:4000|6|MO-FR|14:32' => self::conflictingPair()]];
+        $this->assertNull(describe_unresolved_conflict($maps, self::spec(['hhmm' => null])));
+        $this->assertNull(describe_unresolved_conflict($maps, self::spec(['stopId' => ''])));
+    }
+
     public function test_narrow_ignores_candidates_without_course(): void
     {
         $candidates = [

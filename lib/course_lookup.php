@@ -177,6 +177,53 @@ function narrow_course_candidates(array $candidates, array $spec): ?array
 }
 
 /**
+ * Beschreibt, warum eine Abfahrt ohne Kursnummer blieb – sofern der Grund
+ * widersprüchliche Kandidaten waren.
+ *
+ * Wird nur aufgerufen, wenn pick_course_for_departure() nichts geliefert hat,
+ * und unterscheidet die beiden Fälle:
+ *   - gar keine Daten zum Route-Schlüssel  → null (normal, nichts zu melden)
+ *   - Daten vorhanden, aber widersprüchlich → Befund
+ *
+ * Nur der zweite Fall ist ein echter Aussetzer der Heuristik und wird über
+ * record_heuristic_miss() festgehalten.
+ *
+ * @return array{routeKey:string, courses:string[], tripIds:int[]}|null
+ */
+function describe_unresolved_conflict(array $maps, array $spec): ?array
+{
+    if (empty($spec['stopId']) || empty($spec['hhmm'])) {
+        return null;
+    }
+
+    $routeKey = $spec['stopId'] . '|' . ($spec['line'] ?? '') . '|' . ($spec['dayType'] ?? '') . '|' . $spec['hhmm'];
+    $candidates = ($maps['byRouteStop'] ?? [])[$routeKey] ?? [];
+
+    $courses = [];
+    $tripIds = [];
+    foreach ($candidates as $c) {
+        if (($c['course'] ?? null) === null) {
+            continue;
+        }
+        $courses[$c['course']] = true;
+        $tripIds[] = $c['tripId'] ?? null;
+    }
+
+    if (count($courses) < 2) {
+        return null; // keine Daten oder einig – kein Widerspruch
+    }
+
+    $courses = array_keys($courses);
+    sort($courses);
+
+    return [
+        'routeKey' => $routeKey,
+        'courses'  => $courses,
+        'tripIds'  => array_values(array_filter($tripIds, static fn($id) => $id !== null)),
+    ];
+}
+
+/**
  * Baut die Heuristik-Kandidatenmap für alle route_stops einer Periode auf.
  *
  * Anders als ein fertiger Schlüssel→Nummer-Index behält die Map je Schlüssel
