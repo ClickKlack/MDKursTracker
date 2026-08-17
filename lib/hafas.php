@@ -470,7 +470,7 @@ function hafas_request(array $services, array $params = []): array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 10,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-        CURLOPT_USERAGENT      => 'MDKursTracker/1.0 (https://codeberg.org/ClickKlack/JSKursTracker)',
+        CURLOPT_USERAGENT      => 'MDKursTracker/1.0 (https://github.com/ClickKlack/MDKursTracker)',
     ]);
 
     $responseHeaders = [];

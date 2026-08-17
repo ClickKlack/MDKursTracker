@@ -19,7 +19,7 @@ Erfassungsperiode starten.
 | Datenbank | MariaDB ≥ 10.4 |
 | Fahrplandaten | INSA/NASA HAFAS-API |
 | Tests | PHPUnit 11 |
-| CI | Forgejo Actions (Codeberg) |
+| Repository | GitHub (github.com/ClickKlack/MDKursTracker) |
 
 ## Voraussetzungen
 

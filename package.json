@@ -1,6 +1,6 @@
 {
   "name": "mdkurstracker",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "private": true,
   "description": "MDKursTracker – PWA zur gemeinschaftlichen Erfassung von MVB-Kursnummern (Magdeburg)"
 }

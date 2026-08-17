@@ -257,6 +257,26 @@ Kein öffentlicher Zugriff auf `config.php` möglich.
 
 ---
 
+## Phase 12 – Umzug der Code-Verwaltung zu GitHub
+
+**Ziel:** Wechsel des Hostings von Codeberg zu GitHub (geänderte Regeln für
+KI-gestützt entwickelten Code). Das Repository heißt dort `MDKursTracker`
+statt bisher `JSKursTracker`.
+
+- [x] SSH-Schlüssel für GitHub erzeugen (ed25519) und in `~/.ssh/config` eintragen
+- [x] Repository `ClickKlack/MDKursTracker` auf GitHub anlegen
+- [x] Codeberg-Verweise ersetzen: Info-Ansicht, HAFAS-User-Agent, README, composer.json
+- [x] Git-Remote `origin` auf GitHub umstellen
+- [x] Historie inklusive aller Tags nach GitHub pushen
+
+**Abnahmekriterium:** Vollständige Historie und alle Tags auf GitHub vorhanden.
+Kein Verweis auf Codeberg mehr im ausgelieferten Code.
+
+**Hinweis:** Die Einträge in Phase 0 dokumentieren den damaligen Stand
+(Codeberg) und bleiben als Historie unverändert stehen.
+
+---
+
 ## Reihenfolge für KI-gestützte Implementierung
 
 Jede Phase als eigene Sitzung starten. Kontext am Anfang jeder Sitzung

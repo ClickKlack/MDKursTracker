@@ -99,9 +99,9 @@ function buildHtml(cfg, activeSwVersion) {
                 </p>
                 <p class="info-text">
                     <a class="info-link"
-                       href="https://codeberg.org/ClickKlack/JSKursTracker"
+                       href="https://github.com/ClickKlack/MDKursTracker"
                        target="_blank" rel="noopener noreferrer">
-                        codeberg.org/ClickKlack/JSKursTracker
+                        github.com/ClickKlack/MDKursTracker
                     </a>
                 </p>
                 <p class="info-text">
