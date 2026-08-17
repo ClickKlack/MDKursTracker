@@ -322,6 +322,11 @@ function handleDepartureSelect(e) {
         serviceDate:           dep.departurePlanned ? getServiceDate(dep.departurePlanned) : '',
         departurePlanned:      dep.departurePlanned,
         departureActual:       dep.departureActual ?? null,
+        // Start-/Endzeit der Gesamtfahrt – Stichentscheid für den heuristischen
+        // Lookup in /api/trips/touch, wenn mehrere Trips auf denselben
+        // Route-Schlüssel fallen.
+        journeyStartTime:      dep.journeyStartTime ?? null,
+        journeyEndTime:        dep.journeyEndTime ?? null,
         // Vorschlag aus der Abfahrtstafel mitgeben – Capture-View zeigt ihn
         // sofort an, ohne auf den Touch-Aufruf warten zu müssen.
         suggestedCourseNumber: dep.activeCourseNumber ?? null,

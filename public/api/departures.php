@@ -97,7 +97,7 @@ foreach ($stmt->fetchAll() as $row) {
     }
 }
 
-$byRouteStop = build_route_stop_course_map($pdo, $periodId);
+$byRouteStop = build_route_stop_candidate_map($pdo, $periodId);
 
 // Abfahrten mit activeCourseNumber + courseSource anreichern
 $maps   = ['byJourney' => $byJourney, 'byServiceNr' => $byServiceNr, 'byRouteStop' => $byRouteStop];
@@ -110,13 +110,26 @@ foreach ($departures as $dep) {
     // HH:MM aus ISO-8601-UTC-String "YYYY-MM-DDTHH:MM:SSZ" → Position 11..15
     $hhmm = $dep['departurePlanned'] !== null ? substr($dep['departurePlanned'], 11, 5) : null;
 
+    // Start-/Endzeit der Gesamtfahrt als Stichentscheid für die Heuristik:
+    // trennt Fahrten mit gleichem Halt, gleicher Zeit und gleichem Ziel, aber
+    // unterschiedlich langem Laufweg (siehe narrow_course_candidates()).
+    $journeyStart = isset($dep['journeyStartTime']) && $dep['journeyStartTime'] !== null
+        ? substr($dep['journeyStartTime'], 11, 5)
+        : null;
+    $journeyEnd = isset($dep['journeyEndTime']) && $dep['journeyEndTime'] !== null
+        ? substr($dep['journeyEndTime'], 11, 5)
+        : null;
+
     $pick = pick_course_for_departure($maps, [
-        'hafasTripId' => $dep['hafasTripId'],
-        'serviceNr'   => $dep['serviceNr'],
-        'line'        => $dep['line'],
-        'dayType'     => $dayType,
-        'stopId'      => $dep['stopId'] ?? $stopId,
-        'hhmm'        => $hhmm,
+        'hafasTripId'  => $dep['hafasTripId'],
+        'serviceNr'    => $dep['serviceNr'],
+        'line'         => $dep['line'],
+        'dayType'      => $dayType,
+        'stopId'       => $dep['stopId'] ?? $stopId,
+        'hhmm'         => $hhmm,
+        'direction'    => $dep['direction'] ?? null,
+        'journeyStart' => $journeyStart,
+        'journeyEnd'   => $journeyEnd,
     ]);
 
     $result[] = array_merge($dep, [

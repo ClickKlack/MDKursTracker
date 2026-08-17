@@ -188,7 +188,14 @@ GET /api/departures?stopId=de:15003:4000
 | `journeyEnd` | string\|null | Name der Endhaltestelle |
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
 | `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
-| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer; bei mehreren Trips am selben Halt/Zeit-Schlüssel nur, wenn alle dieselbe Kursnummer tragen) oder `null` |
+| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer) oder `null` |
+
+Zur `heuristic`-Quelle: Fallen mehrere Trips auf denselben Halt/Zeit-Schlüssel,
+wird die Kursnummer nur geliefert, wenn alle dieselbe tragen. Widersprechen sie
+sich, engt der Server die Kandidaten zuerst über die Richtung und danach über
+`journeyStartTime`/`journeyEndTime` der Abfahrt ein. Das trennt Fahrten, die
+sich innerhalb einer Fahrplanperiode nur im Laufweg unterscheiden (z. B. eine
+eingekürzte Linie). Bleibt es uneindeutig, ist `activeCourseNumber` `null`.
 | `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
 
 ---
@@ -555,7 +562,9 @@ Fingerprint-Match (`reason: "no_trip"`) wird zusätzlich ein heuristischer
 Lookup über `route_stops` versucht; matchen mehrere Trips denselben Halt/Zeit-
 Schlüssel (Duplikate derselben Fahrt durch instabile Steig-IDs), enthält die
 Antwort `heuristicCourseNumber` nur, wenn sich alle auf dieselbe Kursnummer
-einigen. Sonst kein Vorschlag.
+einigen. Widersprechen sie sich, wird die Kandidatenliste über `direction` und
+anschließend über `journeyStartTime`/`journeyEndTime` eingeengt – sofern der
+Client diese optionalen Felder mitschickt. Bleibt es uneindeutig, kein Vorschlag.
 
 **Request-Body:**
 ```json
@@ -564,12 +573,23 @@ einigen. Sonst kein Vorschlag.
   "serviceNr":        "41058",
   "line":             "6",
   "stopId":           "de:15003:4000",
-  "departurePlanned": "2026-03-24T14:32:00Z"
+  "departurePlanned": "2026-03-24T14:32:00Z",
+  "direction":        "Buckau",
+  "journeyStartTime": "2026-03-24T14:20:00Z",
+  "journeyEndTime":   "2026-03-24T14:48:00Z"
 }
 ```
 
 `stopId` und `departurePlanned` werden für den heuristischen Fallback
 benötigt. `departurePlanned` muss ISO-8601-UTC sein.
+
+`direction`, `journeyStartTime` und `journeyEndTime` sind **optional** und
+dienen als Stichentscheid, wenn mehrere Trips auf denselben Route-Schlüssel
+fallen – etwa wenn sich innerhalb einer Fahrplanperiode der Laufweg einer Linie
+ändert und alte wie neue Fahrt zur selben Minute am selben Steig abfahren. Alle
+drei Werte stammen unverändert aus `/api/departures` (`direction`,
+`journeyStartTime`, `journeyEndTime`). Fehlt ein Feld, entfällt die jeweilige
+Stufe; ältere Clients funktionieren unverändert.
 
 **Erfolg-Response (200) – Match per Fingerprint:**
 ```json
@@ -609,6 +629,8 @@ Bei `matched: false` enthält die Antwort einen `reason`:
 **Fehler:**
 - `400` – Pflichtfeld fehlt oder Feldlänge überschritten
 - `400` – `departurePlanned` nicht im Format `YYYY-MM-DDTHH:MM:SSZ`
+- `400` – `journeyStartTime`/`journeyEndTime` nicht im Format `YYYY-MM-DDTHH:MM:SSZ`
+- `400` – `direction` länger als 100 Zeichen
 
 ---
 

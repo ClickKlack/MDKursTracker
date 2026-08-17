@@ -40,6 +40,9 @@ script:post-response {
     bru.setVar("stopId",             dep.stopId ?? "");
     bru.setVar("departurePlanned",   dep.departurePlanned ?? "");
     bru.setVar("departureActual",    dep.departureActual ?? "");
+    // Stichentscheid-Felder für den heuristischen Lookup in /api/trips/touch
+    bru.setVar("journeyStartTime",   dep.journeyStartTime ?? "");
+    bru.setVar("journeyEndTime",     dep.journeyEndTime ?? "");
   
     // Betriebsdatum aus departurePlanned ableiten (YYYY-MM-DD)
     if (dep.departurePlanned) {

@@ -21,6 +21,9 @@ function validate_trip_touch_body(mixed $body): array
 
     // Pflichtfelder. stopId und departurePlanned werden für den heuristischen
     // route_stops-Lookup gebraucht, wenn der Fingerprint-Match scheitert.
+    // Optional zusätzlich: direction, journeyStartTime, journeyEndTime – sie
+    // schärfen den Lookup, wenn mehrere Trips auf denselben Route-Schlüssel
+    // fallen (siehe narrow_course_candidates() in lib/course_lookup.php).
     $required = ['hafasTripId', 'serviceNr', 'line', 'stopId', 'departurePlanned'];
     foreach ($required as $field) {
         if (!isset($body[$field]) || (string) $body[$field] === '') {
@@ -42,8 +45,27 @@ function validate_trip_touch_body(mixed $body): array
     }
 
     // departurePlanned als ISO-8601-UTC validieren
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $body['departurePlanned'])) {
+    $isoPattern = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/';
+    if (!preg_match($isoPattern, $body['departurePlanned'])) {
         return ['ok' => false, 'error' => 'departurePlanned muss ISO-8601-UTC sein (YYYY-MM-DDTHH:MM:SSZ)'];
+    }
+
+    // Optionale Stichentscheid-Felder für den heuristischen Lookup. Ältere
+    // Clients (gecachter Service Worker) senden sie nicht – dann entfällt die
+    // jeweilige Stufe, statt den Request abzulehnen.
+    if (isset($body['direction']) && mb_strlen((string) $body['direction']) > 100) {
+        return ['ok' => false, 'error' => 'direction darf maximal 100 Zeichen lang sein'];
+    }
+
+    // Leerer String zählt wie "nicht mitgeschickt" – HAFAS liefert die Zeiten
+    // nicht für jede Fahrt, und Clients reichen dann '' statt null durch.
+    foreach (['journeyStartTime', 'journeyEndTime'] as $field) {
+        if (!isset($body[$field]) || (string) $body[$field] === '') {
+            continue;
+        }
+        if (!preg_match($isoPattern, (string) $body[$field])) {
+            return ['ok' => false, 'error' => "$field muss ISO-8601-UTC sein (YYYY-MM-DDTHH:MM:SSZ)"];
+        }
     }
 
     return ['ok' => true, 'body' => $body];

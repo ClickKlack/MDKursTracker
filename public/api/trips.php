@@ -185,13 +185,26 @@ function handle_post_trip_touch(): never
         // Fingerprint-Match fehlgeschlagen: heuristischen Lookup über
         // route_stops versuchen, damit die Capture-View trotzdem einen
         // Vorschlag bekommen kann.
-        $hhmm  = substr($body['departurePlanned'], 11, 5); // "HH:MM" UTC
-        $heur  = lookup_route_stop_course_single(
+        $hhmm = substr($body['departurePlanned'], 11, 5); // "HH:MM" UTC
+
+        // Optionale Stichentscheide, sofern der Client sie mitschickt.
+        // Leere Werte werden zu null – die jeweilige Stufe entfällt dann.
+        $hhmmOrNull = static function (mixed $iso): ?string {
+            $iso = (string) ($iso ?? '');
+            return $iso === '' ? null : substr($iso, 11, 5);
+        };
+
+        $direction = trim((string) ($body['direction'] ?? ''));
+
+        $heur = lookup_route_stop_course_single(
             $pdo, $periodId,
             (string) $body['stopId'],
             (string) $body['line'],
             $dayType,
-            $hhmm
+            $hhmm,
+            $direction !== '' ? $direction : null,
+            $hhmmOrNull($body['journeyStartTime'] ?? null),
+            $hhmmOrNull($body['journeyEndTime'] ?? null)
         );
 
         $response = ['matched' => false, 'reason' => 'no_trip'];

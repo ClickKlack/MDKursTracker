@@ -106,4 +106,76 @@ class TripTouchTest extends TestCase
         $result              = validate_trip_touch_body($body);
         $this->assertTrue($result['ok']);
     }
+
+    // -------------------------------------------------------------------------
+    // Optionale Stichentscheid-Felder (direction, journeyStartTime,
+    // journeyEndTime) für den heuristischen route_stops-Lookup.
+    // -------------------------------------------------------------------------
+
+    public function test_optional_tiebreak_fields_are_accepted(): void
+    {
+        $body = self::validBody() + [
+            'direction'        => 'Buckau',
+            'journeyStartTime' => '2026-03-24T14:20:00Z',
+            'journeyEndTime'   => '2026-03-24T14:48:00Z',
+        ];
+        $result = validate_trip_touch_body($body);
+        $this->assertTrue($result['ok']);
+        $this->assertSame('Buckau', $result['body']['direction']);
+    }
+
+    public function test_optional_tiebreak_fields_may_be_absent(): void
+    {
+        // Ältere Clients mit gecachtem Service Worker senden sie nicht – der
+        // Request muss trotzdem durchgehen.
+        $result = validate_trip_touch_body(self::validBody());
+        $this->assertTrue($result['ok']);
+    }
+
+    public function test_optional_tiebreak_fields_may_be_null(): void
+    {
+        $body = self::validBody() + [
+            'direction'        => null,
+            'journeyStartTime' => null,
+            'journeyEndTime'   => null,
+        ];
+        $result = validate_trip_touch_body($body);
+        $this->assertTrue($result['ok']);
+    }
+
+    public function test_optional_tiebreak_fields_may_be_empty_strings(): void
+    {
+        // HAFAS liefert die Laufwegzeiten nicht für jede Fahrt; Clients reichen
+        // dann '' durch. Das darf keinen 400er auslösen.
+        $body = self::validBody() + [
+            'direction'        => '',
+            'journeyStartTime' => '',
+            'journeyEndTime'   => '',
+        ];
+        $result = validate_trip_touch_body($body);
+        $this->assertTrue($result['ok']);
+    }
+
+    public function test_invalid_journey_time_format_is_rejected(): void
+    {
+        foreach (['journeyStartTime', 'journeyEndTime'] as $field) {
+            $body         = self::validBody();
+            $body[$field] = '2026-03-24 14:20:00';
+            $result       = validate_trip_touch_body($body);
+            $this->assertFalse($result['ok'], "$field-Format geprüft");
+            $this->assertStringContainsString('ISO-8601-UTC', $result['error']);
+        }
+    }
+
+    public function test_direction_length_limit(): void
+    {
+        $body              = self::validBody();
+        $body['direction'] = str_repeat('a', 101);
+        $result            = validate_trip_touch_body($body);
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('direction darf maximal', $result['error']);
+
+        $body['direction'] = str_repeat('a', 100);
+        $this->assertTrue(validate_trip_touch_body($body)['ok']);
+    }
 }

@@ -262,6 +262,12 @@ async function touchTripMapping(container, data) {
             line:             data.line,
             stopId:           data.stopId,
             departurePlanned: data.departurePlanned,
+            // Optionale Stichentscheide für den heuristischen Lookup bei
+            // fehlgeschlagenem Fingerprint-Match. Ältere pendingCapture-
+            // Datensätze haben sie noch nicht – dann bleiben sie weg.
+            direction:        data.direction ?? null,
+            journeyStartTime: data.journeyStartTime ?? null,
+            journeyEndTime:   data.journeyEndTime ?? null,
         });
 
         // Vorschlag aktualisieren, wenn Touch einen Wert liefert, der nicht

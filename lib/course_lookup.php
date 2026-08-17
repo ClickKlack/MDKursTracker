@@ -9,6 +9,10 @@
 //   2. byServiceNr["serviceNr|line|dayType"]      – persistent über tripId-Wechsel
 //   3. byRouteStop["stopId|line|dayType|HH:MM"]   – heuristisch (route_stops)
 //
+// Stufe 3 hält je Schlüssel eine Kandidatenliste statt einer fertigen Nummer.
+// Fallen mehrere Trips auf denselben Schlüssel, engt narrow_course_candidates()
+// sie stufenweise ein – siehe dort.
+//
 // Quelle pro Treffer: 'manual' (Override am Trip), 'recorded' (Mehrheit aus
 // recordings) oder 'heuristic' (eindeutiger route_stops-Fund ohne Override).
 
@@ -18,9 +22,13 @@ require_once __DIR__ . '/db.php';
  * Wählt aus drei Lookup-Maps die best passende Kursnummer für eine Abfahrt.
  *
  * @param array $maps  ['byJourney'=>[], 'byServiceNr'=>[], 'byRouteStop'=>[]]
- *                     Jeder Eintrag: ['number' => string, 'source' => string]
- * @param array $spec  ['hafasTripId','serviceNr','line','dayType','stopId','hhmm']
- *                     'hhmm' ist ein "HH:MM"-String oder null.
+ *                     byJourney/byServiceNr: Eintrag ['number','source'].
+ *                     byRouteStop: Eintrag ist eine Kandidatenliste
+ *                     (siehe build_route_stop_candidate_map()).
+ * @param array $spec  ['hafasTripId','serviceNr','line','dayType','stopId','hhmm',
+ *                      'direction','journeyStart','journeyEnd']
+ *                     'hhmm', 'journeyStart' und 'journeyEnd' sind "HH:MM"-Strings
+ *                     (UTC) oder null.
  * @return array       ['number' => string|null, 'source' => string|null]
  */
 function pick_course_for_departure(array $maps, array $spec): array
@@ -40,8 +48,9 @@ function pick_course_for_departure(array $maps, array $spec): array
 
     if (!empty($spec['stopId']) && !empty($spec['hhmm'])) {
         $routeKey = $spec['stopId'] . '|' . ($spec['line'] ?? '') . '|' . ($spec['dayType'] ?? '') . '|' . $spec['hhmm'];
-        if (isset($byRouteStop[$routeKey])) {
-            return $byRouteStop[$routeKey];
+        $pick     = narrow_course_candidates($byRouteStop[$routeKey] ?? [], $spec);
+        if ($pick !== null) {
+            return ['number' => $pick['number'], 'source' => $pick['source']];
         }
     }
 
@@ -95,61 +104,184 @@ function agree_course_from_trips(array $trips): ?array
 }
 
 /**
- * Baut die Heuristik-Lookup-Map für alle route_stops einer Periode auf.
+ * Engt eine Kandidatenliste stufenweise ein, bis sie eine eindeutige
+ * Kursnummer liefert.
  *
- * Matchen mehrere Trips denselben Schlüssel (Duplikate derselben Fahrt durch
- * instabile Steig-IDs), wird die Kursnummer geliefert, wenn sich alle einig
- * sind – siehe agree_course_from_trips(). Widersprechen sie sich, kein Eintrag.
+ * Der Route-Schlüssel (stopId|line|dayType|HH:MM) ist bewusst grob und fasst
+ * gelegentlich zwei reale Fahrten zusammen – etwa wenn sich innerhalb einer
+ * Fahrplanperiode der Laufweg einer Linie ändert (Linie 2 ab 29.07.2026 von
+ * Westerhüsen auf Buckau eingekürzt). Dann tragen die Trips verschiedene
+ * Kursnummern und agree_course_from_trips() verweigert die Auskunft.
  *
- * @return array  Map["stopId|line|dayType|HH:MM" => ['number','source']]
+ * Stufen:
+ *   1. alle Kandidaten           – identisch zum Verhalten ohne Stichentscheid
+ *   2. nur passende Richtung     – trennt Westerhüsen von Buckau
+ *   3. nur passende Start-/Endzeit der Gesamtfahrt – trennt Fahrten mit
+ *      gleichem Ziel, aber unterschiedlich langem Laufweg
+ *
+ * Jede Stufe filtert aus der Vollliste, nicht aus dem Ergebnis der
+ * vorhergehenden: Ändert HAFAS den Richtungstext, bleibt Stufe 3 wirksam.
+ * Da Stufe 1 die ungefilterte Liste ist, kann keine Abfahrt eine Kursnummer
+ * verlieren, die sie vorher hatte – die späteren Stufen greifen nur dort, wo
+ * bisher gar nichts angezeigt wurde.
+ *
+ * @param array $candidates Liste aus ['course','manual','tripId','direction',
+ *                          'journeyStart','journeyEnd'].
+ * @param array $spec       Erwartet 'direction', 'journeyStart', 'journeyEnd'
+ *                          (je optional). Fehlt ein Wert, entfällt die Stufe.
+ * @return array{number: string, source: string, tripId: int|null}|null
  */
-function build_route_stop_course_map(PDO $pdo, int $periodId): array
+function narrow_course_candidates(array $candidates, array $spec): ?array
 {
-    // Eine Zeile je (Route-Schlüssel, Trip) mit dessen effektiver Kursnummer;
-    // die Einigung über mehrere Trips erfolgt anschließend in PHP.
-    $sql = '
-        SELECT
-            rs.stop_id,
-            COALESCE(rs.line, t.line) AS line,
-            t.day_type,
-            DATE_FORMAT(rs.departure_planned, \'%H:%i\') AS hhmm,
-            t.id AS trip_id,
-            t.manual_course_number,
-            (
-                SELECT r.course_number
-                FROM ' . tbl('recordings') . ' r
-                WHERE r.trip_id = t.id AND r.deleted_at IS NULL
-                GROUP BY r.course_number
-                ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
-                LIMIT 1
-            ) AS majority_course_number
-        FROM ' . tbl('route_stops') . ' rs
-        JOIN ' . tbl('trips') . ' t ON t.id = rs.trip_id
-        WHERE t.period_id = ?
-          AND rs.departure_planned IS NOT NULL
-        GROUP BY rs.stop_id, COALESCE(rs.line, t.line), t.day_type, hhmm, t.id
-    ';
+    if (!$candidates) {
+        return null;
+    }
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$periodId]);
+    $stages = [$candidates];
 
-    // Trips je Route-Schlüssel sammeln …
-    $grouped = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $key = $row['stop_id'] . '|' . ($row['line'] ?? '') . '|' . $row['day_type'] . '|' . $row['hhmm'];
-        $grouped[$key][] = [
-            'course' => $row['manual_course_number'] ?? $row['majority_course_number'],
-            'manual' => $row['manual_course_number'] !== null,
+    if (($spec['direction'] ?? '') !== '') {
+        $stages[] = array_filter(
+            $candidates,
+            static fn(array $c): bool => ($c['direction'] ?? null) === $spec['direction']
+        );
+    }
+
+    if (($spec['journeyStart'] ?? '') !== '' && ($spec['journeyEnd'] ?? '') !== '') {
+        $stages[] = array_filter(
+            $candidates,
+            static fn(array $c): bool => ($c['journeyStart'] ?? null) === $spec['journeyStart']
+                                      && ($c['journeyEnd'] ?? null) === $spec['journeyEnd']
+        );
+    }
+
+    foreach ($stages as $stage) {
+        // Leere Stufen liefern über agree_course_from_trips() ohnehin null.
+        $pick = agree_course_from_trips($stage);
+        if ($pick === null) {
+            continue;
+        }
+
+        // Repräsentativen Trip mitgeben – der Touch-Endpunkt gibt ihn zurück.
+        $tripId = null;
+        foreach ($stage as $c) {
+            if (($c['course'] ?? null) === $pick['number']) {
+                $tripId = $c['tripId'] ?? null;
+                break;
+            }
+        }
+
+        return $pick + ['tripId' => $tripId];
+    }
+
+    return null;
+}
+
+/**
+ * Baut die Heuristik-Kandidatenmap für alle route_stops einer Periode auf.
+ *
+ * Anders als ein fertiger Schlüssel→Nummer-Index behält die Map je Schlüssel
+ * alle passenden Trips. Die Auswahl trifft erst narrow_course_candidates() zum
+ * Abfragezeitpunkt – nur dort sind Richtung und Laufwegzeiten der konkreten
+ * Abfahrt bekannt.
+ *
+ * @return array  Map["stopId|line|dayType|HH:MM" => Kandidatenliste]
+ */
+function build_route_stop_candidate_map(PDO $pdo, int $periodId): array
+{
+    // Trip-Ebene separat laden: die Mehrheits-Subquery läuft so einmal je Trip
+    // (einige hundert) statt einmal je route_stops-Zeile (einige zehntausend).
+    $tripStmt = $pdo->prepare(
+        'SELECT
+             t.id,
+             t.day_type,
+             t.direction,
+             t.manual_course_number,
+             (
+                 SELECT r.course_number
+                 FROM ' . tbl('recordings') . ' r
+                 WHERE r.trip_id = t.id AND r.deleted_at IS NULL
+                 GROUP BY r.course_number
+                 ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
+                 LIMIT 1
+             ) AS majority_course_number
+         FROM ' . tbl('trips') . ' t
+         WHERE t.period_id = ?'
+    );
+    $tripStmt->execute([$periodId]);
+
+    $trips = [];
+    foreach ($tripStmt->fetchAll() as $row) {
+        $trips[(int) $row['id']] = [
+            'course'    => $row['manual_course_number'] ?? $row['majority_course_number'],
+            'manual'    => $row['manual_course_number'] !== null,
+            'tripId'    => (int) $row['id'],
+            'direction' => $row['direction'],
+            'dayType'   => $row['day_type'],
         ];
     }
 
-    // … und nur eintragen, wenn sich die Trips auf eine Kursnummer einigen.
-    $map = [];
-    foreach ($grouped as $key => $trips) {
-        $pick = agree_course_from_trips($trips);
-        if ($pick !== null) {
-            $map[$key] = $pick;
+    // Start- und Endzeit der Gesamtfahrt je Trip. MIN/MAX auf dem vollen
+    // Datetime statt Sortierung nach sequence: Die Halte einer Fahrt sind
+    // chronologisch, und das mitgespeicherte Datum macht die Grenzen auch bei
+    // Fahrten über Mitternacht eindeutig.
+    $boundStmt = $pdo->prepare(
+        'SELECT
+             rs.trip_id,
+             DATE_FORMAT(MIN(rs.departure_planned), \'%H:%i\') AS journey_start,
+             DATE_FORMAT(MAX(rs.departure_planned), \'%H:%i\') AS journey_end
+         FROM ' . tbl('route_stops') . ' rs
+         JOIN ' . tbl('trips') . ' t ON t.id = rs.trip_id
+         WHERE t.period_id = ?
+           AND rs.departure_planned IS NOT NULL
+         GROUP BY rs.trip_id'
+    );
+    $boundStmt->execute([$periodId]);
+
+    $bounds = [];
+    foreach ($boundStmt->fetchAll() as $row) {
+        $bounds[(int) $row['trip_id']] = [$row['journey_start'], $row['journey_end']];
+    }
+
+    // Laufwege zeilenweise streamen – die Rohzeilen werden nicht gesammelt,
+    // sonst läge der Spitzenverbrauch bei einer Periode mit einigen zehntausend
+    // route_stops deutlich über dem Speicherlimit des Hostings.
+    $stopStmt = $pdo->prepare(
+        'SELECT
+             rs.trip_id,
+             rs.stop_id,
+             COALESCE(rs.line, t.line) AS line,
+             DATE_FORMAT(rs.departure_planned, \'%H:%i\') AS hhmm
+         FROM ' . tbl('route_stops') . ' rs
+         JOIN ' . tbl('trips') . ' t ON t.id = rs.trip_id
+         WHERE t.period_id = ?
+           AND rs.departure_planned IS NOT NULL'
+    );
+    $stopStmt->execute([$periodId]);
+
+    // Je Schlüssel höchstens ein Kandidat pro Trip – ein Trip, der denselben
+    // Halt zur selben Minute doppelt führt, soll nicht doppelt zählen.
+    $grouped = [];
+    while ($row = $stopStmt->fetch()) {
+        $tripId = (int) $row['trip_id'];
+        if (!isset($trips[$tripId])) {
+            continue;
         }
+        $trip = $trips[$tripId];
+        $key  = $row['stop_id'] . '|' . ($row['line'] ?? '') . '|' . $trip['dayType'] . '|' . $row['hhmm'];
+
+        $grouped[$key][$tripId] = [
+            'course'       => $trip['course'],
+            'manual'       => $trip['manual'],
+            'tripId'       => $trip['tripId'],
+            'direction'    => $trip['direction'],
+            'journeyStart' => $bounds[$tripId][0] ?? null,
+            'journeyEnd'   => $bounds[$tripId][1] ?? null,
+        ];
+    }
+
+    $map = [];
+    foreach ($grouped as $key => $byTrip) {
+        $map[$key] = array_values($byTrip);
     }
 
     return $map;
@@ -158,10 +290,12 @@ function build_route_stop_course_map(PDO $pdo, int $periodId): array
 /**
  * Heuristik-Lookup für eine einzelne Fahrt (Touch-Endpoint).
  *
- * Matchen mehrere Trips (stopId, line, dayType, HH:MM) – Duplikate derselben
- * Fahrt durch instabile Steig-IDs – wird die Kursnummer geliefert, sofern sich
- * alle einig sind (siehe agree_course_from_trips). Sonst null.
+ * Gleiche Stufenlogik wie in der Abfahrtstafel – siehe
+ * narrow_course_candidates(). $direction, $journeyStart und $journeyEnd sind
+ * optional; fehlen sie, bleibt es beim groben Schlüssel.
  *
+ * @param string|null $journeyStart "HH:MM" (UTC) des ersten Halts der Gesamtfahrt
+ * @param string|null $journeyEnd   "HH:MM" (UTC) des letzten Halts der Gesamtfahrt
  * @return array|null ['number','source','tripId'] oder null bei 0/uneindeutig.
  */
 function lookup_route_stop_course_single(
@@ -170,12 +304,32 @@ function lookup_route_stop_course_single(
     string $stopId,
     string $line,
     string $dayType,
-    string $hhmm
+    string $hhmm,
+    ?string $direction = null,
+    ?string $journeyStart = null,
+    ?string $journeyEnd = null
 ): ?array {
+    // Nur ein Schlüssel, entsprechend wenige Trips – die Laufwegzeiten dürfen
+    // hier als korrelierte Subqueries kommen.
     $sql = '
         SELECT
             t.id AS trip_id,
+            t.direction,
             t.manual_course_number,
+            (
+                SELECT DATE_FORMAT(rs_s.departure_planned, \'%H:%i\')
+                FROM ' . tbl('route_stops') . ' rs_s
+                WHERE rs_s.trip_id = t.id AND rs_s.departure_planned IS NOT NULL
+                ORDER BY rs_s.sequence ASC
+                LIMIT 1
+            ) AS journey_start,
+            (
+                SELECT DATE_FORMAT(rs_e.departure_planned, \'%H:%i\')
+                FROM ' . tbl('route_stops') . ' rs_e
+                WHERE rs_e.trip_id = t.id AND rs_e.departure_planned IS NOT NULL
+                ORDER BY rs_e.sequence DESC
+                LIMIT 1
+            ) AS journey_end,
             (
                 SELECT r.course_number
                 FROM ' . tbl('recordings') . ' r
@@ -197,32 +351,21 @@ function lookup_route_stop_course_single(
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$periodId, $stopId, $line, $dayType, $hhmm]);
 
-    $trips = [];
+    $candidates = [];
     foreach ($stmt->fetchAll() as $row) {
-        $trips[] = [
-            'course' => $row['manual_course_number'] ?? $row['majority_course_number'],
-            'manual' => $row['manual_course_number'] !== null,
-            'tripId' => (int) $row['trip_id'],
+        $candidates[] = [
+            'course'       => $row['manual_course_number'] ?? $row['majority_course_number'],
+            'manual'       => $row['manual_course_number'] !== null,
+            'tripId'       => (int) $row['trip_id'],
+            'direction'    => $row['direction'],
+            'journeyStart' => $row['journey_start'],
+            'journeyEnd'   => $row['journey_end'],
         ];
     }
 
-    $pick = agree_course_from_trips($trips);
-    if ($pick === null) {
-        return null; // 0 Treffer oder widersprüchliche Kursnummern
-    }
-
-    // Repräsentativen Trip mit der gewählten Nummer für die Antwort wählen.
-    $tripId = null;
-    foreach ($trips as $t) {
-        if ($t['course'] === $pick['number']) {
-            $tripId = $t['tripId'];
-            break;
-        }
-    }
-
-    return [
-        'number' => $pick['number'],
-        'source' => $pick['source'],
-        'tripId' => $tripId,
-    ];
+    return narrow_course_candidates($candidates, [
+        'direction'    => $direction,
+        'journeyStart' => $journeyStart,
+        'journeyEnd'   => $journeyEnd,
+    ]);
 }

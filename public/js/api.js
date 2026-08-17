@@ -228,7 +228,8 @@ export async function getRecordings(filters = {}) {
  * Best-effort – Fehler werden vom Caller ignoriert.
  * @param {{
  *   hafasTripId:string, serviceNr:string, line:string,
- *   stopId:string, departurePlanned:string
+ *   stopId:string, departurePlanned:string,
+ *   direction?:string|null, journeyStartTime?:string|null, journeyEndTime?:string|null
  * }} data
  * @returns {Promise<{
  *   matched:boolean, tripId?:number, updated?:boolean,
