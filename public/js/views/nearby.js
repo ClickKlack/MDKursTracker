@@ -24,6 +24,15 @@ let   debounceTimer          = null;
 /** Monoton steigender Token; ältere Responses werden verworfen */
 let   searchToken            = 0;
 
+// Zuletzt aus der Namenssuche geöffnete Haltestellen
+const RECENT_STOPS_KEY = 'nearby_recent_stops';
+const RECENT_STOPS_CAP = 10;
+
+// Gespeicherter Suchbegriff verfällt nach 5 Minuten
+const QUERY_KEY      = 'nearby_name_query';
+const QUERY_TIME_KEY = 'nearby_name_query_at';
+const QUERY_TTL_MS   = 5 * 60 * 1000;
+
 function cancelAutoSearch() {
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
 }
@@ -40,13 +49,14 @@ export async function render(container, params, context) {
     } else if (searchMode === 'gps') {
         await runGpsSearch(container, params, context);
     } else {
-        const lastQuery = localStorage.getItem('nearby_name_query') ?? '';
+        const lastQuery = loadNameQuery();
         const inputEl   = container.querySelector('#stop-name-input');
         if (inputEl && lastQuery) {
             inputEl.value = lastQuery;
             inputEl.dispatchEvent(new Event('input'));
             await runNameSearch(container);
         } else {
+            renderRecentStops(container);
             inputEl?.focus();
         }
     }
@@ -118,11 +128,17 @@ function attachTabListeners(container, params, context) {
         await runGpsSearch(container, params, context);
     });
 
-    container.querySelector('#toggle-name')?.addEventListener('click', () => {
+    container.querySelector('#toggle-name')?.addEventListener('click', async () => {
         setMode('name', container);
         container.querySelector('#name-search-form').hidden = false;
-        container.querySelector('#nearby-content').innerHTML = '';
-        container.querySelector('#stop-name-input')?.focus();
+        const nameInput = container.querySelector('#stop-name-input');
+        // Steht noch ein Suchbegriff im Feld, dessen Treffer wiederholen – sonst Zuletzt-Liste
+        if (nameInput?.value.trim()) {
+            await runNameSearch(container);
+        } else {
+            renderRecentStops(container);
+        }
+        nameInput?.focus();
     });
 
     container.querySelector('#btn-search-name')?.addEventListener('click', async () => {
@@ -142,6 +158,15 @@ function attachTabListeners(container, params, context) {
 
         cancelAutoSearch();
         const query = inputEl.value.trim();
+
+        // Leeres Feld: laufende Anfrage verwerfen und Zuletzt-Liste zeigen
+        if (query === '') {
+            searchToken++;
+            clearNameQuery();
+            renderRecentStops(container);
+            return;
+        }
+
         if (query.length >= AUTO_SEARCH_MIN_CHARS) {
             debounceTimer = setTimeout(() => {
                 debounceTimer = null;
@@ -155,9 +180,8 @@ function attachTabListeners(container, params, context) {
         cancelAutoSearch();
         searchToken++;  // laufende Anfrage invalidieren
         inputEl.value = '';
-        localStorage.removeItem('nearby_name_query');
-        const contentEl = container.querySelector('#nearby-content');
-        if (contentEl) contentEl.innerHTML = '';
+        clearNameQuery();
+        renderRecentStops(container);
         clearBtn.hidden = true;
         inputEl.focus();
     });
@@ -294,10 +318,16 @@ async function runNameSearch(container) {
     const query     = input?.value?.trim() ?? '';
     const contentEl = container.querySelector('#nearby-content');
 
-    if (!query) { input?.focus(); return; }
+    if (!query) {
+        searchToken++;  // laufende Anfrage invalidieren
+        clearNameQuery();
+        renderRecentStops(container);
+        input?.focus();
+        return;
+    }
 
     const myToken = ++searchToken;
-    localStorage.setItem('nearby_name_query', query);
+    saveNameQuery(query);
     showLoading(contentEl, 'Haltestellen werden gesucht…');
 
     let stops;
@@ -324,6 +354,92 @@ async function runNameSearch(container) {
     renderStopList(contentEl, stops, false);
 }
 
+// --- Suchbegriff mit Verfallszeit -------------------------------------------
+
+function saveNameQuery(query) {
+    try {
+        localStorage.setItem(QUERY_KEY, query);
+        localStorage.setItem(QUERY_TIME_KEY, String(Date.now()));
+    } catch {
+        // Quota voll – ignorieren, der Begriff wird dann eben nicht gemerkt
+    }
+}
+
+/** Liefert den gespeicherten Suchbegriff oder '' – abgelaufene werden verworfen */
+function loadNameQuery() {
+    const query = localStorage.getItem(QUERY_KEY) ?? '';
+    if (!query) return '';
+
+    const savedAt = Number(localStorage.getItem(QUERY_TIME_KEY));
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > QUERY_TTL_MS) {
+        clearNameQuery();  // fehlender/unbrauchbarer Zeitstempel gilt als abgelaufen
+        return '';
+    }
+    return query;
+}
+
+function clearNameQuery() {
+    localStorage.removeItem(QUERY_KEY);
+    localStorage.removeItem(QUERY_TIME_KEY);
+}
+
+// --- Zuletzt geöffnete Haltestellen -----------------------------------------
+
+function loadRecentStops() {
+    try {
+        const raw = localStorage.getItem(RECENT_STOPS_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr
+            .filter(s => s && typeof s.id === 'string' && s.id !== ''
+                           && typeof s.name === 'string' && s.name !== '')
+            .slice(0, RECENT_STOPS_CAP);
+    } catch {
+        return [];
+    }
+}
+
+function addRecentStop(stop) {
+    if (!stop?.id || !stop?.name) return;
+
+    // Neueste zuerst, Dedupe über die Stop-ID
+    const list = loadRecentStops().filter(s => s.id !== stop.id);
+    list.unshift({ id: stop.id, name: stop.name });
+
+    try {
+        localStorage.setItem(RECENT_STOPS_KEY,
+            JSON.stringify(list.slice(0, RECENT_STOPS_CAP)));
+    } catch {
+        // Quota voll – ignorieren
+    }
+}
+
+function renderRecentStops(container) {
+    const contentEl = container.querySelector('#nearby-content');
+    if (!contentEl) return;
+
+    const recent = loadRecentStops();
+
+    if (recent.length === 0) {
+        contentEl.innerHTML = `
+            <div class="empty-state">
+                <p>Noch keine Haltestellen geöffnet.</p>
+                <p class="text-muted">Oben nach einer Haltestelle suchen – die zuletzt
+                   geöffneten erscheinen dann hier.</p>
+            </div>`;
+        return;
+    }
+
+    contentEl.innerHTML = `
+        <p class="nearby-meta text-small text-muted">Zuletzt geöffnet</p>
+        <ul class="card-list" role="list" aria-label="Zuletzt geöffnete Haltestellen">
+            ${recent.map(stop => renderStopItem(stop, false)).join('')}
+        </ul>`;
+
+    attachStopListHandlers(contentEl);
+}
+
 // --- Haltestellenliste (GPS + Name) -----------------------------------------
 
 function renderStopList(contentEl, stops, showDistance) {
@@ -335,6 +451,11 @@ function renderStopList(contentEl, stops, showDistance) {
             ${stops.map(stop => renderStopItem(stop, showDistance)).join('')}
         </ul>`;
 
+    attachStopListHandlers(contentEl);
+}
+
+/** Delegierte Listener für Haltestellenlisten (Suchtreffer + Zuletzt-Liste) */
+function attachStopListHandlers(contentEl) {
     const ul = contentEl.querySelector('ul');
     ul?.addEventListener('click',   e => handleStopClick(e));
     ul?.addEventListener('keydown', e => {
@@ -404,7 +525,13 @@ async function handleStopClick(e) {
     }
 
     const item = e.target.closest('[data-stop-id]');
-    if (item) navigateToDepartures(item.dataset.stopId, item.dataset.stopName);
+    if (!item) return;
+
+    // Nur aus der Namenssuche geöffnete Haltestellen merken (nicht GPS/Favoriten)
+    if (searchMode === 'name') {
+        addRecentStop({ id: item.dataset.stopId, name: item.dataset.stopName });
+    }
+    navigateToDepartures(item.dataset.stopId, item.dataset.stopName);
 }
 
 // --- Hilfsfunktionen --------------------------------------------------------

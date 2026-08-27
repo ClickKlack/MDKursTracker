@@ -213,8 +213,13 @@ in `localStorage` gespeichert wird:
 - Freitexteingabe → `GET /api/nearby?name=…` → HAFAS LocMatch
 - Der in `config.php` konfigurierte `stop_name_prefix` (z.B. `"Magdeburg, "`)
   wird serverseitig automatisch vorangestellt
-- Suche nur auf Knopfdruck / Enter (kein Live-Search)
-- Letzter Suchbegriff wird in `localStorage` wiederhergestellt
+- Suche auf Knopfdruck / Enter sowie automatisch ~550 ms nach dem Tippen
+  (ab 3 Zeichen)
+- Letzter Suchbegriff wird aus `localStorage` wiederhergestellt, verfällt
+  aber nach 5 Minuten
+- Bei leerem Suchfeld: die 10 zuletzt aus der Namenssuche geöffneten
+  Haltestellen (`localStorage`, neueste zuerst, Dedupe per Stop-ID) –
+  direkt anwählbar ohne erneute Suche
 
 **Favoriten-Reiter:**
 - Zeigt gespeicherte Lieblings-Haltestellen kompakt als Liste
