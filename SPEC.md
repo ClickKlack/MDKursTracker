@@ -232,6 +232,12 @@ Favorit hinzugefügt oder entfernt werden.
 ### 7.2 Abfahrten an einer Haltestelle
 
 - Nächste ~20 Straßenbahn-Abfahrten nach Haltestellenauswahl
+- **Sortierung:** standardmäßig nach der **Ist-Zeit** (Echtzeit, Fallback Soll).
+  Über den Toggle `Ist | Soll` in der Kopfzeile clientseitig auf die **Soll-Zeit**
+  umschaltbar – stark verspätete Fahrten bleiben dann an ihrer Fahrplanposition
+  und rutschen nicht ans Listenende. Die Auswahl wird in `localStorage`
+  (`departures_sort_mode`) gespeichert und gilt für alle Haltestellen.
+  Umschalten sortiert die bereits geladenen Daten um, ohne neu zu laden.
 - Anzeige je Abfahrt:
   - Linie, Richtung
   - Abfahrt **Soll** und **Ist** (Echtzeit, wenn verfügbar)

@@ -615,6 +615,28 @@ body {
     margin-bottom: 12px;
 }
 
+/* Rechte Gruppe der Kopfzeile: Sortier-Toggle + Refresh */
+.departures-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Sortier-Umschalter Ist/Soll – kompakte Variante der .btn-toggle-Pills
+   aus der Haltestellensuche (flex: 1 und Padding werden überschrieben) */
+.sort-toggle {
+    display: flex;
+    gap: 4px;
+}
+
+.sort-toggle .btn-toggle {
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    border-width: 1px;
+    border-radius: 14px;
+}
+
 /* Icon-Button (Refresh, zukünftige Actions) */
 .btn-icon {
     background: none;

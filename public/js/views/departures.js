@@ -7,6 +7,10 @@
  *  3. Liste rendern: Linie, Richtung, Soll/Ist-Zeit, Verspätung, Kursnummer
  *  4. Tap auf Abfahrt → Erfassungsdaten in sessionStorage → #capture (Phase 7)
  *  5. Automatische Aktualisierung alle 30 Sekunden
+ *
+ * Sortierung: Das Backend liefert nach Ist-Zeit sortiert. Der Toggle in der
+ * Kopfzeile kann clientseitig auf Soll-Zeit umstellen – bei starken
+ * Verspätungen bleibt eine Fahrt dann an ihrer Fahrplanposition stehen.
  */
 
 import { getDepartures, postRecording }           from '../api.js';
@@ -26,6 +30,14 @@ let currentContainer = null;
 
 /** Zuletzt geladene Abfahrten (für den Click-Handler via Index) */
 let storedDepartures = [];
+
+/** Sortierung der Tafel: 'actual' = Ist-Zeit (Standard), 'planned' = Soll-Zeit */
+const SORT_MODE_KEY = 'departures_sort_mode';
+let sortMode = localStorage.getItem(SORT_MODE_KEY) ?? 'actual';
+if (!['actual', 'planned'].includes(sortMode)) sortMode = 'actual';
+
+/** Zeitpunkt der letzten erfolgreichen Abfrage (für "Stand:" beim Umsortieren) */
+let lastUpdatedAt = null;
 
 export async function render(container, params, context) {
     currentStopId    = params.get('stopId');
@@ -71,6 +83,8 @@ export function destroy() {
     currentStopName  = null;
     currentContainer = null;
     storedDepartures = [];
+    lastUpdatedAt    = null;
+    // sortMode bleibt erhalten – es ist eine Benutzereinstellung
 }
 
 // --- Laden & Rendern --------------------------------------------------------
@@ -110,6 +124,7 @@ async function loadAndRender(container, quiet) {
     if (!currentStopId) return;
 
     storedDepartures = departures ?? [];
+    lastUpdatedAt    = new Date();
 
     if (storedDepartures.length === 0) {
         container.innerHTML = `
@@ -119,29 +134,60 @@ async function loadAndRender(container, quiet) {
         return;
     }
 
-    // Zeitstempel der letzten Aktualisierung
-    const now = new Date();
+    renderBoard(container);
+}
+
+/**
+ * Tafel aus den bereits geladenen Daten rendern.
+ *
+ * Wird sowohl nach einem Ladevorgang als auch beim Umschalten der Sortierung
+ * aufgerufen – letzteres kommt ohne Netzwerk-Request aus. Der Zeitstempel
+ * stammt deshalb aus lastUpdatedAt und nicht aus der aktuellen Uhrzeit.
+ */
+function renderBoard(container) {
+    // Reihenfolge von storedDepartures selbst anpassen: data-idx und die
+    // Event-Handler indizieren direkt in dieses Array.
+    storedDepartures = sortDepartures(storedDepartures, sortMode);
+
+    const byActual = sortMode === 'actual';
+    const stand    = lastUpdatedAt ?? new Date();
 
     container.innerHTML = `
         <div class="departures-header">
             <span class="text-small text-muted" aria-live="polite">
-                Stand: ${formatTime(now.toISOString())} Uhr
+                Stand: ${formatTime(stand.toISOString())} Uhr
             </span>
-            <button class="btn-icon" id="btn-refresh" aria-label="Abfahrten jetzt aktualisieren"
-                    title="Aktualisieren">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2.5"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                    <path d="M21 3v5h-5"/>
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                    <path d="M8 16H3v5"/>
-                </svg>
-            </button>
+            <div class="departures-actions">
+                <div class="sort-toggle" role="group" aria-label="Sortierung der Abfahrten">
+                    <button type="button" class="btn-toggle ${byActual ? 'active' : ''}"
+                            id="toggle-sort-actual" aria-pressed="${byActual}"
+                            title="Nach tatsächlicher Abfahrtszeit sortieren">Ist</button>
+                    <button type="button" class="btn-toggle ${byActual ? '' : 'active'}"
+                            id="toggle-sort-planned" aria-pressed="${!byActual}"
+                            title="Nach Fahrplanzeit sortieren">Soll</button>
+                </div>
+                <button class="btn-icon" id="btn-refresh" aria-label="Abfahrten jetzt aktualisieren"
+                        title="Aktualisieren">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M8 16H3v5"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         <ul class="card-list departures-list" role="list" aria-label="Abfahrten">
             ${storedDepartures.map((dep, idx) => renderDepartureItem(dep, idx)).join('')}
         </ul>`;
+
+    // Sortier-Toggle
+    container.querySelector('#toggle-sort-actual')
+        .addEventListener('click', () => setSortMode('actual', container));
+    container.querySelector('#toggle-sort-planned')
+        .addEventListener('click', () => setSortMode('planned', container));
 
     // Manueller Refresh-Button
     container.querySelector('#btn-refresh')
@@ -152,6 +198,37 @@ async function loadAndRender(container, quiet) {
         .addEventListener('click',   handleDepartureSelect);
     container.querySelector('.departures-list')
         .addEventListener('keydown', handleDepartureKeydown);
+}
+
+// --- Sortierung -------------------------------------------------------------
+
+/**
+ * Abfahrten nach Ist- oder Soll-Zeit sortieren.
+ *
+ * Spiegelt hafas_sort_departures() aus lib/hafas.php: Effektivzeit mit
+ * Fallback auf die jeweils andere Zeit, Einträge ganz ohne Zeit ans Ende
+ * (\uFFFF sortiert nach jedem ISO-String). ISO-8601-UTC-Strings sind
+ * lexikographisch vergleichbar, Array#sort ist stabil.
+ */
+function sortDepartures(list, mode) {
+    const effective = mode === 'planned'
+        ? d => d.departurePlanned ?? d.departureActual  ?? '\uFFFF'
+        : d => d.departureActual  ?? d.departurePlanned ?? '\uFFFF';
+
+    return [...list].sort((a, b) => {
+        const ka = effective(a);
+        const kb = effective(b);
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+}
+
+function setSortMode(mode, container) {
+    if (mode === sortMode) return;
+    sortMode = mode;
+    try {
+        localStorage.setItem(SORT_MODE_KEY, mode);
+    } catch { /* z. B. Speicher voll oder privater Modus – Sortierung gilt trotzdem */ }
+    renderBoard(container);
 }
 
 // --- Einzelne Abfahrt rendern -----------------------------------------------
