@@ -82,8 +82,9 @@ Tabellen für Fahrten und Erfassungen – als wäre die App neu gestartet.
 
 Da sich `serviceNr`-Werte zwischen Fahrplanperioden wiederholen können (gleiche
 Nummer, aber möglicherweise andere Kursnummer), sind alle fahrtenspezifischen
-Daten strikt periodengebunden. Es gibt keine Übernahme von Altdaten in die
-neue Periode.
+Daten strikt periodengebunden. Es gibt keine automatische Übernahme von
+Altdaten in die neue Periode. Einzige benannte Ausnahme ist die vom Admin
+angestoßene Kursübernahme für Linien ohne Fahrplanänderung – siehe § 4.5.
 
 ### 4.2 Aktive Periode
 
@@ -110,6 +111,19 @@ im Admin-Frontend nachträglich korrigieren.
 3. Neue Zeile wird in `schedule_periods` angelegt
 4. Die App wechselt sofort auf die neue Periode
 5. Alle Erfasser arbeiten ab sofort in der neuen, leeren Periode
+
+### 4.5 Kursübernahme unveränderter Linien
+
+Hat eine Linie beim Fahrplanwechsel keine Fahrplanänderung, ist der
+`schedule_fingerprint` ihrer Fahrten unverändert. Ihre Fahrten lassen sich
+deshalb in die neue Periode klonen, sodass die Kursnummern dort sofort
+angezeigt werden, statt komplett neu erfasst werden zu müssen.
+
+Die Übernahme ist ein **eigener, ausdrücklich angestoßener Schritt nach dem
+Fahrplanschnitt** – welche Linien unverändert sind, ist eine fachliche
+Aussage des Betreibers. Regeln, Randfälle und der geplante Admin-Dialog
+stehen in **SPEC_KURSUEBERNAHME.md**; bis zu dessen Umsetzung erledigt das
+Einmalskript `data_migrations/clone_unchanged_lines.php` die Arbeit.
 
 ---
 

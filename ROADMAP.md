@@ -277,6 +277,34 @@ Kein Verweis auf Codeberg mehr im ausgelieferten Code.
 
 ---
 
+## Phase 13 – Kursübernahme beim Fahrplanwechsel (geplant)
+
+**Ziel:** Das, was heute das Einmalskript
+`data_migrations/clone_unchanged_lines.php` leistet, als Admin-Funktion
+verfügbar machen: Kurswissen unveränderter Linien in die neue Fahrplanperiode
+übernehmen. Fachliche Grundlage ist **SPEC_KURSUEBERNAHME.md**.
+
+- [ ] Schemaerweiterung: Herkunft einer Erfassung explizit machen
+      (`recordings.origin` bzw. `transferred_from_recording_id`) –
+      ersetzt die Behelfserkennung über leere `service_nr`
+- [ ] `GET /admin-api/course-transfer/preview` – Kandidaten, übersprungene
+      Fahrten und Warnungen (durchgebundene Linien, geteilte Route-Schlüssel)
+- [ ] `POST /admin-api/course-transfer` – Übernahme in einer Transaktion,
+      inkl. Konsistenzprüfung und Rollback
+- [ ] `DELETE /admin-api/course-transfer` – Rückbau unberührter Klone
+- [ ] Admin-Frontend: Linienauswahl, Vorschautabelle mit Ortszeit und
+      Einzelausschluss, Bestätigungsdialog, Ergebnisanzeige
+- [ ] Hinweis nach dem Fahrplanschnitt, dass eine Kursübernahme möglich ist
+- [ ] Entscheidung: eigener `courseSource`-Wert `transferred` in der App
+- [ ] API.md, Bruno-Tests und PHPUnit-Tests mitführen
+
+**Abnahmekriterium:** Nach einem Fahrplanschnitt lässt sich eine unveränderte
+Linie im Admin übernehmen; einzelne verschobene Fahrten sind dabei
+ausschließbar; `detect_course_conflicts()` meldet danach 0 Konflikte; der
+Rückbau entfernt ausschließlich unberührte Klone.
+
+---
+
 ## Reihenfolge für KI-gestützte Implementierung
 
 Jede Phase als eigene Sitzung starten. Kontext am Anfang jeder Sitzung
