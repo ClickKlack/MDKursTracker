@@ -178,6 +178,37 @@ Fahrt am selben Halt gelegentlich abweichende Steig-IDs (z. B. Olvenstedter Plat
 Halte ohne Zeitangabe werden in `schedule_fingerprint` übersprungen. Letzter Halt:
 HAFAS liefert dort die Ankunftszeit als `departurePlanned` (aTimeS-Fallback).
 
+#### Störungen: Zusatzhalte und entfallende Halte
+
+Bei einer Umleitung – etwa der Sperrung eines Streckenastes – liefert HAFAS im
+selben Laufweg **beides**: die entfallenden Planhalte (`aCncl`/`dCncl`, mit
+unveränderten Planzeiten) und die Zusatzhalte der Umleitungsstrecke (`isAdd`).
+Dieselbe Haltestelle kann dadurch zweimal vorkommen.
+
+Ankunft und Abfahrt fallen getrennt aus, und nicht jeder Halt hat beides. Ein
+Halt gilt nur dann als entfallen, wenn alle seine Bewegungen ausfallen – sonst
+würde der vorzeitige Endhalt einer umgeleiteten Fahrt fälschlich als entfallen
+gelten, denn dort setzt HAFAS `dCncl`, weil keine Weiterfahrt existiert.
+
+**Zusatzhalte fließen nicht in die Fingerprints ein** (`scheduled_stops_only()`
+in `lib/fingerprint.php`). Eine umgeleitete Fahrt ergibt damit denselben
+Fingerprint wie im Regelbetrieb und löst auf denselben Trip-Datensatz auf.
+Ohne diese Regel bekäme jede Fahrt an jedem Störungstag eine eigene Identität:
+Die Erfassung hinge an einer Fahrt, die es nur an diesem Tag gab, sie wäre für
+die reguläre Fahrt unsichtbar, und die Heuristik (§ Abfahrten-Übersicht) bekäme
+Route-Schlüssel für Halte, die die Linie planmäßig gar nicht bedient.
+
+Entfallende Planhalte bleiben in der Berechnung — sie behalten ihre Planzeiten
+und beschreiben weiterhin den regulären Fahrplan.
+
+Aus demselben Grund speichert `POST /api/recordings` nur die Planhalte in
+`route_stops`: Die Tabelle ist fahrplanbezogen, eine Umleitung gilt nur für
+einen Betriebstag. Die `sequence` wird dabei über die gefilterte Liste neu
+vergeben, damit ein Störungstag und ein Regeltag dieselben Werte erzeugen.
+
+An störungsfreien Tagen enthält der Laufweg keine Zusatzhalte; die Fingerprints
+sind identisch zu allen zuvor gespeicherten.
+
 Da HAFAS-Journey-IDs tagesgebunden sind und sich ändern können, werden sie nicht
 mehr zur primären Identifikation verwendet. Stattdessen wird `last_hafas_trip_id`
 auf dem Trip **lazy nachgeführt** (beim Öffnen des Detail-Views, vor der Erfassung).

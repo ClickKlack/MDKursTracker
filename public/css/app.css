@@ -571,6 +571,27 @@ body {
     color: var(--color-error);
 }
 
+/* --- Abweichungen vom Fahrplan (Zusatzhalt, Teilausfall) ------------------ */
+/* Die Fahrt findet statt und ist erfassbar, weicht aber vom Fahrplan ab.
+   Deshalb warnend, aber nicht in der Ausfall-Farbe. */
+.departure-notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.dep-note-badge {
+    display: inline-block;
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--color-warning);
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    padding: 0 4px;
+    line-height: 1.5;
+}
+
 /* --- Hilfsklassen --------------------------------------------------------- */
 .text-muted    { color: var(--color-text-muted); }
 .text-small    { font-size: 0.82rem; }
@@ -958,6 +979,51 @@ body {
     font-size: 0.5rem;
     color: var(--color-primary);
     line-height: 1.6;
+}
+
+/* --- Gestörte Halte im Laufweg -------------------------------------------- */
+/* Bei einer Umleitung liefert HAFAS entfallende Planhalte und Zusatzhalte im
+   selben Laufweg – dieselbe Haltestelle steht dann zweimal in der Liste. */
+.route-stop--cancelled .route-stop-name,
+.route-stop--cancelled .route-stop-time {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.route-stop--additional .route-stop-name {
+    color: var(--color-text);
+}
+
+.route-stop-badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.64rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    padding: 0 4px;
+    line-height: 1.5;
+    vertical-align: baseline;
+}
+
+.route-stop-badge--cancelled {
+    color: var(--color-error);
+}
+
+.route-stop-badge--additional {
+    color: var(--color-warning);
+}
+
+/* Hinweiszeile über dem Laufweg */
+.route-disruption {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--color-text-muted);
+    border-left: 3px solid var(--color-warning);
+    padding: 4px 0 4px 8px;
+    margin: 0 0 8px;
 }
 
 .route-line-change {

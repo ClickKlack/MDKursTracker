@@ -315,16 +315,24 @@ async function loadTripRoute(container, data) {
         return;
     }
 
-    // Erfassungshaltestelle ermitteln: ID + Planzeit
+    // Erfassungshaltestelle ermitteln. Bei einer Umleitung kommt dieselbe
+    // Haltestelle zweimal im Laufweg vor – einmal als entfallender Planhalt,
+    // einmal als Zusatzhalt der Umleitungsstrecke. Deshalb zuerst auf ID *und*
+    // Planzeit prüfen und erst danach auf eines von beidem zurückfallen.
     const planTime = data.departurePlanned ? data.departurePlanned.slice(11, 16) : null; // "HH:MM"
-    const recordingStopIdx = stops.findIndex(s => {
-        if (s.stopId === data.stopId) return true;
+    const stopTime = s => (s.departurePlanned ? s.departurePlanned.slice(11, 16) : null);
+
+    let recordingStopIdx = -1;
+    if (planTime) {
+        recordingStopIdx = stops.findIndex(s => s.stopId === data.stopId && stopTime(s) === planTime);
+    }
+    if (recordingStopIdx === -1) {
+        recordingStopIdx = stops.findIndex(s => s.stopId === data.stopId);
+    }
+    if (recordingStopIdx === -1 && planTime) {
         // Zeitabgleich als Fallback (unterschiedliche ID-Formate)
-        if (planTime && s.departurePlanned) {
-            return s.departurePlanned.slice(11, 16) === planTime;
-        }
-        return false;
-    });
+        recordingStopIdx = stops.findIndex(s => stopTime(s) === planTime);
+    }
 
     const knownLines = stops.map(s => s.line).filter(l => l != null);
     const hasLineChange = new Set(knownLines).size > 1;
@@ -333,7 +341,31 @@ async function loadTripRoute(container, data) {
     const rows = stops.map((s, idx) => {
         const time     = s.departurePlanned ? formatTime(s.departurePlanned) : '–';
         const isStop   = idx === recordingStopIdx;
-        const cls      = isStop ? ' route-stop--recording' : '';
+
+        // Störungs-Flags aus HAFAS. Ältere Service-Worker-Caches liefern sie
+        // nicht mit – dann gilt der Halt als planmäßig.
+        //
+        // s.boarding ("Hält nur zum Aussteigen") wird bewusst nicht angezeigt:
+        // HAFAS setzt das Flag am Ende eines Fahrzeugumlaufs, nicht am Ende
+        // einer Fahrt. Die Bahn kehrt dort in aller Regel um und fährt als
+        // Gegenrichtung weiter – ob eine Haltestelle wirklich Endpunkt ist,
+        // kann die App nicht entscheiden. Der Hinweis wäre öfter falsch als
+        // richtig.
+        const cancelled  = s.cancelled  === true;
+        const additional = s.additional === true;
+
+        let cls = isStop ? ' route-stop--recording' : '';
+        if (cancelled)  cls += ' route-stop--cancelled';
+        if (additional) cls += ' route-stop--additional';
+
+        const badges = [];
+        if (cancelled) {
+            badges.push('<span class="route-stop-badge route-stop-badge--cancelled">entfällt</span>');
+        }
+        if (additional) {
+            badges.push('<span class="route-stop-badge route-stop-badge--additional">Zusatzhalt</span>');
+        }
+        const badgeHtml = badges.join('');
 
         const delay    = calcDelay(s.departurePlanned, s.departureActual);
         const isLate   = delay !== null && delay > 0;
@@ -360,14 +392,43 @@ async function loadTripRoute(container, data) {
             <li class="route-stop${cls}">
                 <span class="route-stop-time">${escapeHtml(time)}</span>
                 <span class="route-stop-delay">${delayHtml}</span>
-                <span class="route-stop-name">${escapeHtml(stripStopPrefix(s.stop))}</span>
+                <span class="route-stop-name">${escapeHtml(stripStopPrefix(s.stop))}${badgeHtml}</span>
                 ${isStop ? '<span class="route-stop-marker" aria-label="Erfassungshaltestelle">●</span>' : ''}
             </li>`;
     }).join('');
 
-    routeEl.innerHTML = `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
+    routeEl.innerHTML = buildDisruptionNoticeHtml(stops)
+        + `<ul class="route-list" aria-label="Laufweg">${rows}</ul>`;
 
     // Kein automatisches Scrollen – die Erfassungselemente oben bleiben im Fokus
+}
+
+/**
+ * Hinweis über dem Laufweg, wenn die Fahrt an diesem Tag gestört ist.
+ *
+ * Ohne diesen Hinweis wirkt ein Umleitungs-Laufweg wie ein normaler: Halte
+ * tauchen doppelt auf, die Fahrt scheint bis zum planmäßigen Ziel zu laufen.
+ * Erfasst werden darf sie trotzdem – die Bahn fährt ja, nur anders.
+ */
+function buildDisruptionNoticeHtml(stops) {
+    const cancelled  = stops.filter(s => s.cancelled  === true).length;
+    const additional = stops.filter(s => s.additional === true).length;
+
+    if (cancelled === 0 && additional === 0) return '';
+
+    const parts = [];
+    if (cancelled > 0) {
+        parts.push(cancelled === 1 ? '1 entfallender Halt' : `${cancelled} entfallende Halte`);
+    }
+    if (additional > 0) {
+        parts.push(`${additional} Zusatzhalt${additional !== 1 ? 'e' : ''}`);
+    }
+
+    return `
+        <p class="route-disruption" role="note">
+            <strong>Fahrt weicht vom Fahrplan ab:</strong> ${escapeHtml(parts.join(', '))}.
+            Die Kursnummer kann normal erfasst werden.
+        </p>`;
 }
 
 /** Schnellbutton-Hervorhebung setzen. nr = null → alle deselektiert. */

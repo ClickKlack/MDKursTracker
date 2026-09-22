@@ -180,6 +180,8 @@ GET /api/departures?stopId=de:15003:4000
 | `line` | string | Linienbezeichnung (aus jid-ZB#, zuverlässiger als prodL) |
 | `direction` | string | Richtungstext (Endhaltestellenname, Marketing-Name) |
 | `cancelled` | bool | `true` = Fahrt (isCncl) oder Halt (dCncl) ist ausgefallen; Erfassung gesperrt |
+| `additionalStop` | bool | `true` = Zusatzhalt (HAFAS `isAdd`): die Linie hält hier nur wegen einer Umleitung, nicht laut Fahrplan. Die Abfahrt ist real und erfassbar |
+| `partiallyCancelled` | bool | `true` = Teilausfall (HAFAS `isPartCncl`): die Fahrt endet vorzeitig oder überspringt einen Abschnitt, fährt an diesem Halt aber |
 | `stopId` | string | Lang-ID des konkreten Bahnsteigs (extId aus HAFAS locL); enthält die Steig-Stelle. Frontend nutzt sie für `pendingCapture.stopId`, damit der Heuristik-Lookup gegen `route_stops.stop_id` matchen kann. |
 | `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
 | `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit (klar von "pünktlich" unterschieden — pünktlich heißt `departureActual == departurePlanned`, das Frontend zeigt dafür ein "Live"-Badge) |
@@ -202,7 +204,12 @@ eingekürzte Linie). Bleibt es uneindeutig, ist `activeCourseNumber` `null`.
 
 ### GET `/api/trip`
 
-Vollständiger Laufweg eines Kurses (alle planmäßigen Halte).
+Vollständiger Laufweg eines Kurses.
+
+An Störungstagen enthält der Laufweg **beide** Varianten: die entfallenden
+Planhalte (`cancelled`) und die Zusatzhalte der Umleitungsstrecke
+(`additional`). Dieselbe Haltestelle kann dadurch zweimal vorkommen – einmal
+mit ihrer Planzeit, einmal mit der Umleitungszeit.
 
 Wird `serviceDate` angegeben, wird die Fahrt zusätzlich per `schedule_fingerprint` in der DB
 aufgelöst: `activeCourseNumber` und `tripId` werden zurückgegeben, und `last_hafas_trip_id`
@@ -229,10 +236,34 @@ GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...
     "stop": "Magdeburg, Westerhüsen",
     "departurePlanned": "2026-03-24T14:10:00Z",
     "departureActual": "2026-03-24T14:11:00Z",
-    "line": "1"
+    "line": "1",
+    "cancelled": false,
+    "additional": false,
+    "boarding": true
   }
 ]
 ```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `sequence` | int | Position im Laufweg, beginnend bei 1 |
+| `stopId` | string | Lang-ID des Bahnsteigs (extId aus HAFAS locL) |
+| `stop` | string | Haltestellenname |
+| `departurePlanned` | string\|null | Planmäßige Abfahrt (ISO 8601 UTC); am letzten Halt die Ankunft |
+| `departureActual` | string\|null | Echtzeit; `null` = keine Echtzeit oder Halt entfällt |
+| `line` | string\|null | Linie ab diesem Halt (Linienübergang bei durchgebundenen Fahrten) |
+| `cancelled` | bool | Halt entfällt an diesem Betriebstag. Gesetzt, wenn *alle* Bewegungen des Halts ausfallen: bei einem Zwischenhalt `aCncl` **und** `dCncl`, am ersten Halt `dCncl` allein, am letzten `aCncl` allein. Am vorzeitigen Endhalt einer umgeleiteten Fahrt setzt HAFAS nur `dCncl` (keine Weiterfahrt) – der Halt wird bedient und gilt hier nicht als entfallen |
+| `additional` | bool | Zusatzhalt einer Umleitung (HAFAS `isAdd`), nicht im Fahrplan |
+| `boarding` | bool | `false` = „Hält nur zum Aussteigen" (HAFAS `dInS`/`dInR`). Die App zeigt das Flag **nicht** an: HAFAS setzt es am Ende eines Fahrzeugumlaufs, nicht am Ende einer Fahrt – die Bahn kehrt dort meist um und fährt als Gegenrichtung weiter |
+
+**Zusatzhalte und die Fahrt-Identität:** `pathFingerprint` und
+`scheduleFingerprint` werden **ohne** Zusatzhalte berechnet (siehe
+`scheduled_stops_only()` in `lib/fingerprint.php`). Eine umgeleitete Fahrt
+bekommt damit denselben Fingerprint wie im Regelbetrieb und löst auf denselben
+Trip-Datensatz auf – sonst entstünde pro Störungstag eine eigene Fahrt.
+Entfallende Planhalte bleiben in der Berechnung, da sie ihre Planzeiten
+behalten. `POST /api/recordings` speichert aus demselben Grund nur die
+Planhalte in `route_stops`.
 
 **Beispiel-Request mit serviceDate (Fingerprint-Auflösung):**
 ```
@@ -249,7 +280,10 @@ GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...&serviceDate=2026-
       "stop": "Magdeburg, Westerhüsen",
       "departurePlanned": "2026-04-22T14:10:00Z",
       "departureActual": null,
-      "line": "1"
+      "line": "1",
+      "cancelled": false,
+      "additional": false,
+      "boarding": true
     }
   ],
   "tripId": 38,
@@ -299,8 +333,14 @@ GET /api/calendar?date=2026-12-25
 ### POST `/api/recordings`
 
 Neue Kursnummer-Erfassung speichern. Legt bei Bedarf automatisch eine
-logische Fahrt in `trips` an (INSERT IGNORE) und speichert den
-vollständigen Laufweg.
+logische Fahrt in `trips` an (INSERT IGNORE) und speichert den Planlaufweg.
+
+Der Server lädt den Laufweg selbst über HAFAS und berechnet daraus
+`path_fingerprint` und `schedule_fingerprint`, über die die Fahrt aufgelöst
+wird. Zusatzhalte einer Umleitung gehen weder in die Fingerprints noch in
+`route_stops` ein – eine umgeleitete Fahrt landet damit am selben
+Trip-Datensatz wie im Regelbetrieb. Entfallende Planhalte bleiben in beidem
+enthalten, weil sie ihre Planzeiten behalten. Details siehe `GET /api/trip`.
 
 **Request-Body:**
 ```json
@@ -535,6 +575,12 @@ Auf einen bereits aktiven Datensatz idempotent:
 Laufweg einer gespeicherten Erfassung (aus `route_stops`-Tabelle).
 Gibt 404 zurück wenn kein Laufweg gespeichert ist (ältere Erfassungen
 ohne HAFAS-Abfrage) oder die Erfassung nicht existiert.
+
+Geliefert wird immer der **Planlaufweg** der Fahrt. Zusatzhalte einer
+Umleitung stehen nicht in `route_stops`, weil die Tabelle fahrplanbezogen ist
+und die Umleitung nur für einen Betriebstag galt. Wie eine konkrete Fahrt an
+einem Störungstag tatsächlich verkehrt ist, zeigt `GET /api/trip` mit den
+Flags `cancelled`/`additional` je Halt.
 
 **Beispiel-Response:**
 ```json

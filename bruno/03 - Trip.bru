@@ -20,6 +20,9 @@ assert {
   res.body[0].sequence: eq 1
   res.body[0].stopId: isDefined
   res.body[0].stop: isDefined
+  res.body[0].cancelled: isBoolean
+  res.body[0].additional: isBoolean
+  res.body[0].boarding: isBoolean
 }
 
 script:post-response {
@@ -27,5 +30,13 @@ script:post-response {
     console.log("Laufweg:", res.body.length, "Halte");
     console.log("Erster Halt:", res.body[0].stop);
     console.log("Letzter Halt:", res.body[res.body.length - 1].stop);
+  
+    // Bei einer Umleitung liefert HAFAS entfallende Planhalte und Zusatzhalte
+    // im selben Laufweg – dieselbe Haltestelle kann zweimal vorkommen.
+    const cancelled  = res.body.filter(s => s.cancelled).length;
+    const additional = res.body.filter(s => s.additional).length;
+    if (cancelled > 0 || additional > 0) {
+      console.log("Störung:", cancelled, "Halte entfallen,", additional, "Zusatzhalte");
+    }
   }
 }

@@ -26,6 +26,9 @@ assert {
   res.body[0].departurePlanned: isDefined
   res.body[0].activeCourseNumber: isDefined
   res.body[0].courseSource: isDefined
+  res.body[0].cancelled: isBoolean
+  res.body[0].additionalStop: isBoolean
+  res.body[0].partiallyCancelled: isBoolean
 }
 
 script:post-response {
@@ -51,5 +54,12 @@ script:post-response {
   
     console.log("Abfahrt gesetzt:", dep.line, "→", dep.direction, "| TripId:", dep.hafasTripId);
     console.log("activeCourseNumber:", dep.activeCourseNumber, "| courseSource:", dep.courseSource);
+  
+    // Störungslage der Haltestelle protokollieren (Zusatzhalte entstehen bei
+    // Umleitungen und sind ohne Markierung nicht von Planhalten zu trennen)
+    const disrupted = res.body.filter(d => d.cancelled || d.additionalStop || d.partiallyCancelled);
+    if (disrupted.length > 0) {
+      console.log("Gestörte Abfahrten:", disrupted.length, "von", res.body.length);
+    }
   }
 }

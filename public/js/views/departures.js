@@ -322,6 +322,8 @@ function renderDepartureItem(dep, idx) {
         `Linie ${dep.line}`,
         `nach ${dep.direction}`,
         dep.cancelled ? 'Fahrt ausgefallen' : `ab ${planned}`,
+        !dep.cancelled && dep.additionalStop && 'Zusatzhalt wegen Umleitung',
+        !dep.cancelled && dep.partiallyCancelled && 'Fahrt teilweise ausgefallen',
         !dep.cancelled && (isDelayed
             ? `+${delay} Min. Verspätung`
             : isEarly
@@ -337,6 +339,26 @@ function renderDepartureItem(dep, idx) {
         ? `<span class="departure-original-line">vorher Linie\u00a0${escapeHtml(dep.originalLine)}</span>`
         : '';
 
+    // Störungshinweise: Ein Zusatzhalt ist eine reale, erfassbare Abfahrt an
+    // einer Haltestelle, die diese Linie planmäßig nicht bedient (Umleitung).
+    // Ohne Markierung ist sie von einer planmäßigen Abfahrt nicht zu
+    // unterscheiden. Teilausfall heißt: die Bahn fährt hier, endet aber
+    // vorzeitig oder überspringt einen Abschnitt.
+    const disruptionBadges = [];
+    if (dep.additionalStop && !dep.cancelled) {
+        disruptionBadges.push(
+            `<span class="dep-note-badge" title="Umleitungshalt – diese Linie hält hier planmäßig nicht">Zusatzhalt</span>`
+        );
+    }
+    if (dep.partiallyCancelled && !dep.cancelled) {
+        disruptionBadges.push(
+            `<span class="dep-note-badge" title="Die Fahrt endet vorzeitig oder überspringt einen Abschnitt">Teilausfall</span>`
+        );
+    }
+    const disruptionHtml = disruptionBadges.length
+        ? `<span class="departure-notes">${disruptionBadges.join('')}</span>`
+        : '';
+
     return `
         <li class="card departure-item${dep.cancelled ? ' departure-cancelled' : ''}"
             role="${dep.cancelled ? 'listitem' : 'button'}"
@@ -350,6 +372,7 @@ function renderDepartureItem(dep, idx) {
             <span class="departure-info">
                 <span class="departure-direction">${escapeHtml(dep.direction)}</span>
                 ${originalLineHtml}
+                ${disruptionHtml}
                 <span class="departure-times">${timeHtml}</span>
             </span>
             <span class="departure-course">${courseHtml}</span>

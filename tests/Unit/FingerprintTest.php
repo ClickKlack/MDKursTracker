@@ -261,4 +261,119 @@ class FingerprintTest extends TestCase
         ];
         $this->assertSame('2026-01-16', derive_service_date($stops));
     }
+
+    // -----------------------------------------------------------------------
+    // scheduled_stops_only – Zusatzhalte bei Umleitungen
+    // -----------------------------------------------------------------------
+
+    /**
+     * Regelbetrieb der Fahrt: drei planmäßige Halte.
+     */
+    private static function stopsRegular(): array
+    {
+        return [
+            ['stopId' => 'de:15003:1', 'departurePlanned' => '2026-09-22T17:29:00Z'],
+            ['stopId' => 'de:15003:2', 'departurePlanned' => '2026-09-22T17:31:00Z'],
+            ['stopId' => 'de:15003:3', 'departurePlanned' => '2026-09-22T17:37:00Z'],
+        ];
+    }
+
+    /**
+     * Dieselbe Fahrt an einem Störungstag: die Planhalte bleiben mit ihren
+     * Planzeiten erhalten und sind als ausgefallen markiert, dazwischen
+     * stehen Zusatzhalte der Umleitungsstrecke.
+     */
+    private static function stopsDiverted(): array
+    {
+        return [
+            ['stopId' => 'de:15003:1',  'departurePlanned' => '2026-09-22T17:29:00Z'],
+            ['stopId' => 'de:15003:90', 'departurePlanned' => '2026-09-22T17:30:00Z', 'additional' => true],
+            ['stopId' => 'de:15003:2',  'departurePlanned' => '2026-09-22T17:31:00Z', 'cancelled' => true],
+            ['stopId' => 'de:15003:91', 'departurePlanned' => '2026-09-22T17:32:00Z', 'additional' => true],
+            ['stopId' => 'de:15003:3',  'departurePlanned' => '2026-09-22T17:37:00Z', 'cancelled' => true],
+        ];
+    }
+
+    public function test_scheduled_stops_only_removes_additional_stops(): void
+    {
+        $filtered = scheduled_stops_only(self::stopsDiverted());
+
+        $this->assertCount(3, $filtered);
+        $this->assertSame(
+            ['de:15003:1', 'de:15003:2', 'de:15003:3'],
+            array_column($filtered, 'stopId')
+        );
+    }
+
+    public function test_scheduled_stops_only_keeps_cancelled_stops(): void
+    {
+        $filtered = scheduled_stops_only(self::stopsDiverted());
+
+        // Entfallende Halte behalten ihre Planzeiten und beschreiben weiter
+        // den regulären Fahrplan – sie dürfen nicht herausfallen.
+        $this->assertTrue($filtered[1]['cancelled']);
+    }
+
+    public function test_scheduled_stops_only_is_noop_without_flags(): void
+    {
+        $stops = self::stopsBasic();
+        $this->assertSame($stops, scheduled_stops_only($stops));
+    }
+
+    public function test_scheduled_stops_only_keeps_list_if_all_additional(): void
+    {
+        // Defensiv: ein leerer Laufweg wäre schlechter als ein abweichender.
+        $stops = [
+            ['stopId' => 'a', 'departurePlanned' => '2026-09-22T17:29:00Z', 'additional' => true],
+            ['stopId' => 'b', 'departurePlanned' => '2026-09-22T17:31:00Z', 'additional' => true],
+        ];
+        $this->assertSame($stops, scheduled_stops_only($stops));
+    }
+
+    /**
+     * Kern der Störungsbehandlung: Die umgeleitete Fahrt muss denselben
+     * Fingerprint ergeben wie im Regelbetrieb – sonst legt
+     * POST /api/recordings pro Störungstag eine eigene Fahrt an.
+     */
+    public function test_diverted_trip_keeps_schedule_fingerprint_of_regular_trip(): void
+    {
+        $this->assertSame(
+            compute_schedule_fingerprint(self::stopsRegular()),
+            compute_schedule_fingerprint(self::stopsDiverted())
+        );
+    }
+
+    public function test_diverted_trip_keeps_path_fingerprint_of_regular_trip(): void
+    {
+        $this->assertSame(
+            compute_path_fingerprint(self::stopsRegular()),
+            compute_path_fingerprint(self::stopsDiverted())
+        );
+    }
+
+    /**
+     * Gegenprobe: Eine echte Fahrplanänderung – ein anderer Planhalt – muss
+     * den Fingerprint weiterhin verändern.
+     */
+    public function test_changed_scheduled_stop_still_changes_fingerprint(): void
+    {
+        $changed = self::stopsDiverted();
+        $changed[2]['stopId'] = 'de:15003:99';
+
+        $this->assertNotSame(
+            compute_schedule_fingerprint(self::stopsRegular()),
+            compute_schedule_fingerprint($changed)
+        );
+    }
+
+    public function test_derive_service_date_ignores_additional_start_stop(): void
+    {
+        // Umgeleitete Fahrt, die auf der Umleitungsstrecke beginnt: der
+        // Betriebstag kommt trotzdem vom ersten Planhalt.
+        $stops = [
+            ['stopId' => 'extra', 'departurePlanned' => '2026-04-26T22:10:00Z', 'additional' => true],
+            ['stopId' => 'plan',  'departurePlanned' => '2026-04-26T21:45:00Z'],
+        ];
+        $this->assertSame('2026-04-26', derive_service_date($stops));
+    }
 }

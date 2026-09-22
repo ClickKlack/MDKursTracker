@@ -277,7 +277,44 @@ Kein Verweis auf Codeberg mehr im ausgelieferten Code.
 
 ---
 
-## Phase 13 – Kursübernahme beim Fahrplanwechsel (geplant)
+## Phase 13 – Umleitungen und Zusatzhalte
+
+**Ziel:** Fahrten, die wegen einer Streckensperrung umgeleitet werden, bleiben
+erfassbar, ohne die Fahrt-Identität zu zersplittern. Anlass war die Sperrung
+der Alten Neustadt am 22.09.2026.
+
+HAFAS liefert an Störungstagen im selben Laufweg die entfallenden Planhalte
+(`dCncl`/`aCncl`) **und** die Zusatzhalte der Umleitungsstrecke (`isAdd`).
+Dieselbe Haltestelle steht dadurch zweimal in der Liste. Bisher wurden beide
+Angaben verworfen: Der Laufweg war nicht mehr lesbar, und die Zusatzhalte
+gingen in den `schedule_fingerprint` ein, sodass pro Störungstag ein eigener
+Trip-Datensatz entstand.
+
+- [x] `hafas_parse_trip_stops()` aus `hafas_trip()` ausgelagert (testbar ohne
+      HAFAS-Aufruf) und um die Halt-Flags `cancelled`, `additional`,
+      `boarding` erweitert
+- [x] `GET /api/departures` um `additionalStop` und `partiallyCancelled`
+      erweitert
+- [x] `scheduled_stops_only()` in `lib/fingerprint.php`: Zusatzhalte fließen
+      nicht in `path_fingerprint`, `schedule_fingerprint` und
+      `derive_service_date()` ein
+- [x] `POST /api/recordings` speichert nur den Planlaufweg in `route_stops`,
+      mit neu vergebener `sequence`
+- [x] Erfassungsdetail: entfallende Halte durchgestrichen, Zusatzhalte als
+      Badge, Hinweiszeile über dem Laufweg (`boarding` wird bewusst nicht
+      angezeigt – das Flag markiert das Ende eines Fahrzeugumlaufs, nicht das
+      Ende einer Fahrt)
+- [x] Abfahrtstafel: Badges „Zusatzhalt" und „Teilausfall"
+- [x] SPEC.md § Fingerprints, API.md, Bruno-Tests und PHPUnit-Tests
+
+**Abnahmekriterium:** Eine umgeleitete Fahrt ergibt denselben
+`schedule_fingerprint` wie im Regelbetrieb und landet am selben
+Trip-Datensatz; an störungsfreien Tagen bleiben alle Fingerprints unverändert
+(an 33 realen Fahrten geprüft).
+
+---
+
+## Phase 14 – Kursübernahme beim Fahrplanwechsel (geplant)
 
 **Ziel:** Das, was heute das Einmalskript
 `data_migrations/clone_unchanged_lines.php` leistet, als Admin-Funktion

@@ -522,18 +522,32 @@ function handle_post_recording(): never
 
         // Laufweg-Haltestellen anlegen und route_stops befüllen – nur einmal pro Trip.
         // INSERT IGNORE auf (trip_id, sequence) verhindert Duplikate bei parallelen Erfassungen.
-        if (!empty($tripStops)) {
+        //
+        // Gespeichert wird der Planlaufweg ohne Zusatzhalte: route_stops ist
+        // fahrplanbezogen, Zusatzhalte sind tagesbezogen. Stünden sie in der
+        // Tabelle, bekäme die Heuristik in lib/course_lookup.php Route-
+        // Schlüssel für Halte, die die Linie planmäßig nicht bedient, und die
+        // kanonische Halteliste im Admin-Fahrtentab wäre der Umleitungsweg.
+        // Entfallende Planhalte bleiben dagegen drin – sie behalten ihre
+        // Planzeiten und beschreiben weiter den regulären Fahrplan.
+        //
+        // Die sequence wird dabei über die gefilterte Liste neu vergeben.
+        // Sonst entstünden Lücken, in die eine spätere Erfassung derselben
+        // Fahrt an einem störungsfreien Tag ihre Halte einfügen würde – der
+        // Laufweg enthielte Haltestellen doppelt.
+        $routeStops = scheduled_stops_only($tripStops);
+        if (!empty($routeStops)) {
             $stopInsert  = $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)');
             $routeInsert = $pdo->prepare(
                 'INSERT IGNORE INTO ' . tbl('route_stops') . '
                      (trip_id, sequence, stop_id, departure_planned, line)
                  VALUES (?, ?, ?, ?, ?)'
             );
-            foreach ($tripStops as $ts) {
+            foreach ($routeStops as $i => $ts) {
                 $stopInsert->execute([$ts['stopId'], $ts['stop']]);
                 $routeInsert->execute([
                     $tripId,
-                    $ts['sequence'],
+                    $i + 1,
                     $ts['stopId'],
                     $ts['departurePlanned'] !== null ? iso_to_mysql($ts['departurePlanned']) : null,
                     $ts['line'] ?? null,

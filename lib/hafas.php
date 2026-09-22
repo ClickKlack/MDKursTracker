@@ -290,6 +290,16 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
         // Ausfall: gesamte Fahrt (isCncl) oder dieser Halt (dCncl) ist ausgefallen
         $cancelled = !empty($jny['isCncl']) || !empty($stbStop['dCncl']);
 
+        // Zusatzhalt: HAFAS bedient diesen Halt nur wegen einer Umleitung; er
+        // steht nicht im Fahrplan. Die Abfahrt ist real und erfassbar, sieht
+        // ohne Markierung aber aus wie eine planmäßige Fahrt (REM-Code
+        // text.realtime.stop.additional).
+        $additionalStop = !empty($stbStop['isAdd']);
+
+        // Teilausfall: die Fahrt endet vorzeitig oder überspringt einen
+        // Abschnitt. Ab diesem Halt kann sie trotzdem regulär fahren.
+        $partiallyCancelled = !empty($jny['isPartCncl']);
+
         $best[$dedupeKey] = [
             'duration' => $duration,
             'entry'    => [
@@ -299,6 +309,8 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
                 'originalLine'     => $originalLine,
                 'direction'        => $dirTxt,
                 'cancelled'        => $cancelled,
+                'additionalStop'   => $additionalStop,
+                'partiallyCancelled' => $partiallyCancelled,
                 // Lang-ID des Bahnsteigs an dem diese Abfahrt erfolgt
                 // (extId aus locL). Wird vom Frontend an die Capture-View und
                 // die Heuristik-Lookups in /api/departures + /api/trips/touch
@@ -325,9 +337,11 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
 }
 
 /**
- * Vollständiger Laufweg einer Fahrt (alle planmäßigen Halte).
+ * Vollständiger Laufweg einer Fahrt.
  *
- * @return array<array{sequence: int, stopId: string, stop: string, departurePlanned: string|null}>
+ * Enthält an Störungstagen sowohl die entfallenden Planhalte als auch die
+ * Zusatzhalte der Umleitung – unterscheidbar über die Flags je Halt.
+ * Siehe hafas_parse_trip_stops() für den Aufbau eines Halts.
  */
 function hafas_trip(string $tripId): array
 {
@@ -361,9 +375,41 @@ function hafas_trip(string $tripId): array
 
     $res = hafas_request([['meth' => 'JourneyDetails', 'req' => $req]], $logParams);
 
-    $common  = $res[0]['res']['common'] ?? [];
+    $result = hafas_parse_trip_stops($res[0]['res'] ?? []);
+
+    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_TRIP);
+
+    return $result;
+}
+
+/**
+ * Wandelt die `res`-Sektion einer JourneyDetails-Antwort in die Haltliste um.
+ *
+ * Als reine Funktion ausgelagert, damit die Halt-Flags ohne HAFAS-Aufruf
+ * getestet werden können (tests/Unit/HafasTripParseTest.php).
+ *
+ * Neben Zeit und Name trägt jeder Halt drei Störungs-Flags:
+ *   cancelled  – Halt entfällt an diesem Betriebstag (aCncl/dCncl, siehe unten)
+ *   additional – Zusatzhalt wegen Umleitung, steht nicht im Fahrplan (isAdd)
+ *   boarding   – false, wenn nur noch ausgestiegen werden darf (dInS/dInR)
+ *
+ * Wichtig: Bei einer Umleitung liefert HAFAS *beide* Varianten im selben
+ * Laufweg – die entfallenden Planhalte und die Zusatzhalte der Umleitungs-
+ * strecke. Dieselbe Haltestelle kann dadurch zweimal vorkommen. Ohne die
+ * Flags sind die beiden Einträge nicht unterscheidbar.
+ *
+ * @param array $res  $response[0]['res'] aus hafas_request()
+ * @return array<array{sequence:int, stopId:string, stop:string,
+ *                     departurePlanned:string|null, departureActual:string|null,
+ *                     line:string|null, cancelled:bool, additional:bool,
+ *                     boarding:bool}>
+ */
+function hafas_parse_trip_stops(array $res): array
+{
+
+    $common  = $res['common'] ?? [];
     $locList = $common['locL'] ?? [];
-    $journey = $res[0]['res']['journey'] ?? [];
+    $journey = $res['journey'] ?? [];
 
     // Basisdatum der Fahrt als Fallback – neuere HAFAS-Versionen lassen dDateS
     // auf Stop-Ebene weg, wenn es mit dem Fahrtdatum übereinstimmt.
@@ -425,6 +471,44 @@ function hafas_trip(string $tripId): array
             $rTime = '';
         }
 
+        // Halt entfällt, wenn *alle* Bewegungen dieses Halts ausfallen.
+        //
+        // HAFAS markiert Ankunft (aCncl) und Abfahrt (dCncl) getrennt, und ein
+        // Halt hat nicht immer beides: Der erste Halt einer Fahrt hat keine
+        // Ankunft, der letzte keine Abfahrt. Ein "oder" wäre deshalb falsch –
+        // am Endhalt einer umgeleiteten Fahrt setzt HAFAS dCncl, weil es keine
+        // Weiterfahrt gibt. Der Halt wird aber sehr wohl bedient (er hat sogar
+        // Echtzeit-Ankunft); nur aussteigen ist möglich, was über dInS/dInR
+        // als $boarding = false ankommt.
+        //
+        // Real beobachtet am 22.09.2026 (Umleitung Linie 10):
+        //   entfallender Zwischenhalt → aCncl + dCncl, keine Echtzeit
+        //   planmäßiger Endhalt, der entfällt → nur aTimeS, aCncl
+        //   vorzeitiger Endhalt der Umleitung → nur aTimeS/aTimeR, dCncl
+        $hasArrival   = isset($stop['aTimeS']) || isset($stop['aTimeR']);
+        $hasDeparture = isset($stop['dTimeS']) || isset($stop['dTimeR']);
+        $arrCancelled = !empty($stop['aCncl']);
+        $depCancelled = !empty($stop['dCncl']);
+
+        if ($hasArrival && $hasDeparture) {
+            $cancelled = $arrCancelled && $depCancelled;
+        } elseif ($hasArrival) {
+            $cancelled = $arrCancelled;
+        } elseif ($hasDeparture) {
+            $cancelled = $depCancelled;
+        } else {
+            // Halt ganz ohne Zeiten – jedes gesetzte Flag zählt
+            $cancelled = $arrCancelled || $depCancelled;
+        }
+
+        // Zusatzhalt der Umleitungsstrecke – nicht im Fahrplan enthalten.
+        $additional = !empty($stop['isAdd']);
+
+        // Einstieg gesperrt ("Hält nur zum Aussteigen"). HAFAS liefert dInS
+        // (Plan) bzw. dInR (Echtzeit) explizit als false; fehlt der Schlüssel,
+        // ist Einstieg erlaubt.
+        $boarding = ($stop['dInR'] ?? $stop['dInS'] ?? true) !== false;
+
         $result[] = [
             'sequence'         => $i + 1,
             'stopId'           => $loc['extId'] ?? '',
@@ -432,10 +516,11 @@ function hafas_trip(string $tripId): array
             'departurePlanned' => ($dTime !== '') ? hafas_iso($dDate, $dTime) : null,
             'departureActual'  => ($rTime !== '') ? hafas_iso($rDate, $rTime) : null,
             'line'             => $lineForIdx($i, $stop),
+            'cancelled'        => $cancelled,
+            'additional'       => $additional,
+            'boarding'         => $boarding,
         ];
     }
-
-    hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_TRIP);
 
     return $result;
 }

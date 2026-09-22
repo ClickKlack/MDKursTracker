@@ -7,6 +7,8 @@
 //
 // Stops ohne departurePlanned werden in schedule_fingerprint übersprungen.
 // Letzter Halt: HAFAS liefert dort die Ankunftszeit als departurePlanned (aTimeS-Fallback).
+//
+// Zusatzhalte (additional) fließen NICHT ein – siehe scheduled_stops_only().
 
 /**
  * Berechnet path_fingerprint und schedule_fingerprint aus einem Laufweg-Array.
@@ -21,6 +23,43 @@ function compute_fingerprints(array $stops): array
         'path'     => compute_path_fingerprint($stops),
         'schedule' => compute_schedule_fingerprint($stops),
     ];
+}
+
+/**
+ * Reduziert einen Laufweg auf die fahrplanmäßigen Halte, d. h. entfernt
+ * Zusatzhalte (HAFAS `isAdd`).
+ *
+ * Hintergrund: Bei einer Umleitung – etwa der Sperrung eines Streckenastes –
+ * liefert HAFAS denselben Laufweg mit zusätzlichen Halten der Umleitungs-
+ * strecke, während die entfallenden Planhalte als `cancelled` bestehen
+ * bleiben und ihre Planzeiten behalten. Hashte der Fingerprint auch die
+ * Zusatzhalte, bekäme die Fahrt an jedem Störungstag eine neue Identität:
+ * `POST /api/recordings` legte einen zweiten Trip-Datensatz an, die Erfassung
+ * hinge an einer Fahrt, die es nur an diesem einen Tag gab, und die
+ * Heuristik in lib/course_lookup.php bekäme Route-Schlüssel für Halte, die
+ * die Linie planmäßig gar nicht bedient.
+ *
+ * Ohne die Zusatzhalte ergibt der Umleitungslauf wieder exakt den Fingerprint
+ * des Regelbetriebs – die Erfassung landet an der richtigen Fahrt.
+ *
+ * An störungsfreien Tagen enthält der Laufweg keine Zusatzhalte; die
+ * Fingerprints bleiben damit unverändert zu allen bereits gespeicherten.
+ *
+ * Defensiv: Bestünde ein Laufweg ausschließlich aus Zusatzhalten (bisher nie
+ * beobachtet), bliebe er unverändert – ein leerer Fingerprint wäre schlechter
+ * als ein abweichender.
+ *
+ * @param array $stops  Ausgabe von hafas_trip()
+ * @return array        Laufweg ohne Zusatzhalte
+ */
+function scheduled_stops_only(array $stops): array
+{
+    $filtered = array_values(array_filter(
+        $stops,
+        static fn(array $s): bool => empty($s['additional'])
+    ));
+
+    return $filtered !== [] ? $filtered : $stops;
 }
 
 /**
@@ -51,7 +90,8 @@ function normalize_stop_id(string $stopId): string
  */
 function compute_path_fingerprint(array $stops): string
 {
-    $ids = array_map(fn($s) => normalize_stop_id((string) $s['stopId']), $stops);
+    $stops = scheduled_stops_only($stops);
+    $ids   = array_map(fn($s) => normalize_stop_id((string) $s['stopId']), $stops);
     return hash('sha256', implode('|', $ids));
 }
 
@@ -63,7 +103,7 @@ function compute_path_fingerprint(array $stops): string
 function compute_schedule_fingerprint(array $stops): ?string
 {
     $parts = [];
-    foreach ($stops as $s) {
+    foreach (scheduled_stops_only($stops) as $s) {
         $time = extract_utc_hhmm($s['departurePlanned'] ?? null);
         if ($time === null) {
             continue;
@@ -110,7 +150,9 @@ function extract_utc_hhmm(?string $iso): ?string
  */
 function derive_service_date(array $stops): ?string
 {
-    foreach ($stops as $s) {
+    // Zusatzhalte überspringen: Startet eine umgeleitete Fahrt auf der
+    // Umleitungsstrecke, darf ihr Betriebstag trotzdem vom Planbeginn kommen.
+    foreach (scheduled_stops_only($stops) as $s) {
         $iso = $s['departurePlanned'] ?? null;
         if ($iso === null || $iso === '') {
             continue;
