@@ -14,6 +14,7 @@ require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/user_helpers.php';
 require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
+require_once dirname(__DIR__, 2) . '/lib/trip_resolve.php';
 require_once dirname(__DIR__, 2) . '/lib/recording_helpers.php';
 require_once dirname(__DIR__, 2) . '/lib/maintenance.php';
 
@@ -363,6 +364,31 @@ function handle_post_recording(): never
         );
         $tripStmt->execute([$periodId, $fp['schedule'], $dayType]);
         $existingTrip = $tripStmt->fetch();
+
+        // Fallback bei Umleitungen: HAFAS verschiebt dabei einzelne Planzeiten
+        // um ein, zwei Minuten (siehe lib/trip_resolve.php). Der Fingerprint
+        // trifft dann nicht mehr, obwohl es dieselbe Fahrt ist. Deshalb vor der
+        // Neuanlage nach einer Fahrt mit gleichem Laufweg und nahezu gleichen
+        // Planzeiten suchen.
+        if (!$existingTrip) {
+            $nearTripId = find_trip_by_near_schedule(
+                $pdo, $periodId, $dayType, $fp['path'], $tripStops, $body['line']
+            );
+            if ($nearTripId !== null) {
+                $nearStmt = $pdo->prepare(
+                    'SELECT id, last_hafas_trip_id, service_nr FROM ' . tbl('trips') . ' WHERE id = ?'
+                );
+                $nearStmt->execute([$nearTripId]);
+                $existingTrip = $nearStmt->fetch();
+
+                get_logger()->info('recordings POST: Fahrt über Zeittoleranz zugeordnet', [
+                    'trip_id'     => $nearTripId,
+                    'hafasTripId' => $body['hafasTripId'],
+                    'line'        => $body['line'],
+                    'direction'   => $body['direction'],
+                ]);
+            }
+        }
 
         if ($existingTrip) {
             $tripId = (int) $existingTrip['id'];

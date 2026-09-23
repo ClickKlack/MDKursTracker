@@ -15,7 +15,8 @@
             "lib/calendar.php",
             "lib/hafas_cache.php",
             "lib/hafas.php",
-            "lib/fingerprint.php"
+            "lib/fingerprint.php",
+            "lib/trip_resolve.php"
         ]
     },
     "config": {

@@ -209,6 +209,40 @@ vergeben, damit ein Störungstag und ein Regeltag dieselben Werte erzeugen.
 An störungsfreien Tagen enthält der Laufweg keine Zusatzhalte; die Fingerprints
 sind identisch zu allen zuvor gespeicherten.
 
+#### Toleranzsuche bei verschobenen Planzeiten
+
+Bei einer Umleitung verschiebt HAFAS zusätzlich einzelne **Planzeiten**. Am
+Verzweigungshalt trägt der Halt dann den Hinweis
+`text.realtime.stop.scheduled.dep.arr.time.changed` und eine um ein, zwei
+Minuten abweichende Sollzeit. Beobachtet am 23.09.2026 (Linie 10 Richtung
+Alte Neustadt): Von 27 Halten wich genau einer ab – S-Bahnhof Neustadt lag bei
++22 statt +23 Minuten nach Fahrtbeginn. Da der `schedule_fingerprint` über
+*alle* Halt-Zeit-Paare geht, genügt diese eine Minute, um die Fahrt als neue
+Fahrt zu behandeln.
+
+Der Fingerprint bleibt deshalb der exakte, primäre Schlüssel. Greift er nicht,
+sucht `find_trip_by_near_schedule()` (`lib/trip_resolve.php`) eine Fahrt mit
+
+- gleicher Periode, gleichem `day_type`,
+- gleicher **Linie**,
+- gleichem `path_fingerprint`,
+- und Planzeiten, die an **jedem** Halt um höchstens zwei Minuten abweichen.
+
+Bleiben mehrere Kandidaten übrig, wird nicht zugeordnet – ein zusätzlicher
+Trip ist harmloser als eine Erfassung an der falschen Fahrt.
+
+Der Linienfilter ist nicht optional: In Periode 1 fahren Linie 3 und Linie 4
+abends denselben Weg zum Betriebshof Nord, zwei Minuten versetzt und mit
+verschiedenen Kursnummern. Über die Zeiten allein wären sie nicht zu trennen.
+
+Die Toleranz ist an allen 2392 gespeicherten Fahrten gegengeprüft: Von 22.684
+Paaren mit gleicher Periode, gleichem Wochentagstyp, gleicher Linie und
+gleichem Laufweg liegen nur die beiden echten Umleitungs-Duplikate innerhalb
+der Toleranz. Der dichteste Takt im Netz beträgt fünf Minuten.
+
+Die Suche gilt für `POST /api/recordings`, `POST /api/trips/touch` und
+`GET /api/trip`.
+
 Da HAFAS-Journey-IDs tagesgebunden sind und sich ändern können, werden sie nicht
 mehr zur primären Identifikation verwendet. Stattdessen wird `last_hafas_trip_id`
 auf dem Trip **lazy nachgeführt** (beim Öffnen des Detail-Views, vor der Erfassung).

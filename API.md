@@ -265,6 +265,15 @@ Entfallende Planhalte bleiben in der Berechnung, da sie ihre Planzeiten
 behalten. `POST /api/recordings` speichert aus demselben Grund nur die
 Planhalte in `route_stops`.
 
+**Verschobene Planzeiten:** Eine Umleitung verschiebt zusätzlich einzelne
+Sollzeiten um ein, zwei Minuten. Trifft der `schedule_fingerprint` deshalb
+nicht, suchen `GET /api/trip`, `POST /api/trips/touch` und
+`POST /api/recordings` eine Fahrt mit gleicher Linie, gleichem
+`path_fingerprint` und Planzeiten, die an jedem Halt um höchstens zwei Minuten
+abweichen. Nur ein eindeutiger Treffer wird übernommen. Siehe
+`find_trip_by_near_schedule()` in `lib/trip_resolve.php` und SPEC.md
+§ Fingerprints.
+
 **Beispiel-Request mit serviceDate (Fingerprint-Auflösung):**
 ```
 GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...&serviceDate=2026-04-22

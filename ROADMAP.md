@@ -306,6 +306,12 @@ Trip-Datensatz entstand.
       Ende einer Fahrt)
 - [x] Abfahrtstafel: Badges „Zusatzhalt" und „Teilausfall"
 - [x] SPEC.md § Fingerprints, API.md, Bruno-Tests und PHPUnit-Tests
+- [x] Nachtrag 23.09.: HAFAS verschiebt bei einer Umleitung auch einzelne
+      Planzeiten (eine Minute am Verzweigungshalt genügte, um Linie-10-Fahrten
+      erneut anzulegen). `find_trip_by_near_schedule()` in
+      `lib/trip_resolve.php` sucht bei Fingerprint-Miss eine Fahrt mit
+      gleicher Linie, gleichem Laufweg und Planzeiten innerhalb von zwei
+      Minuten; mehrdeutige Treffer werden verworfen
 
 **Abnahmekriterium:** Eine umgeleitete Fahrt ergibt denselben
 `schedule_fingerprint` wie im Regelbetrieb und landet am selben

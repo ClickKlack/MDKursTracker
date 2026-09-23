@@ -13,6 +13,7 @@ require_once dirname(__DIR__, 2) . '/lib/response.php';
 require_once dirname(__DIR__, 2) . '/lib/logger.php';
 require_once dirname(__DIR__, 2) . '/lib/hafas.php';
 require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
+require_once dirname(__DIR__, 2) . '/lib/trip_resolve.php';
 require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 
@@ -73,6 +74,31 @@ if ($fp['schedule'] !== null) {
     );
     $tripRow->execute([$periodId, $fp['schedule'], $dayType]);
     $trip = $tripRow->fetch();
+
+    // Umleitungen verschieben einzelne Planzeiten – dann trägt der Fingerprint
+    // nicht mehr (siehe lib/trip_resolve.php). Toleranzsuche als Fallback,
+    // damit die Capture-View auch bei einer Umleitung die Kursnummer zeigt.
+    if (!$trip) {
+        $nearTripId = find_trip_by_near_schedule(
+            $pdo, $periodId, $dayType, $fp['path'], $stops, dominant_line_from_stops($stops)
+        );
+        if ($nearTripId !== null) {
+            $nearStmt = $pdo->prepare(
+                'SELECT t.id, t.last_hafas_trip_id, t.service_nr, t.manual_course_number,
+                        (
+                            SELECT r.course_number
+                            FROM ' . tbl('recordings') . ' r
+                            WHERE r.trip_id = t.id AND r.deleted_at IS NULL
+                            GROUP BY r.course_number
+                            ORDER BY COUNT(*) DESC, MIN(r.recorded_at) ASC
+                            LIMIT 1
+                        ) AS majority_course_number
+                   FROM ' . tbl('trips') . ' t WHERE t.id = ?'
+            );
+            $nearStmt->execute([$nearTripId]);
+            $trip = $nearStmt->fetch();
+        }
+    }
 
     if ($trip) {
         $resolvedTripId     = (int) $trip['id'];

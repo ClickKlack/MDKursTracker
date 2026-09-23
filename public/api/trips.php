@@ -19,6 +19,7 @@ if (preg_match('#/api/trips/touch$#', $uri)) {
     require_once dirname(__DIR__, 2) . '/lib/calendar.php';
     require_once dirname(__DIR__, 2) . '/lib/hafas.php';
     require_once dirname(__DIR__, 2) . '/lib/fingerprint.php';
+    require_once dirname(__DIR__, 2) . '/lib/trip_resolve.php';
     require_once dirname(__DIR__, 2) . '/lib/trip_touch.php';
     require_once dirname(__DIR__, 2) . '/lib/course_lookup.php';
     handle_post_trip_touch();
@@ -180,6 +181,23 @@ function handle_post_trip_touch(): never
     );
     $tripStmt->execute([$periodId, $fp['schedule'], $dayType]);
     $existing = $tripStmt->fetch();
+
+    // Bei Umleitungen weichen einzelne Planzeiten minutenweise ab und der
+    // Fingerprint trifft nicht – dieselbe Toleranzsuche wie in
+    // POST /api/recordings (siehe lib/trip_resolve.php).
+    if (!$existing) {
+        $nearTripId = find_trip_by_near_schedule(
+            $pdo, $periodId, $dayType, $fp['path'], $tripStops, $body['line']
+        );
+        if ($nearTripId !== null) {
+            $nearStmt = $pdo->prepare(
+                'SELECT id, last_hafas_trip_id, service_nr, manual_course_number
+                 FROM ' . tbl('trips') . ' WHERE id = ?'
+            );
+            $nearStmt->execute([$nearTripId]);
+            $existing = $nearStmt->fetch();
+        }
+    }
 
     if (!$existing) {
         // Fingerprint-Match fehlgeschlagen: heuristischen Lookup über
