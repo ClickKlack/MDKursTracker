@@ -248,6 +248,26 @@ lib/mdtakt.php
   `mdtakt_grace_minutes`, `mdtakt_log_days` in `config.php`; ohne Token
   passiert nichts.
 
+### Fluss 2: Kursauskunft für die Abfahrtstafel
+
+```
+GET /api/departures
+  1. eigene Quellen je Abfahrt (manual / recorded / heuristic)
+  2. mdtakt_course_lookup(): Cache je (Bahnsteig, Linie, Soll-Zeit),
+     fehlende Einträge in EINER Sammelabfrage
+       POST /api/v1/collector/course-lookup  { departures[] ≤ 100 }
+  3. gefundener Kurs → courseSource = mdtakt (Vorrang);
+     abweichender eigener Wert bleibt als localCourseNumber sichtbar
+```
+
+- **Cache:** gefunden 1 h (Vorgabe MD-Takt), nicht gefunden 15 min; nach
+  einem Fehler eine Minute Pause, damit die Tafel bei einem Ausfall nicht
+  bei jedem Refresh wartet. Timeout 2 s (Verbindung 1 s).
+- **Anzeige:** hellgrüner Badge auf der Tafel, in der Erfassungsmaske mit
+  dem Label „Aus MD-Takt“ (weicht der eigene Wert ab, steht er darunter). Das ✓ legt wie bei der Heuristik eine normale
+  Erfassung an – der Nutzer bestätigt, was er am Fahrzeug sieht.
+- **Feedback-Loop-Verbot:** Auskünfte werden nie als Erfassung gespeichert.
+
 ---
 
 ## 6. Konfigurationsdatei (außerhalb Webroot)

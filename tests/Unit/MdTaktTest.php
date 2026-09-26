@@ -283,6 +283,118 @@ class MdTaktTest extends TestCase
         $this->assertSame([], $marked);
     }
 
+    // ── Fluss 2: Kursauskunft ───────────────────────────────────────────────
+
+    /** Cache-Schlüssel, die ein Test angelegt hat – werden in tearDown entfernt */
+    private array $cacheKeys = [];
+
+    protected function tearDown(): void
+    {
+        foreach ([...$this->cacheKeys, mdtakt_lookup_pause_key()] as $key) {
+            @unlink(hafas_cache_path($key));
+        }
+        $this->cacheKeys = [];
+    }
+
+    private function dep(string $stop, string $time = '2026-09-26T16:00:00Z', array $extra = []): array
+    {
+        $dep = $extra + ['stopId' => $stop, 'stopName' => 'Magdeburg, Test', 'line' => '10',
+                'direction' => 'Barleber See', 'departurePlanned' => $time, 'cancelled' => false];
+        $item = mdtakt_lookup_item($dep);
+        if ($item !== null) {
+            $this->cacheKeys[] = mdtakt_lookup_cache_key($item);
+        }
+        return $dep;
+    }
+
+    public function test_lookup_item_maps_departure(): void
+    {
+        $item = mdtakt_lookup_item($this->dep('phpunit_mdt_a'));
+
+        $this->assertSame([
+            'hafas_stop' => 'phpunit_mdt_a', 'line' => '10', 'time' => '2026-09-26T16:00:00Z',
+            'stop_name' => 'Magdeburg, Test', 'direction' => 'Barleber See',
+        ], $item);
+    }
+
+    public function test_lookup_item_skips_cancelled_and_incomplete(): void
+    {
+        $this->assertNull(mdtakt_lookup_item(['cancelled' => true] + $this->dep('phpunit_mdt_b')));
+        $this->assertNull(mdtakt_lookup_item(['departurePlanned' => null] + $this->dep('phpunit_mdt_b')));
+        $this->assertNull(mdtakt_lookup_item(['stopId' => ''] + $this->dep('phpunit_mdt_b')));
+    }
+
+    public function test_pad_course_number(): void
+    {
+        $this->assertSame('03', mdtakt_pad_course_number('3'));
+        $this->assertSame('03', mdtakt_pad_course_number('03'));
+        $this->assertSame('13', mdtakt_pad_course_number('13'));
+    }
+
+    public function test_lookup_hit(): void
+    {
+        $this->assertSame(['number' => '03'], mdtakt_lookup_hit(['found' => true, 'course_number' => '3']));
+        $this->assertNull(mdtakt_lookup_hit(['found' => false, 'reason' => 'ambiguous']));
+        $this->assertNull(mdtakt_lookup_hit(['found' => true]));
+    }
+
+    public function test_lookup_summary_counts_reasons(): void
+    {
+        $sum = mdtakt_lookup_summary(['departures' => [[], [], []]], [
+            ['ref' => '0', 'found' => true, 'course_number' => '03'],
+            ['ref' => '1', 'found' => false, 'reason' => 'ambiguous'],
+            ['ref' => '2', 'found' => false, 'reason' => 'ambiguous'],
+        ]);
+
+        $this->assertSame(['itemsSent' => 3, 'itemsOk' => 1, 'stats' => ['ambiguous' => 2]], $sum);
+        $this->assertNull(mdtakt_lookup_summary(['departures' => [[]]], null)['itemsOk']);
+    }
+
+    public function test_course_lookup_batches_and_caches(): void
+    {
+        $deps = [
+            $this->dep('phpunit_mdt_c'),
+            $this->dep('phpunit_mdt_d', extra: ['cancelled' => true]),
+            $this->dep('phpunit_mdt_e'),
+        ];
+        $calls = [];
+        $send  = function (array $body) use (&$calls): array {
+            $calls[] = $body;
+            return ['status' => 200, 'error' => null, 'data' => [
+                ['ref' => '0', 'found' => true, 'course_number' => '3'],
+                ['ref' => '2', 'found' => false, 'reason' => 'no-trip-match'],
+            ]];
+        };
+
+        $this->assertSame([0 => ['number' => '03']], mdtakt_course_lookup($deps, $send));
+        // Eine Sammelabfrage, ausgefallene Fahrt nicht gefragt, ref = Index
+        $this->assertCount(1, $calls);
+        $this->assertSame(['0', '2'], array_column($calls[0]['departures'], 'ref'));
+
+        // Zweiter Aufruf: beide Ergebnisse (auch found:false) aus dem Cache
+        $this->assertSame([0 => ['number' => '03']], mdtakt_course_lookup($deps, $send));
+        $this->assertCount(1, $calls);
+    }
+
+    public function test_course_lookup_pauses_after_error(): void
+    {
+        $deps  = [$this->dep('phpunit_mdt_f')];
+        $calls = 0;
+        $send  = function () use (&$calls): array {
+            $calls++;
+            return ['status' => 0, 'data' => null, 'error' => 'curl: timeout'];
+        };
+
+        $this->assertSame([], mdtakt_course_lookup($deps, $send));
+        $this->assertSame([], mdtakt_course_lookup($deps, $send));
+        $this->assertSame(1, $calls);
+    }
+
+    public function test_course_lookup_without_configuration_does_nothing(): void
+    {
+        $this->assertSame([], mdtakt_course_lookup([$this->dep('phpunit_mdt_g')]));
+    }
+
     // ── Konfiguration ───────────────────────────────────────────────────────
 
     public function test_not_configured_in_tests(): void

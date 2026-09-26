@@ -273,6 +273,7 @@ function renderDepartureItem(dep, idx) {
     }
 
     // Kursnummer-Badge – Quelle bestimmt Stil und Tooltip:
+    //   mdtakt    → hellgrün (Kursauskunft aus MD-Takt, hat Vorrang)
     //   manual    → grün  (admin-überschrieben)
     //   recorded  → blau  (Mehrheit aus Erfassungen)
     //   heuristic → orange (route_stops-Fallback, unsicher)
@@ -299,12 +300,18 @@ function renderDepartureItem(dep, idx) {
     let badgeHtml;
     if (dep.activeCourseNumber) {
         const source = dep.courseSource ?? 'recorded';
-        const cls = source === 'manual'    ? 'manual'
+        const cls = source === 'mdtakt'    ? 'mdtakt'
+                  : source === 'manual'    ? 'manual'
                   : source === 'heuristic' ? 'heuristic'
                   :                          'known';
-        const title = source === 'manual'    ? `Manuelle Kursnummer (${dep.activeCourseNumber})`
-                    : source === 'heuristic' ? `Vermutete Kursnummer aus Plan-Daten (${dep.activeCourseNumber})`
-                    :                          `Bekannte Kursnummer (${dep.activeCourseNumber})`;
+        let title = source === 'mdtakt'    ? `Kursnummer aus MD-Takt (${dep.activeCourseNumber})`
+                  : source === 'manual'    ? `Manuelle Kursnummer (${dep.activeCourseNumber})`
+                  : source === 'heuristic' ? `Vermutete Kursnummer aus Plan-Daten (${dep.activeCourseNumber})`
+                  :                          `Bekannte Kursnummer (${dep.activeCourseNumber})`;
+        // Eigener, abweichender Wert – MD-Takt hat Vorrang, der eigene bleibt sichtbar
+        if (dep.localCourseNumber) {
+            title += ` – eigene Daten: ${dep.localCourseNumber}`;
+        }
         badgeHtml = `
             <span class="course-number ${cls}" title="${escapeHtml(title)}">
                 ${escapeHtml(dep.activeCourseNumber)}
@@ -330,7 +337,9 @@ function renderDepartureItem(dep, idx) {
                 ? `${Math.abs(delay)} Min. zu früh`
                 : hasRealtime ? 'pünktlich (Live)' : 'planmäßig'),
         !dep.cancelled && (dep.activeCourseNumber
-            ? (dep.courseSource === 'heuristic' ? `Kurs ${dep.activeCourseNumber} (vermutet)` : `Kurs ${dep.activeCourseNumber}`)
+            ? (dep.courseSource === 'heuristic' ? `Kurs ${dep.activeCourseNumber} (vermutet)`
+               : dep.courseSource === 'mdtakt' ? `Kurs ${dep.activeCourseNumber} (aus MD-Takt)`
+               : `Kurs ${dep.activeCourseNumber}`)
             : 'Kurs unbekannt'),
     ].filter(Boolean).join(', ');
 
@@ -431,6 +440,8 @@ function handleDepartureSelect(e) {
         // sofort an, ohne auf den Touch-Aufruf warten zu müssen.
         suggestedCourseNumber: dep.activeCourseNumber ?? null,
         suggestedCourseSource: dep.courseSource ?? null,
+        // Abweichender eigener Wert, wenn MD-Takt Vorrang hatte
+        localCourseNumber:     dep.localCourseNumber ?? null,
     };
     sessionStorage.setItem('pendingCapture', JSON.stringify(captureData));
     window.location.hash = '#capture';

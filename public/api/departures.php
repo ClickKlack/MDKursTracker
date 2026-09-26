@@ -1,6 +1,7 @@
 <?php
 // GET /api/departures – Nächste Tramabfahrten an einer Haltestelle,
-// angereichert mit activeCourseNumber + courseSource aus der eigenen DB.
+// angereichert mit activeCourseNumber + courseSource aus der eigenen DB
+// und der Kursauskunft von MD-Takt.
 // Parameter: stopId (string, Pflicht), results (int, optional, Standard 20)
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
@@ -11,6 +12,7 @@ require_once dirname(__DIR__, 2) . '/lib/db.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar.php';
 require_once dirname(__DIR__, 2) . '/lib/course_lookup.php';
 require_once dirname(__DIR__, 2) . '/lib/diagnostics.php';
+require_once dirname(__DIR__, 2) . '/lib/mdtakt.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Methode nicht erlaubt', 405);
@@ -154,6 +156,22 @@ foreach ($departures as $dep) {
         'activeCourseNumber' => $pick['number'],
         'courseSource'       => $pick['source'],
     ]);
+}
+
+// Kursauskunft aus MD-Takt (Fluss 2): Ein gefundener Kurs hat Vorrang vor den
+// eigenen Quellen – MD-Takt pflegt die Umläufe und schreibt Kurse fort, auch
+// wo niemand erfasst hat. Weicht ein eigener Wert ab, bleibt er als
+// localCourseNumber sichtbar. Ohne Konfiguration oder bei Ausfall bleibt die
+// Tafel bei den eigenen Quellen. Die Auskunft wird nie als Erfassung
+// gespeichert (Feedback-Loop-Verbot).
+foreach (mdtakt_course_lookup($departures) as $i => $hit) {
+    $own = $result[$i]['activeCourseNumber'];
+    if ($own !== null && $own !== $hit['number']) {
+        $result[$i]['localCourseNumber'] = $own;
+        $result[$i]['localCourseSource'] = $result[$i]['courseSource'];
+    }
+    $result[$i]['activeCourseNumber'] = $hit['number'];
+    $result[$i]['courseSource']       = 'mdtakt';
 }
 
 // Best-effort und nach dem Aufbau der Antwort – im Normalfall ist $misses leer

@@ -18,6 +18,8 @@
     --color-warning:       #ed6c02;
     --color-error:         #c62828;
     --color-known-course:  #1b5e20;
+    --color-mdtakt-bg:     #c8e6c9;  /* Kurs aus MD-Takt: hellgrün, abgesetzt vom manuellen Vollgrün */
+    --color-mdtakt-text:   #1b5e20;
 
     --header-height:   56px;
     --nav-height:      60px;
@@ -326,6 +328,12 @@ body {
     color: #fff;
 }
 
+.course-number.mdtakt {
+    background: var(--color-mdtakt-bg);
+    color: var(--color-mdtakt-text);
+    box-shadow: inset 0 0 0 1px var(--color-success);
+}
+
 .course-number.heuristic {
     background: var(--color-warning);
     color: #fff;
@@ -338,8 +346,15 @@ body {
 }
 
 /* --- Capture-Vorschlag ---------------------------------------------------- */
+/* Abweichender eigener Wert unter einem Vorschlag aus MD-Takt – eigene Zeile */
+.capture-suggestion-source {
+    flex-basis: 100%;
+    margin: 0;
+}
+
 .capture-suggestion {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin: 0 0 12px 0;

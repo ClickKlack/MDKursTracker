@@ -43,6 +43,7 @@ export async function render(container, _params, _context) {
         renderSuggestion(container, {
             number: data.suggestedCourseNumber,
             source: data.suggestedCourseSource ?? 'recorded',
+            local:  data.localCourseNumber ?? null,
         });
     }
 
@@ -224,21 +225,33 @@ let captureMaintenanceListener = null;
 /**
  * Rendert oder ersetzt den Vorschlags-Badge über der Kursnummer-Grid.
  * @param {HTMLElement} container
- * @param {{number:string, source:'manual'|'recorded'|'heuristic'}} suggestion
+ * @param {{number:string, source:'mdtakt'|'manual'|'recorded'|'heuristic', local?:string|null}} suggestion
+ *        local: abweichender eigener Wert, wenn der Vorschlag aus MD-Takt stammt
  */
 function renderSuggestion(container, suggestion) {
     const el = container.querySelector('#capture-suggestion');
     if (!el) return;
 
-    const cls = suggestion.source === 'manual'    ? 'manual'
+    const cls = suggestion.source === 'mdtakt'    ? 'mdtakt'
+              : suggestion.source === 'manual'    ? 'manual'
               : suggestion.source === 'heuristic' ? 'heuristic'
               :                                     'known';
-    const label = suggestion.source === 'manual'    ? 'Manueller Wert'
+    const label = suggestion.source === 'mdtakt'    ? 'Aus MD-Takt'
+                : suggestion.source === 'manual'    ? 'Manueller Wert'
                 : suggestion.source === 'heuristic' ? 'Vermutet (Plan-Daten)'
                 :                                     'Bekannter Wert';
     const title = suggestion.source === 'heuristic'
         ? 'Vermutete Kursnummer aus Plan-Daten – bitte prüfen'
-        : 'Vorschlag übernehmen';
+        : suggestion.source === 'mdtakt'
+            ? 'Kursnummer aus MD-Takt – bitte am Fahrzeug prüfen'
+            : 'Vorschlag übernehmen';
+    // Die Quelle nennt schon das Label; bei einem Kurs aus MD-Takt zusätzlich
+    // den abweichenden eigenen Wert zeigen, falls es einen gibt
+    const sourceNote = suggestion.source === 'mdtakt' && suggestion.local
+        ? `<p class="capture-suggestion-source text-small text-muted">
+               Eigene Erfassungen: ${escapeHtml(suggestion.local)}
+           </p>`
+        : '';
 
     el.innerHTML = `
         <span class="text-small text-muted">${escapeHtml(label)}:</span>
@@ -247,7 +260,8 @@ function renderSuggestion(container, suggestion) {
                 title="${escapeHtml(title)}"
                 aria-label="Vorschlag ${escapeHtml(suggestion.number)} übernehmen">
             ${escapeHtml(suggestion.number)}
-        </button>`;
+        </button>
+        ${sourceNote}`;
     el.hidden = false;
 }
 
@@ -272,6 +286,11 @@ async function touchTripMapping(container, data) {
 
         // Vorschlag aktualisieren, wenn Touch einen Wert liefert, der nicht
         // identisch zum bereits angezeigten ist.
+        // Ein Kurs aus MD-Takt hat Vorrang vor den eigenen Quellen und
+        // bleibt deshalb stehen.
+        if (data.suggestedCourseSource === 'mdtakt') {
+            return;
+        }
         if (res?.matched && res.activeCourseNumber) {
             const newSource = res.courseSource ?? 'recorded';
             if (data.suggestedCourseNumber !== res.activeCourseNumber

@@ -165,10 +165,13 @@ GET /api/departures?stopId=de:15003:4000
     "journeyStart":     "Magdeburg, City Carré",
     "journeyStartTime": "2026-04-12T12:44:00Z",
     "stopId":           "300754301",
+    "stopName":         "Magdeburg, Hasselbachplatz (Tram/Bus)",
     "journeyEnd":       "Magdeburg, Westerhüsen (Betriebshof)",
     "journeyEndTime":   "2026-04-12T13:13:00Z",
     "activeCourseNumber": "07",
-    "courseSource": "recorded"
+    "courseSource": "mdtakt",
+    "localCourseNumber": "05",
+    "localCourseSource": "recorded"
   }
 ]
 ```
@@ -183,15 +186,29 @@ GET /api/departures?stopId=de:15003:4000
 | `additionalStop` | bool | `true` = Zusatzhalt (HAFAS `isAdd`): die Linie hält hier nur wegen einer Umleitung, nicht laut Fahrplan. Die Abfahrt ist real und erfassbar |
 | `partiallyCancelled` | bool | `true` = Teilausfall (HAFAS `isPartCncl`): die Fahrt endet vorzeitig oder überspringt einen Abschnitt, fährt an diesem Halt aber |
 | `stopId` | string | Lang-ID des konkreten Bahnsteigs (extId aus HAFAS locL); enthält die Steig-Stelle. Frontend nutzt sie für `pendingCapture.stopId`, damit der Heuristik-Lookup gegen `route_stops.stop_id` matchen kann. |
+| `stopName` | string\|null | Name des Bahnsteigs aus HAFAS |
 | `departurePlanned` | string\|null | Geplante Abfahrtszeit (ISO 8601 UTC) |
 | `departureActual` | string\|null | Echtzeit-Abfahrtszeit; `null` = keine Echtzeit (klar von "pünktlich" unterschieden — pünktlich heißt `departureActual == departurePlanned`, das Frontend zeigt dafür ein "Live"-Badge) |
 | `journeyStart` | string\|null | Name der Starthaltestelle; `null` = nicht im Response verfügbar |
 | `journeyStartTime` | string\|null | Abfahrtszeit an der Starthaltestelle (ISO 8601 UTC) |
 | `journeyEnd` | string\|null | Name der Endhaltestelle |
 | `journeyEndTime` | string\|null | Planmäßige Ankunftszeit an der Endhaltestelle |
-| `activeCourseNumber` | string\|null | Kursnummer aus eigener DB; `null` = noch nicht erfasst |
-| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer) oder `null` |
+| `activeCourseNumber` | string\|null | Kursnummer, immer zweistellig; `null` = unbekannt |
+| `courseSource` | string\|null | Quelle der `activeCourseNumber`: `mdtakt` (Kursauskunft von MD-Takt, hat Vorrang), `manual` (Override), `recorded` (Mehrheit aus Erfassungen), `heuristic` (route_stops-Treffer) oder `null` |
+| `localCourseNumber` | string | Nur bei `courseSource: mdtakt`, wenn die eigenen Daten eine **andere** Nummer liefern |
+| `localCourseSource` | string | Quelle von `localCourseNumber` (`manual`, `recorded`, `heuristic`) |
 | `originalLine` | string\|null | Linie zu Fahrtbeginn, wenn unterschiedlich zur aktuellen Linie (durchgebundene Fahrt); `null` = kein Linienwechsel |
+
+Zur `mdtakt`-Quelle: Der Server fragt MD-Takt mit einer Sammelabfrage
+(`POST /api/v1/collector/course-lookup`) nach den Kursen aller nicht
+ausgefallenen Abfahrten – mit Bahnsteig-ID, Linie, Soll-Zeit, Haltname und
+Richtung. Ein gefundener Kurs hat Vorrang vor den eigenen Quellen: MD-Takt
+pflegt die Umläufe und schreibt Kurse fort, auch wo niemand erfasst hat.
+Ergebnisse werden je (Bahnsteig, Linie, Soll-Zeit) gecacht (gefunden 1 h,
+nicht gefunden 15 min); nach einem Fehler pausiert die Abfrage eine Minute.
+Ist MD-Takt nicht konfiguriert oder nicht erreichbar (Timeout 2 s), gelten
+die eigenen Quellen. Auskünfte werden nie als Erfassung gespeichert; jeder
+Aufruf steht im Admin-Reiter „MD-Takt-Log".
 
 Zur `heuristic`-Quelle: Fallen mehrere Trips auf denselben Halt/Zeit-Schlüssel,
 wird die Kursnummer nur geliefert, wenn alle dieselbe tragen. Widersprechen sie

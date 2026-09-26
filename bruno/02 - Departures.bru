@@ -54,6 +54,13 @@ script:post-response {
   
     console.log("Abfahrt gesetzt:", dep.line, "→", dep.direction, "| TripId:", dep.hafasTripId);
     console.log("activeCourseNumber:", dep.activeCourseNumber, "| courseSource:", dep.courseSource);
+
+    // Kurse aus MD-Takt (Fluss 2) – mit abweichendem eigenen Wert, falls vorhanden
+    const fromMdtakt = res.body.filter(d => d.courseSource === "mdtakt");
+    console.log("Kurse aus MD-Takt:", fromMdtakt.length, "von", res.body.length);
+    for (const d of fromMdtakt.filter(d => d.localCourseNumber).slice(0, 3)) {
+      console.log(`  Abweichung Linie ${d.line} ${d.departurePlanned}: MD-Takt ${d.activeCourseNumber}, eigene ${d.localCourseNumber} (${d.localCourseSource})`);
+    }
   
     // Störungslage der Haltestelle protokollieren (Zusatzhalte entstehen bei
     // Umleitungen und sind ohne Markierung nicht von Planhalten zu trennen)

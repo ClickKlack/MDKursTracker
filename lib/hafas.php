@@ -316,6 +316,9 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
                 // die Heuristik-Lookups in /api/departures + /api/trips/touch
                 // weitergereicht – route_stops.stop_id ist ebenfalls Lang-ID.
                 'stopId'           => $foundId,
+                // Name des Bahnsteigs; u.a. für die MD-Takt-Kursauskunft,
+                // solange MD-Takt die HAFAS-ID noch nicht gelernt hat
+                'stopName'         => $loc['name'] ?? null,
                 'departurePlanned' => $plannedIso,
                 'departureActual'  => ($realtimeTime !== '')
                     ? hafas_iso($realtimeDate ?: $plannedDate, $realtimeTime)

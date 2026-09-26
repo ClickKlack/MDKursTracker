@@ -1,6 +1,8 @@
 <?php
-// Übertragung der Erfassungen an MD-Takt (Fluss 1, "Ingest").
+// Anbindung an MD-Takt: Übertragung der Erfassungen (Fluss 1, "Ingest") und
+// Kursauskunft für die Abfahrtstafel (Fluss 2, siehe mdtakt_course_lookup()).
 //
+// Fluss 1:
 // MD-Takt rekonstruiert Fahrzeugumläufe aus GTFS-Daten und unseren
 // Sichtungen. Wir senden jede Erfassung einmal per
 //   POST {mdtakt_api_url}/api/v1/collector/sightings
@@ -28,6 +30,7 @@
 
 require_once __DIR__ . '/logger.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/hafas_cache.php';
 
 // Grenzen der MD-Takt-Schnittstelle je Request
 const MDTAKT_MAX_SIGHTINGS = 500;
@@ -41,8 +44,17 @@ const MDTAKT_SEED_COMMENT_LIKE = 'Kurs aus Fahrplan %automatische Startbelegung%
 // unknown_fingerprint bleibt offen: Der Laufweg fehlte MD-Takt.
 const MDTAKT_ACCEPTED_OUTCOMES = ['created', 'updated', 'unchanged'];
 
-// Pfad unterhalb von {mdtakt_api_url}/api/v1/, zugleich Kennung im Protokoll
+// Pfade unterhalb von {mdtakt_api_url}/api/v1/, zugleich Kennung im Protokoll
 const MDTAKT_ENDPOINT_SIGHTINGS = 'collector/sightings';
+const MDTAKT_ENDPOINT_LOOKUP    = 'collector/course-lookup';
+
+// Kursauskunft (Fluss 2)
+const MDTAKT_LOOKUP_MAX        = 100;  // Abfahrten je Sammelabfrage (Grenze von MD-Takt)
+const MDTAKT_LOOKUP_TTL_FOUND  = 3600; // MD-Takt erlaubt höchstens eine Stunde
+const MDTAKT_LOOKUP_TTL_MISS   = 900;  // found:false kürzer – neue Kurse sollen bald ankommen
+const MDTAKT_LOOKUP_PAUSE      = 60;   // Nach einem Fehler so lange nicht erneut fragen
+const MDTAKT_LOOKUP_TIMEOUT_MS = 2000; // Die Tafel darf nicht auf MD-Takt warten
+const MDTAKT_LOOKUP_CONNECT_MS = 1000;
 
 /**
  * Ist die Übertragung an MD-Takt konfiguriert?
@@ -382,7 +394,7 @@ function mdtakt_post(array $body, int $timeout = 30): array
 {
     $json  = (string) json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $start = hrtime(true);
-    [$res, $raw] = mdtakt_http_post($json, $timeout);
+    [$res, $raw] = mdtakt_http_post(MDTAKT_ENDPOINT_SIGHTINGS, $json, $timeout * 1000);
     $durationMs = (int) ((hrtime(true) - $start) / 1_000_000);
 
     $sum = mdtakt_sightings_summary($body, $res['data']);
@@ -403,22 +415,25 @@ function mdtakt_post(array $body, int $timeout = 30): array
 }
 
 /**
- * Eigentlicher HTTP-Aufruf (gzip-komprimiert).
+ * Eigentlicher HTTP-Aufruf (POST, gzip-komprimiert).
  *
+ * @param string   $endpoint  Pfad unter /api/v1/
+ * @param int      $timeoutMs Gesamt-Timeout
+ * @param int|null $connectMs Verbindungs-Timeout (null = curl-Standard)
  * @return array{0: array{status: int, data: ?array, error: ?string}, 1: ?string}
  *         Ergebnis und rohe Antwort (null bei Netzwerkfehler)
  */
-function mdtakt_http_post(string $json, int $timeout): array
+function mdtakt_http_post(string $endpoint, string $json, int $timeoutMs, ?int $connectMs = null): array
 {
     $cfg = mdtakt_config();
     $gz  = gzencode($json);
 
-    $ch = curl_init($cfg['url'] . '/api/v1/' . MDTAKT_ENDPOINT_SIGHTINGS);
+    $ch = curl_init($cfg['url'] . '/api/v1/' . $endpoint);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $gz,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_TIMEOUT_MS     => $timeoutMs,
         CURLOPT_HTTPHEADER     => [
             'Authorization: Bearer ' . $cfg['token'],
             'Content-Type: application/json',
@@ -426,6 +441,10 @@ function mdtakt_http_post(string $json, int $timeout): array
             'Accept: application/json',
         ],
     ]);
+
+    if ($connectMs !== null) {
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, $connectMs);
+    }
 
     $raw  = curl_exec($ch);
     $err  = curl_error($ch);
@@ -661,4 +680,222 @@ function mdtakt_send_block(PDO $pdo, array $rows, array $trips, callable $send, 
         'rows'     => count($rows),
     ]);
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Fluss 2: Kursauskunft für die Abfahrtstafel
+// ---------------------------------------------------------------------------
+//
+// /api/departures fragt MD-Takt mit einer Sammelabfrage nach den Kursen aller
+// Abfahrten der Tafel. Ein gefundener Kurs hat Vorrang vor den eigenen Quellen
+// (courseSource "mdtakt"): MD-Takt pflegt die Umläufe und schreibt Kurse
+// logisch fort, auch wo niemand erfasst hat.
+//
+// - Cache je (Halt, Linie, Soll-Zeit): gefunden 1 h, nicht gefunden 15 min.
+//   Abgefragt werden nur die Abfahrten ohne Cache-Eintrag.
+// - Kurzer Timeout; nach einem Fehler pausiert die Abfrage eine Minute, damit
+//   die Tafel bei einem Ausfall nicht bei jedem Refresh wartet.
+// - Ergebnisse werden nie als Erfassung gespeichert (Feedback-Loop-Verbot).
+//   Bestätigt der Nutzer den Kurs per ✓, ist das eine echte Sichtung.
+
+/**
+ * Anfrage-Eintrag für eine Abfahrt der Tafel, oder null, wenn sie nicht
+ * gefragt werden kann oder muss (fällt aus, Halt/Linie/Zeit fehlen).
+ *
+ * @param array $dep Abfahrt aus hafas_departures()
+ */
+function mdtakt_lookup_item(array $dep): ?array
+{
+    if (!empty($dep['cancelled'])
+        || ($dep['stopId'] ?? '') === ''
+        || ($dep['line'] ?? '') === ''
+        || ($dep['departurePlanned'] ?? null) === null) {
+        return null;
+    }
+
+    $item = [
+        'hafas_stop' => (string) $dep['stopId'],
+        'line'       => (string) $dep['line'],
+        'time'       => (string) $dep['departurePlanned'],
+    ];
+    if (($dep['stopName'] ?? '') !== '') {
+        $item['stop_name'] = mb_substr((string) $dep['stopName'], 0, 255);
+    }
+    if (($dep['direction'] ?? '') !== '') {
+        $item['direction'] = mb_substr((string) $dep['direction'], 0, 255);
+    }
+    return $item;
+}
+
+/**
+ * Cache-Schlüssel einer Auskunft – laut MD-Takt stabil je (Halt, Linie, Zeit).
+ */
+function mdtakt_lookup_cache_key(array $item): string
+{
+    return hafas_cache_key('mdtakt-lookup', $item['hafas_stop'], $item['line'], $item['time']);
+}
+
+function mdtakt_lookup_pause_key(): string
+{
+    return hafas_cache_key('mdtakt-lookup-pause');
+}
+
+/**
+ * Kursnummer zweistellig wie im Tracker ("3" → "03"). MD-Takt liefert sie so,
+ * wie sie dort gepflegt ist, mit oder ohne führende Null.
+ */
+function mdtakt_pad_course_number(string $n): string
+{
+    return ctype_digit($n) && strlen($n) === 1 ? '0' . $n : $n;
+}
+
+/**
+ * Treffer aus einem Ergebnis der Kursauskunft, oder null (nicht gefunden).
+ *
+ * @return array{number: string}|null
+ */
+function mdtakt_lookup_hit(array $result): ?array
+{
+    $n = (string) ($result['course_number'] ?? '');
+    if (($result['found'] ?? false) !== true || $n === '') {
+        return null;
+    }
+    return ['number' => mdtakt_pad_course_number($n)];
+}
+
+/**
+ * Kennzahlen einer Kursauskunft für das Protokoll: gefundene Abfahrten und
+ * die Gründe für found:false.
+ *
+ * @param array  $body Gesendeter Request-Body
+ * @param ?array $data "data"-Teil der Antwort (nur bei 2xx)
+ * @return array{itemsSent:int, itemsOk:?int, stats:?array<string,int>}
+ */
+function mdtakt_lookup_summary(array $body, ?array $data): array
+{
+    $sum = ['itemsSent' => count($body['departures'] ?? []), 'itemsOk' => null, 'stats' => null];
+    if ($data === null) {
+        return $sum;
+    }
+
+    $sum['itemsOk'] = 0;
+    $sum['stats']   = [];
+    foreach ($data as $r) {
+        if (!is_array($r)) {
+            continue;
+        }
+        if (mdtakt_lookup_hit($r) !== null) {
+            $sum['itemsOk']++;
+        } else {
+            $reason = (string) ($r['reason'] ?? 'unknown');
+            $sum['stats'][$reason] = ($sum['stats'][$reason] ?? 0) + 1;
+        }
+    }
+    return $sum;
+}
+
+/**
+ * Kurse aus MD-Takt für die Abfahrten einer Tafel.
+ *
+ * Wirft nie. Ist MD-Takt nicht konfiguriert, nicht erreichbar oder kennt es
+ * eine Abfahrt nicht, fehlt sie im Ergebnis – die Tafel zeigt dann die eigenen
+ * Quellen (graceful degradation).
+ *
+ * @param array         $departures Abfahrten aus hafas_departures()
+ * @param callable|null $send       Ersatz für mdtakt_lookup_post() (Tests)
+ * @return array<int, array{number: string}> Treffer je Index in $departures
+ */
+function mdtakt_course_lookup(array $departures, ?callable $send = null): array
+{
+    if ($send === null && !mdtakt_configured()) {
+        return [];
+    }
+
+    $hits    = [];
+    $missing = []; // Index => Anfrage-Eintrag
+    foreach (array_values($departures) as $i => $dep) {
+        $item = mdtakt_lookup_item($dep);
+        if ($item === null) {
+            continue;
+        }
+        $cached = hafas_cache_get(mdtakt_lookup_cache_key($item));
+        if (is_array($cached)) {
+            $hit = mdtakt_lookup_hit($cached);
+            if ($hit !== null) {
+                $hits[$i] = $hit;
+            }
+            continue;
+        }
+        $missing[$i] = $item;
+    }
+
+    if ($missing === [] || hafas_cache_get(mdtakt_lookup_pause_key()) !== null) {
+        return $hits;
+    }
+
+    $missing = array_slice($missing, 0, MDTAKT_LOOKUP_MAX, true);
+    $body    = ['departures' => []];
+    foreach ($missing as $i => $item) {
+        $body['departures'][] = ['ref' => (string) $i] + $item;
+    }
+
+    $res = ($send ?? 'mdtakt_lookup_post')($body);
+    if (!is_array($res['data'] ?? null) || !array_is_list($res['data'])) {
+        // Fehler oder unerwartete Antwort: kurz pausieren statt bei jedem
+        // Refresh der Tafel erneut zu warten
+        hafas_cache_set(mdtakt_lookup_pause_key(), ['status' => $res['status'] ?? 0], MDTAKT_LOOKUP_PAUSE);
+        return $hits;
+    }
+
+    foreach ($res['data'] as $r) {
+        $ref = isset($r['ref']) ? (int) $r['ref'] : null;
+        if ($ref === null || !isset($missing[$ref])) {
+            continue;
+        }
+        $hit = mdtakt_lookup_hit($r);
+        hafas_cache_set(
+            mdtakt_lookup_cache_key($missing[$ref]),
+            $r,
+            $hit !== null ? MDTAKT_LOOKUP_TTL_FOUND : MDTAKT_LOOKUP_TTL_MISS
+        );
+        if ($hit !== null) {
+            $hits[$ref] = $hit;
+        }
+    }
+
+    return $hits;
+}
+
+/**
+ * Sammelabfrage an MD-Takt mit kurzem Timeout; protokolliert den Aufruf.
+ *
+ * @return array{status: int, data: ?array, error: ?string}
+ */
+function mdtakt_lookup_post(array $body): array
+{
+    $json  = (string) json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $start = hrtime(true);
+    [$res, $raw] = mdtakt_http_post(
+        MDTAKT_ENDPOINT_LOOKUP,
+        $json,
+        MDTAKT_LOOKUP_TIMEOUT_MS,
+        MDTAKT_LOOKUP_CONNECT_MS
+    );
+    $durationMs = (int) ((hrtime(true) - $start) / 1_000_000);
+
+    $sum = mdtakt_lookup_summary($body, $res['data']);
+    mdtakt_log_write([
+        'method'     => 'POST',
+        'endpoint'   => MDTAKT_ENDPOINT_LOOKUP,
+        'status'     => $res['status'],
+        'durationMs' => $durationMs,
+        'itemsSent'  => $sum['itemsSent'],
+        'itemsOk'    => $sum['itemsOk'],
+        'stats'      => $sum['stats'],
+        'error'      => $res['error'],
+        'request'    => $json,
+        'response'   => $raw,
+    ]);
+
+    return $res;
 }
