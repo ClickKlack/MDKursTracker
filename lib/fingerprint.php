@@ -63,6 +63,63 @@ function scheduled_stops_only(array $stops): array
 }
 
 /**
+ * Ergänzt fehlende Soll-Ankünfte eines gespeicherten Laufwegs aus einem
+ * frischen HAFAS-Abruf derselben Fahrt.
+ *
+ * Hintergrund: route_stops.arrival_planned gibt es erst seit Schema v9, und
+ * route_stops wird nur beim ersten Erfassen einer Fahrt geschrieben. MD-Takt
+ * braucht die Ankunft aber am Linienwechsel – steht das Fahrzeug dort einige
+ * Minuten, endet die Fahrt der alten Linie mit der Ankunft.
+ *
+ * Übernommen wird nicht die Ankunft selbst, sondern die Standzeit:
+ * arrival = gespeicherte Abfahrt − (Abfahrt − Ankunft laut HAFAS). Die
+ * gespeicherten Zeiten tragen das Datum des ersten HAFAS-Abrufs; so bleibt
+ * die Ankunft zu ihnen passend, auch wenn der frische Abruf von einem
+ * anderen Tag stammt.
+ *
+ * Zugeordnet wird je Position (sequence) und nur, wenn die Abfahrtsminute
+ * (UTC) übereinstimmt – der gespeicherte und der frische Laufweg müssen
+ * dieselbe Fahrt beschreiben. Am Endhalt steht in beiden die Ankunft als
+ * Abfahrt, die Standzeit ist dort 0.
+ *
+ * @param array $routeRows      Zeilen aus route_stops ohne Ankunft:
+ *                              [{sequence, departure_planned (UTC DATETIME)}]
+ * @param array $scheduledStops scheduled_stops_only(hafas_trip(...)) – dieselbe
+ *                              Reihenfolge, mit der route_stops befüllt wurde
+ * @return array<int, string>   sequence => arrival_planned (UTC DATETIME)
+ */
+function route_arrival_updates(array $routeRows, array $scheduledStops): array
+{
+    $updates = [];
+    foreach ($routeRows as $row) {
+        $seq  = (int) $row['sequence'];
+        $dep  = $row['departure_planned'] ?? null;
+        $stop = $scheduledStops[$seq - 1] ?? null;
+        if ($dep === null || $stop === null
+            || ($stop['departurePlanned'] ?? null) === null
+            || ($stop['arrivalPlanned'] ?? null) === null) {
+            continue;
+        }
+
+        $storedDep = new DateTimeImmutable($dep, new DateTimeZone('UTC'));
+        $freshDep  = new DateTimeImmutable($stop['departurePlanned']);
+        $freshArr  = new DateTimeImmutable($stop['arrivalPlanned']);
+
+        // Dieselbe Fahrt? Abfahrtsminute (UTC) muss übereinstimmen.
+        if ($storedDep->format('H:i') !== $freshDep->setTimezone(new DateTimeZone('UTC'))->format('H:i')) {
+            continue;
+        }
+
+        $dwell = $freshDep->getTimestamp() - $freshArr->getTimestamp();
+        if ($dwell < 0) {
+            continue;
+        }
+        $updates[$seq] = $storedDep->modify("-{$dwell} seconds")->format('Y-m-d H:i:s');
+    }
+    return $updates;
+}
+
+/**
  * Normalisiert eine HAFAS-Stop-ID auf Haltestellen-Ebene, indem die letzten
  * zwei Ziffern (der Bahnsteig/Steig) entfernt werden.
  *

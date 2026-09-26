@@ -376,4 +376,62 @@ class FingerprintTest extends TestCase
         ];
         $this->assertSame('2026-04-26', derive_service_date($stops));
     }
+
+    // ── route_arrival_updates ───────────────────────────────────────────────
+
+    /**
+     * Linienwechsel 5 → 1 an City Carré: an 18:36, ab 18:38 (Berlin, MESZ).
+     * Der gespeicherte Laufweg stammt vom 15.04. (MESZ), der frische Abruf vom
+     * 26.09. – die Ankunft muss das Datum der gespeicherten Abfahrt tragen.
+     */
+    public function test_route_arrival_updates_uses_dwell_and_stored_date(): void
+    {
+        $route = [
+            ['sequence' => 2, 'departure_planned' => '2026-04-15 16:38:00'],
+            ['sequence' => 3, 'departure_planned' => '2026-04-15 16:45:00'],
+        ];
+        $fresh = [
+            ['departurePlanned' => '2026-09-26T16:30:00Z', 'arrivalPlanned' => null],
+            ['departurePlanned' => '2026-09-26T16:38:00Z', 'arrivalPlanned' => '2026-09-26T16:36:00Z'],
+            // Endhalt: Ankunft steht auch als Abfahrt → Standzeit 0
+            ['departurePlanned' => '2026-09-26T16:45:00Z', 'arrivalPlanned' => '2026-09-26T16:45:00Z'],
+        ];
+
+        $this->assertSame([
+            2 => '2026-04-15 16:36:00',
+            3 => '2026-04-15 16:45:00',
+        ], route_arrival_updates($route, $fresh));
+    }
+
+    public function test_route_arrival_updates_skips_other_trip_and_missing_arrival(): void
+    {
+        $route = [
+            ['sequence' => 2, 'departure_planned' => '2026-04-15 16:38:00'],
+            ['sequence' => 3, 'departure_planned' => '2026-04-15 16:45:00'],
+            ['sequence' => 4, 'departure_planned' => null],
+            ['sequence' => 9, 'departure_planned' => '2026-04-15 17:00:00'],
+        ];
+        $fresh = [
+            ['departurePlanned' => '2026-09-26T16:30:00Z', 'arrivalPlanned' => null],
+            // Abfahrtsminute weicht ab → andere Fahrt, nicht übernehmen
+            ['departurePlanned' => '2026-09-26T16:39:00Z', 'arrivalPlanned' => '2026-09-26T16:36:00Z'],
+            // Keine Ankunft geliefert
+            ['departurePlanned' => '2026-09-26T16:45:00Z', 'arrivalPlanned' => null],
+            ['departurePlanned' => '2026-09-26T16:50:00Z', 'arrivalPlanned' => '2026-09-26T16:49:00Z'],
+        ];
+
+        $this->assertSame([], route_arrival_updates($route, $fresh));
+    }
+
+    public function test_route_arrival_updates_across_utc_midnight(): void
+    {
+        // an 23:58, ab 00:02 UTC – die Ankunft liegt am Vortag der Abfahrt
+        $route = [['sequence' => 2, 'departure_planned' => '2026-04-16 00:02:00']];
+        $fresh = [
+            ['departurePlanned' => '2026-09-26T23:50:00Z', 'arrivalPlanned' => null],
+            ['departurePlanned' => '2026-09-27T00:02:00Z', 'arrivalPlanned' => '2026-09-26T23:58:00Z'],
+        ];
+
+        $this->assertSame([2 => '2026-04-15 23:58:00'], route_arrival_updates($route, $fresh));
+    }
 }

@@ -582,6 +582,26 @@ function handle_post_recording(): never
                     $ts['line'] ?? null,
                 ]);
             }
+
+            // Bestehender Laufweg (INSERT IGNORE hat nichts geschrieben): fehlende
+            // Soll-Ankünfte aus diesem Abruf ergänzen – MD-Takt braucht sie am
+            // Linienwechsel. Laufwege von vor Schema v9 und geklonte Trips der
+            // Kursübernahme haben keine. Siehe route_arrival_updates().
+            $missingStmt = $pdo->prepare(
+                'SELECT sequence, departure_planned FROM ' . tbl('route_stops') . '
+                  WHERE trip_id = ? AND arrival_planned IS NULL AND sequence > 1'
+            );
+            $missingStmt->execute([$tripId]);
+            $arrivals = route_arrival_updates($missingStmt->fetchAll(PDO::FETCH_ASSOC), $routeStops);
+            if ($arrivals !== []) {
+                $arrivalUpdate = $pdo->prepare(
+                    'UPDATE ' . tbl('route_stops') . ' SET arrival_planned = ?
+                      WHERE trip_id = ? AND sequence = ? AND arrival_planned IS NULL'
+                );
+                foreach ($arrivals as $seq => $arrival) {
+                    $arrivalUpdate->execute([$arrival, $tripId, $seq]);
+                }
+            }
         } else {
             get_logger()->warning('recordings POST: HAFAS lieferte leere Halteliste', [
                 'hafasTripId' => $body['hafasTripId'],
