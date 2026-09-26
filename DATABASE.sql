@@ -138,11 +138,14 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%recordings` (
     `comment`           VARCHAR(500) NULL     COMMENT 'Optionaler Nutzerkommentar (nur bei eigenen Erfassungen editierbar)',
     `deleted_at`        TIMESTAMP    NULL     DEFAULT NULL
                                      COMMENT 'Soft-Delete-Zeitpunkt (UTC); NULL = aktiv',
+    `mdtakt_synced_at`  DATETIME     NULL     DEFAULT NULL
+                                     COMMENT 'An MD-Takt übertragen (UTC); NULL = offen',
     PRIMARY KEY (`id`),
     KEY `idx_%%PREFIX%%recordings_trip`        (`trip_id`),
     KEY `idx_%%PREFIX%%recordings_service_date` (`service_date`),
     KEY `idx_%%PREFIX%%recordings_user_token`   (`user_token`),
     KEY `idx_%%PREFIX%%recordings_deleted_at`   (`deleted_at`),
+    KEY `idx_%%PREFIX%%recordings_mdtakt_sync`  (`mdtakt_synced_at`, `id`),
     CONSTRAINT `fk_%%PREFIX%%recordings_trip`
         FOREIGN KEY (`trip_id`) REFERENCES `%%PREFIX%%trips` (`id`)
         ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -169,6 +172,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%route_stops` (
     `sequence`          TINYINT     NOT NULL COMMENT 'Position im Laufweg, beginnend bei 1',
     `stop_id`           VARCHAR(20) NOT NULL,
     `departure_planned` DATETIME    NULL     COMMENT 'Abfahrtszeit; letzter Halt: Ankunftszeit (HAFAS aTimeS-Fallback)',
+    `arrival_planned`   DATETIME    NULL     COMMENT 'Soll-Ankunft (UTC); erster Halt NULL',
     `line`              VARCHAR(10) NULL     COMMENT 'Linie an diesem Halt (aus HAFAS prodL); NULL wenn nicht verfügbar',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_%%PREFIX%%route_stops_seq` (`trip_id`, `sequence`),
@@ -281,6 +285,33 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%heuristic_misses` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_%%PREFIX%%heuristic_misses_key` (`period_id`, `route_key`, `direction`),
     KEY `idx_%%PREFIX%%heuristic_misses_last_seen` (`last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- Tabelle: %%PREFIX%%mdtakt_log
+-- Protokoll aller Aufrufe der MD-Takt-API (lib/mdtakt.php), beide Datenflüsse:
+-- collector/sightings (Cron) und collector/course-lookup (Abfahrtstafel).
+-- Bereinigung: nach mdtakt_log_days (Standard 30) am Ende jedes Cron-Laufs.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `%%PREFIX%%mdtakt_log` (
+    `id`            BIGINT            NOT NULL AUTO_INCREMENT,
+    `logged_at`     DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'UTC',
+    `method`        VARCHAR(6)        NOT NULL COMMENT 'GET | POST',
+    `endpoint`      VARCHAR(50)       NOT NULL COMMENT 'Pfad unter /api/v1/, z.B. collector/sightings',
+    `context`       VARCHAR(100)      NULL     COMMENT 'Aufrufer: Skriptname (CLI) bzw. Request-Pfad (Web)',
+    `http_status`   SMALLINT          NOT NULL COMMENT '0 = Netzwerkfehler/Timeout',
+    `duration_ms`   INT      UNSIGNED NOT NULL,
+    `cache_hit`     TINYINT(1)        NOT NULL DEFAULT 0 COMMENT '1 = aus eigenem Cache beantwortet, kein HTTP-Aufruf',
+    `items_sent`    SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sichtungen bzw. angefragte Abfahrten',
+    `items_ok`      SMALLINT UNSIGNED NULL     COMMENT 'angenommen bzw. gefunden; NULL ohne 2xx',
+    `stats`         JSON              NULL     COMMENT 'Endpunktspezifische Zähler',
+    `error`         VARCHAR(500)      NULL     COMMENT 'Fehlercode/-text bei Nicht-2xx',
+    `request_body`  MEDIUMTEXT        NULL     COMMENT 'JSON bzw. Query-String; NULL = nicht gespeichert',
+    `response_body` MEDIUMTEXT        NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_%%PREFIX%%mdtakt_log_logged_at` (`logged_at`),
+    KEY `idx_%%PREFIX%%mdtakt_log_endpoint`  (`endpoint`, `logged_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

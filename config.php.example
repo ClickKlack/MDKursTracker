@@ -64,4 +64,21 @@ return [
     //
     // 'telegram_bot_token' => '123456789:AA...',
     // 'telegram_chat_id'   => '-1001234567890',
+
+    // Übertragung der Erfassungen an MD-Takt (optional).
+    // Ohne Token passiert nichts – der Cron beendet sich dann still.
+    //
+    // Token: von MD-Takt vergeben, öffnet nur den Sichtungs-Eingang.
+    //        Nicht ins Frontend, nicht ins Log.
+    // Karenzzeit: Erfassungen werden erst übertragen, wenn sie mindestens so
+    //        viele Minuten alt sind – bis dahin lassen sie sich noch folgenlos
+    //        löschen. Löschungen werden nicht übertragen.
+    //
+    // Cron-Eintrag (alle 4 Stunden):
+    //   0 */4 * * * php /pfad/zum/tracker/cron/mdtakt_sync.php >/dev/null 2>&1
+    //
+    // 'mdtakt_api_url'       => 'https://api.strassenbahn-magdeburg.de',
+    // 'mdtakt_api_token'     => '...',
+    // 'mdtakt_grace_minutes' => 30,
+    // 'mdtakt_log_days'      => 30,   // Aufbewahrung im Admin-Tab "MD-Takt-Log"
 ];

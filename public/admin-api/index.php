@@ -53,6 +53,7 @@ $routes = [
     'periods'            => 'periods.php',
     'hafas-log'          => 'hafas_log.php',
     'hafas-cache'        => 'hafas_cache.php',
+    'mdtakt-log'         => 'mdtakt_log.php',
     'trip-group-detail'  => 'trip_group_detail.php',
     'announcements'      => 'announcements.php',
     'maintenance'        => 'maintenance.php',

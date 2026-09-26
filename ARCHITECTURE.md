@@ -38,7 +38,12 @@ damit vom Browser nicht direkt erreichbar.
 │   ├── hafas.php              ← curl-Wrapper für INSA HAFAS API
 │   ├── calendar.php           ← Wochentagstyp-Berechnung (Feiertage, Ferien)
 │   ├── auth.php               ← Session-Prüfung für Admin-Endpunkte
-│   └── response.php           ← JSON-Ausgabe-Helfer (header + echo + exit)
+│   ├── response.php           ← JSON-Ausgabe-Helfer (header + echo + exit)
+│   └── mdtakt.php             ← Übertragung der Erfassungen an MD-Takt
+│
+├── cron/                      ← CLI-Skripte für den Crontab
+│   ├── diagnostics_report.php ← Täglicher Diagnose-Report (Telegram)
+│   └── mdtakt_sync.php        ← Erfassungen an MD-Takt übertragen (alle 4 h)
 │
 └── public/                    ← Webroot (Document Root des Webservers)
     ├── index.html             ← PWA Shell (einzige HTML-Seite)
@@ -196,6 +201,52 @@ admin-api/periods.php
 Frontend aktualisiert aktive Periode im globalen State
 Alle nachfolgenden Erfassungen nutzen neue period_id
 ```
+
+---
+
+## 5a. Datenfluss: Übertragung an MD-Takt
+
+MD-Takt rekonstruiert Fahrzeugumläufe aus GTFS-Daten und unseren Sichtungen.
+MDKursTracker ist dabei immer der aktive Client; MD-Takt ruft uns nie auf.
+
+```
+Cron (alle 4 h)
+  php cron/mdtakt_sync.php
+         │
+         ▼
+lib/mdtakt.php
+  1. offene Erfassungen laden:
+       mdtakt_synced_at IS NULL, nicht gelöscht,
+       älter als mdtakt_grace_minutes (30),
+       keine Seed-Erfassungen der Kursübernahme
+  2. in Blöcke teilen (≤ 500 Sichtungen, ≤ 200 Laufwege)
+  3. POST /api/v1/collector/sightings  { sync, trips[], sightings[] }
+       trips[].stops = route_stops mit Linie je Halt, Soll-Zeiten UTC
+  4. angenommene Sichtungen (created/updated/unchanged):
+       mdtakt_synced_at = UTC_TIMESTAMP()
+```
+
+- **Kein Sofort-Push.** Die Karenzzeit fängt Erfassungen ab, die direkt
+  wieder gelöscht werden. Löschungen werden nicht übertragen – spätere
+  Fehlerfassungen müssen in MD-Takt auffallen.
+- **Geänderte Kursnummer:** `PUT /api/recordings/{id}` setzt
+  `mdtakt_synced_at` zurück, der nächste Lauf sendet die Erfassung mit
+  derselben ID erneut.
+- **Fehler:** 401/429/5xx/Netzwerk brechen den Lauf ab, nichts wird markiert.
+  Ein 422 halbiert den Block, bis die beanstandete Sichtung allein steht; sie
+  bleibt offen und wird geloggt.
+- **Altbestand:** Nach Migration v9 sind alle Erfassungen offen und gehen
+  über die ersten Läufe raus (höchstens 50 Blöcke je Lauf). Erfassungen
+  älterer Perioden werden vorher per Datenskript ausgenommen:
+  `mdtakt_synced_at = '1970-01-01 00:00:00'` heißt „bewusst nicht übertragen“.
+- **Protokoll:** Jeder HTTP-Aufruf landet mit Kennzahlen, Request und
+  Response in `mdtakt_log` (Admin-Reiter „MD-Takt-Log"). Die Tabelle ist für
+  beide Datenflüsse ausgelegt: gemeinsame Zähler `items_sent`/`items_ok`,
+  endpunktspezifische in `stats` (JSON), Bodies optional. Einträge älter als
+  `mdtakt_log_days` (30) löscht der Cron am Ende jedes Laufs.
+- **Konfiguration:** `mdtakt_api_url`, `mdtakt_api_token`,
+  `mdtakt_grace_minutes`, `mdtakt_log_days` in `config.php`; ohne Token
+  passiert nichts.
 
 ---
 

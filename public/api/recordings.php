@@ -566,16 +566,19 @@ function handle_post_recording(): never
             $stopInsert  = $pdo->prepare('INSERT IGNORE INTO ' . tbl('stops') . ' (hafas_id, name) VALUES (?, ?)');
             $routeInsert = $pdo->prepare(
                 'INSERT IGNORE INTO ' . tbl('route_stops') . '
-                     (trip_id, sequence, stop_id, departure_planned, line)
-                 VALUES (?, ?, ?, ?, ?)'
+                     (trip_id, sequence, stop_id, departure_planned, arrival_planned, line)
+                 VALUES (?, ?, ?, ?, ?, ?)'
             );
             foreach ($routeStops as $i => $ts) {
                 $stopInsert->execute([$ts['stopId'], $ts['stop']]);
+                // arrivalPlanned fehlt in HAFAS-Cache-Einträgen von vor v9
+                $arrival = $ts['arrivalPlanned'] ?? null;
                 $routeInsert->execute([
                     $tripId,
                     $i + 1,
                     $ts['stopId'],
                     $ts['departurePlanned'] !== null ? iso_to_mysql($ts['departurePlanned']) : null,
+                    $arrival !== null ? iso_to_mysql($arrival) : null,
                     $ts['line'] ?? null,
                 ]);
             }
@@ -704,6 +707,9 @@ function handle_put_recording(int $recordingId): never
     if ($hasCourse) {
         $sets[]   = 'course_number = ?';
         $params[] = $body['courseNumber'];
+        // Geänderte Kursnummer beim nächsten MD-Takt-Sync erneut übertragen
+        // (cron/mdtakt_sync.php). Reine Kommentar-Änderungen betreffen MD-Takt nicht.
+        $sets[] = 'mdtakt_synced_at = NULL';
     }
     if ($hasComment) {
         $sets[]   = 'comment = ?';

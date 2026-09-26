@@ -683,6 +683,31 @@ body {
     cursor: default;
 }
 
+/* =============================================================================
+   MD-Takt-Log-Tab (Detailzeile mit Request/Response)
+   ============================================================================= */
+
+.ml-detail-row > td { background: var(--color-bg, #f7f7f7); }
+.ml-detail + .ml-detail { margin-top: 12px; }
+.ml-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.ml-json {
+    margin: 0;
+    max-height: 320px;
+    overflow: auto;
+    font-family: monospace;
+    font-size: 0.78rem;
+    white-space: pre;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 4px;
+    padding: 8px;
+}
+
 /* ==========================================================================
    Feature: Einzelerfassungen-Accordion im Override-Tab
    ========================================================================== */

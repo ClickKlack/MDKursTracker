@@ -1,0 +1,45 @@
+meta {
+  name: Admin MD-Takt-Log GET – Aufruf-Protokoll der MD-Takt-API
+  type: http
+  seq: 50
+}
+
+get {
+  url: {{baseUrl}}/admin-api/mdtakt-log
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.filters.dateFrom: isDefined
+  res.body.entries: isArray
+  res.body.byDay: isArray
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const e = res.body.entries;
+    console.log("Aufrufe:", e.length);
+    if (e.length > 0) {
+      bru.setVar("mdtaktLogId", e[0].id);
+      console.log("Neuester Eintrag:", e[0].id, e[0].method, e[0].endpoint, e[0].httpStatus, e[0].loggedAt);
+    }
+  }
+}
+
+docs {
+  Voraussetzung: Vorher 12-Admin-Login ausführen (Session-Cookie).
+
+  Liefert das Aufruf-Protokoll der MD-Takt-API für heute – Sichtungen
+  (collector/sightings) und Kursauskünfte (collector/course-lookup).
+  Optional:
+    ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    ?endpoint=collector/sightings
+    ?errors_only=1   nur Aufrufe ohne 2xx (inkl. Netzwerkfehler = Status 0)
+
+  Setzt mdtaktLogId auf den neuesten Eintrag (für 50-Admin-MD-Takt-Log-Detail).
+  Eine leere Liste ist kein Fehler – der Cron läuft nur alle 4 Stunden.
+
+  Fehler: 400 ungültiges Datum oder endpoint, 401 ohne Admin-Session, 405 andere Methode.
+}

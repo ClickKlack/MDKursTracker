@@ -25,6 +25,10 @@ cache/hafas/
 # tmp-Cache: nur Laufzeit, nichts davon versionieren
 cache/tmp/
 
+# Lock- und Zustandsdateien der Cron-Skripte
+cache/*.lock
+cache/*.json
+
 # PHPUnit-Cache
 .phpunit.result.cache
 

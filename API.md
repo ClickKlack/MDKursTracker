@@ -236,6 +236,7 @@ GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...
     "stop": "Magdeburg, Westerhüsen",
     "departurePlanned": "2026-03-24T14:10:00Z",
     "departureActual": "2026-03-24T14:11:00Z",
+    "arrivalPlanned": null,
     "line": "1",
     "cancelled": false,
     "additional": false,
@@ -251,6 +252,7 @@ GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...
 | `stop` | string | Haltestellenname |
 | `departurePlanned` | string\|null | Planmäßige Abfahrt (ISO 8601 UTC); am letzten Halt die Ankunft |
 | `departureActual` | string\|null | Echtzeit; `null` = keine Echtzeit oder Halt entfällt |
+| `arrivalPlanned` | string\|null | Planmäßige Ankunft (ISO 8601 UTC); `null` am ersten Halt |
 | `line` | string\|null | Linie ab diesem Halt (Linienübergang bei durchgebundenen Fahrten) |
 | `cancelled` | bool | Halt entfällt an diesem Betriebstag. Gesetzt, wenn *alle* Bewegungen des Halts ausfallen: bei einem Zwischenhalt `aCncl` **und** `dCncl`, am ersten Halt `dCncl` allein, am letzten `aCncl` allein. Am vorzeitigen Endhalt einer umgeleiteten Fahrt setzt HAFAS nur `dCncl` (keine Weiterfahrt) – der Halt wird bedient und gilt hier nicht als entfallen |
 | `additional` | bool | Zusatzhalt einer Umleitung (HAFAS `isAdd`), nicht im Fahrplan |
@@ -289,6 +291,7 @@ GET /api/trip?tripId=2|%23VN%231%23ZI%23125364%23TA%2346%23...&serviceDate=2026-
       "stop": "Magdeburg, Westerhüsen",
       "departurePlanned": "2026-04-22T14:10:00Z",
       "departureActual": null,
+      "arrivalPlanned": null,
       "line": "1",
       "cancelled": false,
       "additional": false,
@@ -1327,3 +1330,92 @@ Konflikte Nutzer tatsächlich zu sehen bekommen. Geschrieben wird nur, wenn eine
 echte Abfahrtsanfrage ohne Kursnummer bleibt, obwohl Kandidaten vorlagen.
 
 **Fehler:** `401` – keine Admin-Session | `404` – Fahrplanperiode nicht gefunden
+
+---
+
+### GET `/admin-api/mdtakt-log`
+
+Aufruf-Protokoll der MD-Takt-API (Admin-Reiter „MD-Takt-Log"). Jeder HTTP-Aufruf
+aus `lib/mdtakt.php` wird mit Kennzahlen, Request und Response in
+`%%PREFIX%%mdtakt_log` gespeichert – für beide Datenflüsse:
+
+| `endpoint` | Datenfluss | `itemsSent` / `itemsOk` | `stats` |
+|---|---|---|---|
+| `collector/sightings` | 1 – Sichtungen (Cron) | Sichtungen / angenommen | `trips`, `waiting`, `unknownFingerprint` |
+| `collector/course-lookup` | 2 – Kursauskunft | angefragte Abfahrten / gefunden | je Endpunkt frei (z.B. Gründe für `found: false`) |
+
+Einträge älter als `mdtakt_log_days` (Standard 30) löscht der Cron am Ende
+jedes Laufs.
+
+**Parameter:**
+
+| Name | Typ | Pflicht | Beschreibung |
+|---|---|---|---|
+| `date_from` | `YYYY-MM-DD` | nein | Standard: heute (UTC-Datum von `logged_at`) |
+| `date_to` | `YYYY-MM-DD` | nein | Standard: `date_from` |
+| `endpoint` | string | nein | z.B. `collector/sightings` |
+| `errors_only` | `1` | nein | Nur Aufrufe ohne 2xx-Antwort (inkl. Netzwerkfehler) |
+
+**Beispiel-Response:**
+```json
+{
+  "filters": { "dateFrom": "2026-09-26", "dateTo": "2026-09-26", "endpoint": "", "errorsOnly": false },
+  "entries": [
+    {
+      "id": 12, "loggedAt": "2026-09-26T16:00:02Z",
+      "method": "POST", "endpoint": "collector/sightings", "context": "mdtakt_sync.php",
+      "httpStatus": 200, "durationMs": 184, "cacheHit": false,
+      "itemsSent": 1, "itemsOk": 1,
+      "stats": { "trips": 1, "waiting": 1, "unknownFingerprint": 0 },
+      "error": null
+    }
+  ],
+  "byDay": [
+    {
+      "day": "2026-09-26", "endpoint": "collector/sightings",
+      "calls": 3, "errors": 1, "cacheHits": 0, "itemsSent": 2, "itemsOk": 2,
+      "stats": { "trips": 2, "waiting": 2, "unknownFingerprint": 0 },
+      "avgDurationMs": 151
+    }
+  ]
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `entries` | Neueste zuerst, höchstens 500, ohne Bodies |
+| `context` | Aufrufer: Skriptname (CLI) bzw. Request-Pfad (Web) |
+| `httpStatus` | `0` = Netzwerkfehler oder Timeout |
+| `cacheHit` | `true` = aus eigenem Cache beantwortet, kein HTTP-Aufruf |
+| `itemsOk` | `null`, wenn keine 2xx-Antwort vorliegt |
+| `stats` | Endpunktspezifische Zähler; `null`-Werte ohne 2xx-Antwort |
+| `error` | `code: message` aus MD-Takts Fehlerformat bzw. Anfang der Rohantwort |
+| `byDay` | Je Tag und Endpunkt, unabhängig von `errors_only`; `stats` summiert |
+
+**Fehler:** `400` – ungültiges Datum oder `endpoint` | `401` – keine Admin-Session | `405` – andere Methode als GET
+
+---
+
+### GET `/admin-api/mdtakt-log/:id`
+
+Einzelner Protokolleintrag (Felder wie in der Liste) mit Request- und
+Response-Body. Der Bearer-Token steht nur im Header und wird nie gespeichert.
+
+**Beispiel-Response:**
+```json
+{
+  "id": 12, "loggedAt": "2026-09-26T16:00:02Z",
+  "method": "POST", "endpoint": "collector/sightings", "context": "mdtakt_sync.php",
+  "httpStatus": 200, "durationMs": 184, "cacheHit": false,
+  "itemsSent": 1, "itemsOk": 1, "stats": { "trips": 1, "waiting": 1, "unknownFingerprint": 0 },
+  "error": null,
+  "request":  { "sync": { "since": "…", "generated_at": "…" }, "trips": [ … ], "sightings": [ … ] },
+  "response": { "data": { "received": { "trips": 1, "sightings": 1 }, "results": [ … ] } }
+}
+```
+
+`request`/`response` sind JSON-Objekte, sofern der Body JSON ist; sonst
+(Query-String eines GET, HTML-Fehlerseite) ein String. `null` heißt: nicht
+gespeichert bzw. keine Antwort (Netzwerkfehler).
+
+**Fehler:** `401` – keine Admin-Session | `404` – Eintrag nicht (mehr) vorhanden

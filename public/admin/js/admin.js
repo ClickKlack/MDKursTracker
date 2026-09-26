@@ -12,6 +12,7 @@ import { renderSchoolHolidays } from './school_holidays.js';
 import { renderPeriods }        from './periods.js';
 import { renderOverride }       from './override.js';
 import { renderHafasLog }       from './hafas_log.js';
+import { renderMdtaktLog }      from './mdtakt_log.js';
 import { renderTrips }          from './trips.js';
 import { renderAnnouncements }  from './announcements.js';
 import { renderMaintenance }    from './maintenance.js';
@@ -119,6 +120,7 @@ const TABS = {
     'periods':         renderPeriods,
     'override':        renderOverride,
     'hafas-log':       renderHafasLog,
+    'mdtakt-log':      renderMdtaktLog,
     'maintenance':     renderMaintenance,
     'announcements':   renderAnnouncements,
     'diagnostics':     renderDiagnostics,

@@ -197,4 +197,37 @@ class HafasTripParseTest extends TestCase
         $this->assertTrue($stops[2]['cancelled']);
         $this->assertTrue($stops[3]['cancelled']);
     }
+
+    /**
+     * arrivalPlanned kommt nur aus aTimeS – ohne Ankunft bleibt es null,
+     * auch wenn departurePlanned am Endhalt auf die Ankunft zurückfällt.
+     */
+    public function test_arrival_planned_only_from_arrival_time(): void
+    {
+        $stops = hafas_parse_trip_stops(self::divertedTrip());
+
+        $this->assertNull($stops[0]['arrivalPlanned']);
+        // 19:36 Berlin (MESZ) = 17:36 UTC
+        $this->assertSame('2026-09-22T17:36:00Z', $stops[4]['arrivalPlanned']);
+        $this->assertSame($stops[4]['arrivalPlanned'], $stops[4]['departurePlanned']);
+    }
+
+    public function test_arrival_planned_uses_own_date(): void
+    {
+        $res = [
+            'common'  => ['locL' => [['extId' => '1', 'name' => 'A']]],
+            'journey' => [
+                'date'  => '20260922',
+                'stopL' => [[
+                    'locX'   => 0,
+                    'aTimeS' => '235900', 'aDateS' => '20260922',
+                    'dTimeS' => '000100', 'dDateS' => '20260923',
+                ]],
+            ],
+        ];
+
+        $stop = hafas_parse_trip_stops($res)[0];
+        $this->assertSame('2026-09-22T21:59:00Z', $stop['arrivalPlanned']);
+        $this->assertSame('2026-09-22T22:01:00Z', $stop['departurePlanned']);
+    }
 }

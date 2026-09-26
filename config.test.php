@@ -27,6 +27,9 @@ return [
     'hafas_client' => ['type' => 'TEST', 'id' => 'TEST', 'v' => '0', 'name' => 'test'],
     'hafas_ver'    => '1.44',
 
+    // MD-Takt: leerer Token → mdtakt_configured() = false, Tests senden nie
+    'mdtakt_api_token' => '',
+
     'admin_hash'       => '$2y$12$invalid',
     'stop_name_prefix' => '',
 ];

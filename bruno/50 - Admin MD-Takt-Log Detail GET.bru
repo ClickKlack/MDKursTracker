@@ -1,0 +1,36 @@
+meta {
+  name: Admin MD-Takt-Log Detail GET – Request und Response eines Aufrufs
+  type: http
+  seq: 51
+}
+
+get {
+  url: {{baseUrl}}/admin-api/mdtakt-log/{{mdtaktLogId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isNumber
+  res.body.endpoint: isString
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const b = res.body;
+    console.log("Eintrag", b.id, b.method, b.endpoint, "HTTP", b.httpStatus,
+                "gesendet:", b.itemsSent, "ok:", b.itemsOk, "stats:", JSON.stringify(b.stats));
+  }
+}
+
+docs {
+  Voraussetzung: 12-Admin-Login und 49-Admin-MD-Takt-Log-GET (setzt mdtaktLogId).
+
+  Liefert einen Protokolleintrag mit vollständigem Request- und Response-Body.
+  request/response sind JSON-Objekte oder – bei GET-Query-Strings und
+  Nicht-JSON-Antworten – Strings; null heißt nicht gespeichert bzw. keine
+  Antwort (Netzwerkfehler). Der Bearer-Token wird nie gespeichert.
+
+  Fehler: 401 ohne Admin-Session, 404 wenn der Eintrag bereits bereinigt ist.
+}

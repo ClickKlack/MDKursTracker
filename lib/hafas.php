@@ -401,6 +401,7 @@ function hafas_trip(string $tripId): array
  * @param array $res  $response[0]['res'] aus hafas_request()
  * @return array<array{sequence:int, stopId:string, stop:string,
  *                     departurePlanned:string|null, departureActual:string|null,
+ *                     arrivalPlanned:string|null,
  *                     line:string|null, cancelled:bool, additional:bool,
  *                     boarding:bool}>
  */
@@ -515,6 +516,11 @@ function hafas_parse_trip_stops(array $res): array
             'stop'             => $loc['name'] ?? '',
             'departurePlanned' => ($dTime !== '') ? hafas_iso($dDate, $dTime) : null,
             'departureActual'  => ($rTime !== '') ? hafas_iso($rDate, $rTime) : null,
+            // Reine Soll-Ankunft, unabhängig vom Abfahrts-Fallback oben;
+            // der erste Halt hat keine.
+            'arrivalPlanned'   => isset($stop['aTimeS'])
+                ? hafas_iso($stop['aDateS'] ?? $jnyDate, $stop['aTimeS'])
+                : null,
             'line'             => $lineForIdx($i, $stop),
             'cancelled'        => $cancelled,
             'additional'       => $additional,
