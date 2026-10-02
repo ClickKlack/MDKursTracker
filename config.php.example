@@ -74,8 +74,8 @@ return [
     //        viele Minuten alt sind – bis dahin lassen sie sich noch folgenlos
     //        löschen. Löschungen werden nicht übertragen.
     //
-    // Cron-Eintrag (alle 4 Stunden):
-    //   0 */4 * * * php /pfad/zum/tracker/cron/mdtakt_sync.php >/dev/null 2>&1
+    // Cron-Eintrag (stündlich zu Minute 33):
+    //   33 * * * * php /pfad/zum/tracker/cron/mdtakt_sync.php >/dev/null 2>&1
     //
     // 'mdtakt_api_url'       => 'https://api.strassenbahn-magdeburg.de',
     // 'mdtakt_api_token'     => '...',

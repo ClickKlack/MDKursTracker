@@ -1,7 +1,7 @@
 <?php
 // Überträgt Erfassungen an MD-Takt (siehe lib/mdtakt.php).
 //
-// Aufruf (CLI, per Cron alle 4 Stunden):
+// Aufruf (CLI, per Cron stündlich zu Minute 33):
 //   php /pfad/zum/tracker/cron/mdtakt_sync.php
 //
 // Optionen:

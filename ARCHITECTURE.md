@@ -43,7 +43,7 @@ damit vom Browser nicht direkt erreichbar.
 │
 ├── cron/                      ← CLI-Skripte für den Crontab
 │   ├── diagnostics_report.php ← Täglicher Diagnose-Report (Telegram)
-│   └── mdtakt_sync.php        ← Erfassungen an MD-Takt übertragen (alle 4 h)
+│   └── mdtakt_sync.php        ← Erfassungen an MD-Takt übertragen (stündlich)
 │
 └── public/                    ← Webroot (Document Root des Webservers)
     ├── index.html             ← PWA Shell (einzige HTML-Seite)
@@ -210,7 +210,7 @@ MD-Takt rekonstruiert Fahrzeugumläufe aus GTFS-Daten und unseren Sichtungen.
 MDKursTracker ist dabei immer der aktive Client; MD-Takt ruft uns nie auf.
 
 ```
-Cron (alle 4 h)
+Cron (stündlich, Minute 33)
   php cron/mdtakt_sync.php
          │
          ▼
