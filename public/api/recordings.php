@@ -732,14 +732,16 @@ function handle_put_recording(int $recordingId): never
     if ($hasCourse) {
         $sets[]   = 'course_number = ?';
         $params[] = $body['courseNumber'];
-        // Geänderte Kursnummer beim nächsten MD-Takt-Sync erneut übertragen
-        // (cron/mdtakt_sync.php). Reine Kommentar-Änderungen betreffen MD-Takt nicht.
-        $sets[] = 'mdtakt_synced_at = NULL';
     }
     if ($hasComment) {
         $sets[]   = 'comment = ?';
         $params[] = $comment;
     }
+    // Kursnummer und Notiz gehen beide an MD-Takt – nach einer Änderung beim
+    // nächsten Sync erneut übertragen (cron/mdtakt_sync.php). Wegen der
+    // Bearbeitungsfrist ist die Erfassung hier ohnehin noch nicht übertragen;
+    // das Zurücksetzen hält es auch bei geänderter Frist richtig.
+    $sets[] = 'mdtakt_synced_at = NULL';
     $params[] = $recordingId;
 
     $pdo->prepare(

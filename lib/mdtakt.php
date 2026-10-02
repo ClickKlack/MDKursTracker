@@ -112,6 +112,9 @@ function mdtakt_sighting(array $row): array
         'observed_at'          => mysql_to_iso($row['recorded_at']),
         'departure_planned'    => mysql_to_iso($row['departure_planned']),
         'departure_actual'     => mysql_to_iso($row['departure_actual'] ?? null),
+        // Notiz des Erfassers; null löscht eine früher übertragene. MD-Takt
+        // zeigt sie nur im Admin.
+        'comment'              => ($row['comment'] ?? '') !== '' ? $row['comment'] : null,
     ];
 }
 
@@ -294,7 +297,8 @@ function mdtakt_load_pending(PDO $pdo, int $graceMinutes, int $limit): array
                 r.service_date,
                 r.recorded_at,
                 r.departure_planned,
-                r.departure_actual
+                r.departure_actual,
+                r.comment
             FROM ' . tbl('recordings') . ' r
             JOIN ' . tbl('trips') . ' t ON t.id = r.trip_id
            WHERE r.mdtakt_synced_at IS NULL

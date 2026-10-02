@@ -238,9 +238,12 @@ lib/mdtakt.php
 - **Kein Sofort-Push.** Die Karenzzeit fängt Erfassungen ab, die direkt
   wieder gelöscht werden. Löschungen werden nicht übertragen – spätere
   Fehlerfassungen müssen in MD-Takt auffallen.
-- **Geänderte Kursnummer:** `PUT /api/recordings/{id}` setzt
+- **Notiz:** `recordings.comment` geht als `sightings[].comment` mit
+  (`null` = keine Notiz). MD-Takt zeigt sie nur im Admin.
+- **Geänderte Kursnummer oder Notiz:** `PUT /api/recordings/{id}` setzt
   `mdtakt_synced_at` zurück, der nächste Lauf sendet die Erfassung mit
-  derselben ID erneut.
+  derselben ID erneut. Wegen der Bearbeitungsfrist (= Karenzzeit) ist sie
+  dann in der Regel noch gar nicht übertragen.
 - **Fehler:** 401/429/5xx/Netzwerk brechen den Lauf ab, nichts wird markiert.
   Ein 422 halbiert den Block, bis die beanstandete Sichtung allein steht; sie
   bleibt offen und wird geloggt.

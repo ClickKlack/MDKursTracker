@@ -74,7 +74,16 @@ class MdTaktTest extends TestCase
         $s   = mdtakt_sighting($row);
 
         $this->assertArrayNotHasKey('user_token', $s);
-        $this->assertArrayNotHasKey('comment', $s);
+    }
+
+    public function test_sighting_sends_comment_or_null(): void
+    {
+        $this->assertSame('Umleitung über Südring',
+            mdtakt_sighting(self::row(1) + ['comment' => 'Umleitung über Südring'])['comment']);
+        // Keine Notiz → explizit null (löscht eine früher übertragene)
+        $this->assertNull(mdtakt_sighting(self::row(1) + ['comment' => null])['comment']);
+        $this->assertNull(mdtakt_sighting(self::row(1) + ['comment' => ''])['comment']);
+        $this->assertArrayHasKey('comment', mdtakt_sighting(self::row(1)));
     }
 
     // ── mdtakt_trip ─────────────────────────────────────────────────────────
