@@ -720,6 +720,17 @@ body {
     display: none;
 }
 
+/* Rechte Gruppe: Tram/Bus-Umschalter + Refresh (nur GPS-Reiter) */
+.nearby-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nearby-actions .btn-icon[hidden] {
+    display: none;
+}
+
 /* Sortier-Umschalter Ist/Soll – kompakte Variante der .btn-toggle-Pills
    aus der Haltestellensuche (flex: 1 und Padding werden überschrieben) */
 .sort-toggle {

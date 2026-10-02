@@ -288,6 +288,9 @@ in `localStorage` gespeichert wird:
 - PHP-Proxy → INSA HAFAS Nearby-Abfrage
 - Anzeige als Liste sortiert nach Entfernung, gefiltert auf die gewählten
   Verkehrsmittel (siehe unten)
+- Refresh-Button rechts neben dem Tram/Bus-Umschalter: bestimmt den Standort
+  neu (ohne gecachte Browser-Position, `maximumAge: 0`) und sucht erneut –
+  für die Suche nach einem Ortswechsel
 
 **Name-Reiter:**
 - Freitexteingabe → `GET /api/nearby?name=…` → HAFAS LocMatch

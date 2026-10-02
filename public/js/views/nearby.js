@@ -98,7 +98,21 @@ function buildShell() {
 
         <div class="nearby-products" id="nearby-products" ${isFav ? 'hidden' : ''}>
             <span class="text-small text-muted">Verkehrsmittel</span>
-            ${productToggleHtml()}
+            <div class="nearby-actions">
+                ${productToggleHtml()}
+                <button class="btn-icon" id="btn-refresh-gps" ${isGps ? '' : 'hidden'}
+                        aria-label="Standort neu bestimmen und erneut suchen"
+                        title="Erneut suchen">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M8 16H3v5"/>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div id="name-search-form" ${isName ? '' : 'hidden'}>
@@ -133,6 +147,12 @@ function attachTabListeners(container, params, context) {
                    && container.querySelector('#stop-name-input')?.value.trim()) {
             await runNameSearch(container);
         }
+    });
+
+    // GPS-Suche nach Ortswechsel wiederholen – mit frischer Position,
+    // nicht der bis zu 60 s alten aus dem Browser-Cache
+    container.querySelector('#btn-refresh-gps')?.addEventListener('click', async () => {
+        await runGpsSearch(container, params, context, /* fresh= */ true);
     });
 
     container.querySelector('#toggle-favorites')?.addEventListener('click', () => {
@@ -215,6 +235,8 @@ function setMode(mode, container) {
 function updateTabHighlight(container) {
     const productsEl = container.querySelector('#nearby-products');
     if (productsEl) productsEl.hidden = searchMode === 'favorites';
+    const refreshEl = container.querySelector('#btn-refresh-gps');
+    if (refreshEl) refreshEl.hidden = searchMode !== 'gps';
 
     ['favorites', 'gps', 'name'].forEach(m => {
         const btn = container.querySelector(`#toggle-${m}`);
@@ -294,7 +316,11 @@ async function handleFavClick(e, container) {
 
 // --- GPS-Suche --------------------------------------------------------------
 
-async function runGpsSearch(container, params, context) {
+/**
+ * @param {boolean} [fresh=false]  true = gecachte Browser-Position verwerfen
+ *                                 (Refresh-Button nach Ortswechsel)
+ */
+async function runGpsSearch(container, params, context, fresh = false) {
     const myToken   = ++searchToken;  // ältere GPS-/Namensantworten verwerfen
     const contentEl = container.querySelector('#nearby-content');
     showLoading(contentEl, 'GPS-Position wird ermittelt…',
@@ -302,7 +328,7 @@ async function runGpsSearch(container, params, context) {
 
     let position;
     try {
-        position = await getCurrentPosition();
+        position = await getCurrentPosition(fresh ? { maximumAge: 0 } : {});
     } catch (gpsErr) {
         if (myToken !== searchToken) return;
         renderError(contentEl, gpsErr.message, () => runGpsSearch(container, params, context));
