@@ -38,6 +38,8 @@ docs {
   Fehlertest:
     X-User-Token gehört zu anderer Erfassung → 403
     Erfassung in älterer Periode → 403
+    Älter als mdtakt_grace_minutes (Bearbeitungsfrist) → 403
+      (lokal ggf. kurz konfiguriert – dann direkt nach 07 ausführen)
     Kein Token → 401
     Nicht gefunden → 404
 }

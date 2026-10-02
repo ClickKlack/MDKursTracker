@@ -4,6 +4,7 @@
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/lib/response.php';
+require_once dirname(__DIR__, 2) . '/lib/recording_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Methode nicht erlaubt', 405);
@@ -21,7 +22,9 @@ if (is_readable($versionFile)) {
 json_response([
     // Präfix, der aus Haltestellennamen in der Anzeige entfernt wird.
     'stopNamePrefix' => $cfg['stop_name_prefix'] ?? '',
-    // Versionsinfo aus version.json (vom deploy.sh generiert)
+    // Bearbeitungsfrist eigener Erfassungen (= Übertragungsfrist an MD-Takt)
+    'editWindowMinutes' => recording_edit_window_minutes(),
+        // Versionsinfo aus version.json (vom deploy.sh generiert)
     'version'        => $versionData['version']        ?? null,
     'swCacheVersion' => $versionData['swCacheVersion'] ?? null,
     'deployedAt'     => $versionData['deployedAt']     ?? null,

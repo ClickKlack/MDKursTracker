@@ -8,6 +8,8 @@
  *  4. Kennzeichnung ob Kursnummer manuell übersteuert
  *  5. Eigene Erfassungen hervorheben (isOwn)
  *  6. Eigene Erfassungen nachträglich bearbeiten (Kurs + Kommentar), nur aktive Periode
+ *     und nur innerhalb der Bearbeitungsfrist (= MD-Takt-Übertragungsfrist,
+ *     appConfig.editWindowMinutes; der Server prüft sie ebenfalls)
  *  7. Eigene Erfassungen löschen (Soft-Delete) mit Undo-Snackbar; gleiche Kriterien wie 6.
  */
 
@@ -17,7 +19,7 @@ import {
 } from '../api.js';
 import { formatTime }                from '../utils/format.js';
 import { lineBadgeHtml }             from '../utils/lines.js';
-import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
+import { escapeHtml, stripStopPrefix, showActionSnackbar, appConfig } from '../app.js';
 import { isMaintenanceActive } from '../notices.js';
 
 /** Aktive Snackbar samt Auto-Commit-Timer/Pending-Item; verhindert Stacking */
@@ -357,10 +359,10 @@ function renderRecordingItem(rec, isActivePeriod) {
         ? `<span class="badge-manual" title="Kursnummer manuell durch Admin übersteuert">M</span>`
         : '';
 
-    // "Eigene" Erfassung: anderer Stil + Bearbeiten-/Löschen-Button (max. 60 Min. nach Erfassung)
+    // "Eigene" Erfassung: anderer Stil + Bearbeiten-/Löschen-Button, solange die
+    // Bearbeitungsfrist läuft (danach überträgt der Cron die Erfassung an MD-Takt)
     const ownClass    = rec.isOwn ? ' recording-item--own' : '';
-    const ageMs       = rec.recordedAt ? Date.now() - new Date(rec.recordedAt).getTime() : Infinity;
-    const isMutable   = rec.isOwn && isActivePeriod && !isManual && ageMs < 60 * 60 * 1000;
+    const isMutable   = rec.isOwn && isActivePeriod && !isManual && isWithinEditWindow(rec.recordedAt);
     const editBtnHtml = isMutable
         ? `<button class="btn btn-ghost btn-xs btn-edit-recording"
                    aria-label="Diese Erfassung bearbeiten">
@@ -400,6 +402,7 @@ function renderRecordingItem(rec, isActivePeriod) {
             data-recording-id="${rec.id}"
             data-stop-id="${escapeHtml(rec.stopId)}"
             data-product="${escapeHtml(rec.product ?? 'tram')}"
+            data-recorded-at="${escapeHtml(rec.recordedAt ?? '')}"
             aria-expanded="false"
             aria-label="${escapeHtml(ariaLabel)}">
             <div class="recording-top">
@@ -446,6 +449,34 @@ function attachListeners(container) {
     container.querySelector('#filter-date')?.addEventListener('change',  debouncedLoad);
 }
 
+// --- Bearbeitungsfrist ------------------------------------------------------
+
+/** Fallback, falls /api/config (noch) keine Frist liefert – Standard von mdtakt_grace_minutes */
+const DEFAULT_EDIT_WINDOW_MINUTES = 30;
+
+/**
+ * Liegt eine Erfassung noch in der Bearbeitungsfrist?
+ * Spiegelt recording_within_edit_window() aus lib/recording_helpers.php.
+ */
+function isWithinEditWindow(recordedAt) {
+    if (!recordedAt) return false;
+    const minutes = appConfig.editWindowMinutes ?? DEFAULT_EDIT_WINDOW_MINUTES;
+    return Date.now() - new Date(recordedAt).getTime() < minutes * 60 * 1000;
+}
+
+/**
+ * Frist beim Klick erneut prüfen – die Liste kann länger offen gewesen sein.
+ * Abgelaufen: Hinweis zeigen und die Buttons entfernen.
+ */
+function ensureEditWindow(item) {
+    if (isWithinEditWindow(item.dataset.recordedAt)) return true;
+    item.querySelectorAll('.btn-edit-recording, .btn-delete-recording').forEach(b => b.remove());
+    const panel = item.querySelector('.recording-edit-panel');
+    if (panel) { panel.hidden = true; panel.innerHTML = ''; }
+    showActionSnackbar('Bearbeitungszeit abgelaufen – die Erfassung wird an MD-Takt übertragen', true);
+    return false;
+}
+
 // --- Zentraler Klick-Handler für die Liste ----------------------------------
 
 function handleListClick(e, container) {
@@ -458,7 +489,7 @@ function handleListClick(e, container) {
             return;
         }
         const item = editBtn.closest('.recording-item');
-        if (item) toggleEditPanel(item);
+        if (item && ensureEditWindow(item)) toggleEditPanel(item);
         return;
     }
 
@@ -471,7 +502,7 @@ function handleListClick(e, container) {
             return;
         }
         const item = delBtn.closest('.recording-item');
-        if (item) handleDeleteClick(item, container);
+        if (item && ensureEditWindow(item)) handleDeleteClick(item, container);
         return;
     }
 

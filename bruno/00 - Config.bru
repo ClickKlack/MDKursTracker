@@ -13,6 +13,7 @@ get {
 assert {
   res.status: eq 200
   res.body.stopNamePrefix: isDefined
+  res.body.editWindowMinutes: isNumber
 }
 
 script:post-response {

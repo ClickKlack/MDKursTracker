@@ -794,7 +794,8 @@ function handle_restore_recording(int $recordingId): never
     $pdo   = get_db();
     require_no_maintenance($pdo);
 
-    $rec = assert_recording_modifiable($pdo, $recordingId, $token);
+    // Ohne Fristprüfung: Undo eines Löschens (siehe assert_recording_modifiable)
+    $rec = assert_recording_modifiable($pdo, $recordingId, $token, checkWindow: false);
 
     if ($rec['deleted_at'] === null) {
         // Restore auf einen aktiven Datensatz: keine Änderung nötig

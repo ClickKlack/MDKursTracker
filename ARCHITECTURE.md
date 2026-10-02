@@ -225,7 +225,8 @@ Cron (stündlich, Minute 33)
 lib/mdtakt.php
   1. offene Erfassungen laden:
        mdtakt_synced_at IS NULL, nicht gelöscht,
-       älter als mdtakt_grace_minutes (30),
+       älter als mdtakt_grace_minutes (30) – zugleich die Bearbeitungsfrist
+       im Verlauf, PUT/DELETE danach abgelehnt (lib/recording_helpers.php),
        keine Seed-Erfassungen der Kursübernahme
   2. in Blöcke teilen (≤ 500 Sichtungen, ≤ 200 Laufwege)
   3. POST /api/v1/collector/sightings  { sync, trips[], sightings[] }

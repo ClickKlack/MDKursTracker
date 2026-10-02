@@ -29,12 +29,17 @@ HTTP-Statuscodes: `200 OK`, `201 Created`, `400 Bad Request`,
 **Erfolg (200):**
 ```json
 {
-  "stopNamePrefix": "Magdeburg, "
+  "stopNamePrefix": "Magdeburg, ",
+  "editWindowMinutes": 30
 }
 ```
 
 `stopNamePrefix` ist leer (`""`), wenn in `config.php` kein `stop_name_prefix` gesetzt ist.
 Das Frontend entfernt diesen Präfix vor der Anzeige von Haltestellennamen.
+
+`editWindowMinutes` ist die Bearbeitungsfrist eigener Erfassungen (PUT/DELETE
+`/api/recordings/{id}`). Sie entspricht `mdtakt_grace_minutes`: Solange die
+Frist läuft, überträgt der Cron die Erfassung nicht an MD-Takt.
 
 ---
 
@@ -532,7 +537,9 @@ die effektive Linie an der Halteposition.
 ### PUT `/api/recordings/{id}`
 
 Eigene Erfassung nachträglich bearbeiten (Kursnummer und/oder Kommentar).
-Nur für Erfassungen der aktiven Periode. Erfordert Header `X-User-Token`.
+Nur für Erfassungen der aktiven Periode und innerhalb der Bearbeitungsfrist
+(`editWindowMinutes` aus `/api/config` = `mdtakt_grace_minutes`, gemessen ab
+`recorded_at`). Erfordert Header `X-User-Token`.
 
 **Request-Header:** `X-User-Token: <token>`
 
@@ -555,6 +562,7 @@ Nur für Erfassungen der aktiven Periode. Erfordert Header `X-User-Token`.
 - `401` – `X-User-Token`-Header fehlt oder ungültig
 - `403` – Erfassung gehört einem anderen User
 - `403` – Erfassung liegt in einer abgeschlossenen Periode
+- `403` – Bearbeitungszeit abgelaufen (älter als `mdtakt_grace_minutes`)
 - `404` – Erfassung nicht gefunden
 - `409` – Erfassung ist soft-gelöscht (erst Restore aufrufen)
 
@@ -585,6 +593,7 @@ Bei bereits soft-gelöschtem Datensatz idempotent:
 - `401` – `X-User-Token`-Header fehlt oder ungültig
 - `403` – Erfassung gehört einem anderen User
 - `403` – Erfassung liegt in einer abgeschlossenen Periode
+- `403` – Bearbeitungszeit abgelaufen (älter als `mdtakt_grace_minutes`)
 - `404` – Erfassung nicht gefunden
 
 ---

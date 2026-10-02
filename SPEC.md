@@ -364,8 +364,10 @@ Favorit hinzugefügt oder entfernt werden.
 - **Eigene Erfassungen** sind mit orangem „Ich"-Badge und blauem linken Rand
   hervorgehoben
 - **Kommentare** werden unter der Metazeile angezeigt
-- **Inline-Bearbeitung** eigener Erfassungen (nur aktive Periode,
-  max. 60 Minuten nach Erfassung):
+- **Inline-Bearbeitung** und Löschen eigener Erfassungen (nur aktive Periode,
+  nur innerhalb der Bearbeitungsfrist = MD-Takt-Übertragungsfrist
+  `mdtakt_grace_minutes`, Standard 30 Minuten; der Server prüft sie ebenfalls,
+  Wiederherstellen per Undo ist davon ausgenommen):
   - Kurs-Buttons `00`–`39`
   - Kommentarfeld (max. 500 Zeichen)
   - Speichern aktualisiert die Karte direkt ohne Reload

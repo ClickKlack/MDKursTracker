@@ -72,7 +72,8 @@ return [
     //        Nicht ins Frontend, nicht ins Log.
     // Karenzzeit: Erfassungen werden erst übertragen, wenn sie mindestens so
     //        viele Minuten alt sind – bis dahin lassen sie sich noch folgenlos
-    //        löschen. Löschungen werden nicht übertragen.
+    //        löschen. Löschungen werden nicht übertragen. Zugleich die
+    //        Bearbeitungsfrist im Verlauf (danach lehnt der Server PUT/DELETE ab).
     //
     // Cron-Eintrag (stündlich zu Minute 33):
     //   33 * * * * php /pfad/zum/tracker/cron/mdtakt_sync.php >/dev/null 2>&1

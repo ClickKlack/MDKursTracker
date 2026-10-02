@@ -61,6 +61,29 @@ class RecordingHelperTest extends TestCase
         $this->assertNull($r);
     }
 
+    // -----------------------------------------------------------------------
+    // recording_within_edit_window – Bearbeitungsfrist = MD-Takt-Übertragungsfrist
+    // -----------------------------------------------------------------------
+
+    public function test_edit_window_open_within_grace(): void
+    {
+        $this->assertTrue(recording_within_edit_window(0, 30));
+        $this->assertTrue(recording_within_edit_window(29 * 60 + 59, 30));
+    }
+
+    public function test_edit_window_closed_at_grace(): void
+    {
+        // Ab genau der Frist ist Schluss – der Cron (recorded_at < now - grace)
+        // überträgt eine Sekunde später; Bearbeiten und Übertragen überschneiden sich nie.
+        $this->assertFalse(recording_within_edit_window(30 * 60, 30));
+        $this->assertFalse(recording_within_edit_window(2 * 3600, 30));
+    }
+
+    public function test_edit_window_zero_grace_never_editable(): void
+    {
+        $this->assertFalse(recording_within_edit_window(0, 0));
+    }
+
     public function test_period_id_string_is_compared_numerically(): void
     {
         // PDO liefert period_id u.U. als String – muss trotzdem matchen.

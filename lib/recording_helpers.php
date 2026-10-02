@@ -9,6 +9,35 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/calendar.php';
 require_once __DIR__ . '/response.php';
+require_once __DIR__ . '/mdtakt.php';
+
+/**
+ * Bearbeitungsfrist für eigene Erfassungen in Minuten.
+ *
+ * Entspricht bewusst der Übertragungsfrist an MD-Takt (mdtakt_grace_minutes):
+ * Die Karenzzeit existiert, damit Fehlerfassungen noch folgenlos korrigiert
+ * oder gelöscht werden können. Danach überträgt cron/mdtakt_sync.php die
+ * Erfassung, und Löschungen werden nicht nachgereicht.
+ */
+function recording_edit_window_minutes(): int
+{
+    return mdtakt_config()['graceMinutes'];
+}
+
+/**
+ * Reine Logik-Funktion: Liegt eine Erfassung noch in der Bearbeitungsfrist?
+ *
+ * Gegenstück zur Bedingung in mdtakt_load_pending()
+ * (recorded_at < UTC_TIMESTAMP() - INTERVAL grace MINUTE): bearbeitbar ist,
+ * was der Cron noch nicht anfassen darf.
+ *
+ * @param int $ageSeconds     Alter der Erfassung (UTC_TIMESTAMP() - recorded_at)
+ * @param int $windowMinutes  Frist aus recording_edit_window_minutes()
+ */
+function recording_within_edit_window(int $ageSeconds, int $windowMinutes): bool
+{
+    return $ageSeconds < $windowMinutes * 60;
+}
 
 /**
  * Reine Logik-Funktion: prüft, ob eine Erfassung durch den Token-Inhaber
@@ -112,14 +141,20 @@ function parse_pagination_params(array $query, int $default = 50, int $max = 200
  * Lädt die Erfassungs-Stammdaten und ruft bei Verstoß json_error() auf.
  * Wird von PUT, DELETE und POST .../restore verwendet.
  *
+ * Mit $checkWindow (PUT, DELETE) gilt zusätzlich die Bearbeitungsfrist.
+ * RESTORE prüft sie nicht: Es macht ein Löschen rückgängig, und gelöschte
+ * Erfassungen hat der Cron nie übertragen.
+ *
  * Liefert die Row inkl. zusätzlich `deleted_at` zur weiteren Verwendung.
  *
- * @return array<string,mixed>  ['id', 'user_token', 'period_id', 'deleted_at']
+ * @return array<string,mixed>  ['id', 'user_token', 'period_id', 'deleted_at', 'age_seconds']
  */
-function assert_recording_modifiable(PDO $pdo, int $recordingId, ?string $token): array
+function assert_recording_modifiable(PDO $pdo, int $recordingId, ?string $token, bool $checkWindow = true): array
 {
+    // Alter per UTC_TIMESTAMP() – dieselbe Uhr wie in mdtakt_load_pending()
     $stmt = $pdo->prepare(
-        'SELECT r.id, r.user_token, r.deleted_at, t.period_id
+        'SELECT r.id, r.user_token, r.deleted_at, t.period_id,
+                TIMESTAMPDIFF(SECOND, r.recorded_at, UTC_TIMESTAMP()) AS age_seconds
            FROM ' . tbl('recordings') . ' r
            JOIN ' . tbl('trips') . ' t ON r.trip_id = t.id
           WHERE r.id = ?'
@@ -131,6 +166,15 @@ function assert_recording_modifiable(PDO $pdo, int $recordingId, ?string $token)
     $reason = recording_modifiable_reason($row ?: null, $token, $activePeriodId);
     if ($reason !== null) {
         json_error($reason['message'], $reason['status']);
+    }
+
+    $window = recording_edit_window_minutes();
+    if ($checkWindow && !recording_within_edit_window((int) $row['age_seconds'], $window)) {
+        $unit = $window === 1 ? 'Minute' : 'Minuten';
+        json_error(
+            "Bearbeitungszeit abgelaufen – Erfassungen lassen sich nur {$window} {$unit} lang ändern oder löschen",
+            403
+        );
     }
 
     return $row;
