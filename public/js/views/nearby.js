@@ -3,12 +3,16 @@
  *
  * Drei Reiter: Favoriten | GPS | Name
  * Letzter Reiter wird in localStorage gespeichert.
+ *
+ * Der Tram/Bus-Umschalter (utils/products.js) filtert GPS- und Namenssuche;
+ * Favoriten und zuletzt geöffnete Haltestellen bleiben ungefiltert.
  */
 
 import { getNearby, getNearbyByName, getUserFavorites, postUserFavorite, deleteUserFavorite }
     from '../api.js';
 import { getCurrentPosition } from '../utils/geolocation.js';
 import { escapeHtml, stripStopPrefix } from '../app.js';
+import { productToggleHtml, attachProductToggle, productsLabel } from '../utils/products.js';
 
 let favoriteIds = new Set();
 let favorites   = [];
@@ -92,6 +96,11 @@ function buildShell() {
             </button>
         </div>
 
+        <div class="nearby-products" id="nearby-products" ${isFav ? 'hidden' : ''}>
+            <span class="text-small text-muted">Verkehrsmittel</span>
+            ${productToggleHtml()}
+        </div>
+
         <div id="name-search-form" ${isName ? '' : 'hidden'}>
             <div class="name-search-row">
                 <input type="search"
@@ -116,6 +125,16 @@ function buildShell() {
 // --- Tab-Listener -----------------------------------------------------------
 
 function attachTabListeners(container, params, context) {
+    // Verkehrsmittel geändert → aktive Suche mit neuer Auswahl wiederholen
+    attachProductToggle(container, async () => {
+        if (searchMode === 'gps') {
+            await runGpsSearch(container, params, context);
+        } else if (searchMode === 'name'
+                   && container.querySelector('#stop-name-input')?.value.trim()) {
+            await runNameSearch(container);
+        }
+    });
+
     container.querySelector('#toggle-favorites')?.addEventListener('click', () => {
         setMode('favorites', container);
         container.querySelector('#name-search-form').hidden = true;
@@ -194,6 +213,9 @@ function setMode(mode, container) {
 }
 
 function updateTabHighlight(container) {
+    const productsEl = container.querySelector('#nearby-products');
+    if (productsEl) productsEl.hidden = searchMode === 'favorites';
+
     ['favorites', 'gps', 'name'].forEach(m => {
         const btn = container.querySelector(`#toggle-${m}`);
         if (!btn) return;
@@ -273,6 +295,7 @@ async function handleFavClick(e, container) {
 // --- GPS-Suche --------------------------------------------------------------
 
 async function runGpsSearch(container, params, context) {
+    const myToken   = ++searchToken;  // ältere GPS-/Namensantworten verwerfen
     const contentEl = container.querySelector('#nearby-content');
     showLoading(contentEl, 'GPS-Position wird ermittelt…',
         'Bitte die Standortabfrage im Browser bestätigen.');
@@ -281,6 +304,7 @@ async function runGpsSearch(container, params, context) {
     try {
         position = await getCurrentPosition();
     } catch (gpsErr) {
+        if (myToken !== searchToken) return;
         renderError(contentEl, gpsErr.message, () => runGpsSearch(container, params, context));
         return;
     }
@@ -292,16 +316,19 @@ async function runGpsSearch(container, params, context) {
     try {
         stops = await getNearby(lat, lon, 10);
     } catch (apiErr) {
+        if (myToken !== searchToken) return;
         renderError(contentEl, `Haltestellen konnten nicht geladen werden: ${apiErr.message}`,
             () => runGpsSearch(container, params, context));
         return;
     }
 
+    if (myToken !== searchToken) return;  // zwischenzeitlich neue Suche gestartet
+
     if (!stops?.length) {
         contentEl.innerHTML = `
             <div class="empty-state">
-                <p>Keine Tramhaltestellen in der Nähe gefunden.</p>
-                <p class="text-muted">Bitte auf dem Magdeburger Straßenbahnnetz befinden.</p>
+                <p>Keine Haltestellen (${escapeHtml(productsLabel())}) in der Nähe gefunden.</p>
+                <p class="text-muted">Bitte im Magdeburger Netz befinden oder weitere Verkehrsmittel wählen.</p>
             </div>`;
         return;
     }
@@ -345,7 +372,7 @@ async function runNameSearch(container) {
     if (!stops?.length) {
         contentEl.innerHTML = `
             <div class="empty-state">
-                <p>Keine Tramhaltestellen für „${escapeHtml(query)}" gefunden.</p>
+                <p>Keine Haltestellen (${escapeHtml(productsLabel())}) für „${escapeHtml(query)}" gefunden.</p>
                 <p class="text-muted">Tipp: Nur den kurzen Haltestellennamen eingeben, z.B. „Hauptbahnhof".</p>
             </div>`;
         return;

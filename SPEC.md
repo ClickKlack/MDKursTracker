@@ -9,7 +9,7 @@
 ## 1. Projektziel
 
 Eine Progressive Web App (PWA) zur kollektiven Erfassung von Kursnummern für
-Straßenbahnfahrten im Verkehrsverbund **marego** (Magdeburg / MVB).
+Straßenbahn- und Busfahrten im Verkehrsverbund **marego** (Magdeburg / MVB).
 
 Mehrere Nutzer können gleichzeitig Kursnummern erfassen. Alle Einträge landen
 in einer gemeinsamen zentralen Datenbank. Der Betreiber wertet zentral aus,
@@ -286,7 +286,8 @@ in `localStorage` gespeichert wird:
 **GPS-Reiter:**
 - Standort via Browser Geolocation API
 - PHP-Proxy → INSA HAFAS Nearby-Abfrage
-- Anzeige als Liste sortiert nach Entfernung, gefiltert auf Trams
+- Anzeige als Liste sortiert nach Entfernung, gefiltert auf die gewählten
+  Verkehrsmittel (siehe unten)
 
 **Name-Reiter:**
 - Freitexteingabe → `GET /api/nearby?name=…` → HAFAS LocMatch
@@ -308,9 +309,22 @@ in `localStorage` gespeichert wird:
 Bei GPS- und Name-Ergebnissen kann jede Haltestelle per ⭐-Button als
 Favorit hinzugefügt oder entfernt werden.
 
+**Verkehrsmittel (Tram/Bus):**
+- Umschalter mit Symbolen in der Haltestellensuche (GPS/Name) und in der
+  Kopfzeile der Abfahrtstafel; beide zeigen dieselbe Einstellung
+- Standard: nur Straßenbahn. Bus zusätzlich wählbar, beide gleichzeitig
+  möglich; mindestens eines bleibt immer aktiv (der letzte aktive Button
+  lässt sich nicht abwählen)
+- Gespeichert in `localStorage` (`transport_products`, JSON-Array)
+- Wirkt serverseitig über den Parameter `products` (HAFAS-Produktklasse:
+  Tram = 32, Bus = 64; SEV-Busse = 8 sind nicht wählbar)
+- Favoriten und zuletzt geöffnete Haltestellen bleiben ungefiltert
+
 ### 7.2 Abfahrten an einer Haltestelle
 
-- Nächste ~20 Straßenbahn-Abfahrten nach Haltestellenauswahl
+- Nächste ~20 Abfahrten der gewählten Verkehrsmittel nach Haltestellenauswahl;
+  Umschalten Tram/Bus lädt die Tafel neu. Buslinien erscheinen mit einheitlichem
+  Bus-Liniensymbol (Pillenform) statt Linienfarbe
 - **Sortierung:** standardmäßig nach der **Ist-Zeit** (Echtzeit, Fallback Soll).
   Über den Toggle `Ist | Soll` in der Kopfzeile clientseitig auf die **Soll-Zeit**
   umschaltbar – stark verspätete Fahrten bleiben dann an ihrer Fahrplanposition
@@ -562,8 +576,8 @@ Siehe `API.md` für vollständige Request/Response-Dokumentation.
 | Methode | Pfad | Funktion |
 |---|---|---|
 | `GET` | `/api/config` | Frontend-Konfiguration |
-| `GET` | `/api/nearby?lat&lon` | Nahegelegene Tramhaltestellen (GPS) |
-| `GET` | `/api/nearby?name` | Tramhaltestellen per Namenssuche |
+| `GET` | `/api/nearby?lat&lon[&products]` | Nahegelegene Haltestellen (GPS), gefiltert auf Tram/Bus |
+| `GET` | `/api/nearby?name[&products]` | Haltestellen per Namenssuche, gefiltert auf Tram/Bus |
 | `GET` | `/api/departures` | Abfahrten an einer Haltestelle |
 | `GET` | `/api/trip` | Vollständiger Laufweg eines Kurses |
 | `GET` | `/api/calendar` | Wochentagstyp für ein Datum |

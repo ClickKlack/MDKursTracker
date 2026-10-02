@@ -11,11 +11,16 @@
  * Sortierung: Das Backend liefert nach Ist-Zeit sortiert. Der Toggle in der
  * Kopfzeile kann clientseitig auf Soll-Zeit umstellen – bei starken
  * Verspätungen bleibt eine Fahrt dann an ihrer Fahrplanposition stehen.
+ *
+ * Verkehrsmittel: Der Tram/Bus-Umschalter (utils/products.js) gilt gemeinsam
+ * mit der Haltestellensuche. Eine Änderung lädt die Tafel neu, da das Backend
+ * nach Verkehrsmittel filtert.
  */
 
 import { getDepartures, postRecording }           from '../api.js';
 import { formatTime, calcDelay, getServiceDate }  from '../utils/format.js';
 import { lineBadgeHtml }                          from '../utils/lines.js';
+import { productToggleHtml, attachProductToggle, getProducts } from '../utils/products.js';
 import { escapeHtml, stripStopPrefix, showActionSnackbar } from '../app.js';
 
 /** Laufender Auto-Refresh-Timer */
@@ -38,6 +43,10 @@ if (!['actual', 'planned'].includes(sortMode)) sortMode = 'actual';
 
 /** Zeitpunkt der letzten erfolgreichen Abfrage (für "Stand:" beim Umsortieren) */
 let lastUpdatedAt = null;
+
+/** Monoton steigender Token; Antworten älterer Ladevorgänge werden verworfen
+ *  (z. B. Auto-Refresh mit alter Verkehrsmittel-Auswahl) */
+let loadToken = 0;
 
 export async function render(container, params, context) {
     currentStopId    = params.get('stopId');
@@ -84,6 +93,7 @@ export function destroy() {
     currentContainer = null;
     storedDepartures = [];
     lastUpdatedAt    = null;
+    loadToken++;
     // sortMode bleibt erhalten – es ist eine Benutzereinstellung
 }
 
@@ -98,14 +108,15 @@ async function loadAndRender(container, quiet) {
             </div>`;
     }
 
+    const myToken = ++loadToken;
     let departures;
     try {
         departures = await getDepartures(currentStopId, 20);
     } catch (err) {
         // Bei Quiet-Refresh: Fehlermeldung unterhalb der bestehenden Liste einfügen
         if (quiet) return;
-        // Guard: View wurde während des API-Calls zerstört
-        if (!currentStopId) return;
+        // Guard: View zerstört oder zwischenzeitlich neuer Ladevorgang
+        if (!currentStopId || myToken !== loadToken) return;
         container.innerHTML = `
             <div class="error-box" role="alert">
                 Abfahrten konnten nicht geladen werden: ${escapeHtml(err.message)}
@@ -121,20 +132,23 @@ async function loadAndRender(container, quiet) {
     }
 
     // Guard: View wurde während des API-Calls zerstört (destroy() setzt currentStopId = null)
-    if (!currentStopId) return;
+    // oder ein neuerer Ladevorgang (z. B. nach Umschalten Tram/Bus) läuft bereits
+    if (!currentStopId || myToken !== loadToken) return;
 
     storedDepartures = departures ?? [];
     lastUpdatedAt    = new Date();
 
-    if (storedDepartures.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <p>Keine Abfahrten in den nächsten Minuten.</p>
-            </div>`;
-        return;
-    }
-
     renderBoard(container);
+}
+
+/**
+ * Leertext passend zur Verkehrsmittel-Auswahl.
+ */
+function emptyText() {
+    const p = getProducts();
+    if (p.length === 1 && p[0] === 'bus')  return 'Keine Busabfahrten in den nächsten Minuten.';
+    if (p.length === 1 && p[0] === 'tram') return 'Keine Straßenbahnabfahrten in den nächsten Minuten.';
+    return 'Keine Abfahrten in den nächsten Minuten.';
 }
 
 /**
@@ -152,12 +166,21 @@ function renderBoard(container) {
     const byActual = sortMode === 'actual';
     const stand    = lastUpdatedAt ?? new Date();
 
+    // Kopfzeile auch bei leerer Liste rendern – sonst wäre der Tram/Bus-
+    // Umschalter weg und eine reine Bus-Auswahl ließe sich nicht zurücknehmen.
+    const listHtml = storedDepartures.length === 0
+        ? `<div class="empty-state"><p>${emptyText()}</p></div>`
+        : `<ul class="card-list departures-list" role="list" aria-label="Abfahrten">
+               ${storedDepartures.map((dep, idx) => renderDepartureItem(dep, idx)).join('')}
+           </ul>`;
+
     container.innerHTML = `
         <div class="departures-header">
             <span class="text-small text-muted" aria-live="polite">
                 Stand: ${formatTime(stand.toISOString())} Uhr
             </span>
             <div class="departures-actions">
+                ${productToggleHtml()}
                 <div class="sort-toggle" role="group" aria-label="Sortierung der Abfahrten">
                     <button type="button" class="btn-toggle ${byActual ? 'active' : ''}"
                             id="toggle-sort-actual" aria-pressed="${byActual}"
@@ -179,9 +202,10 @@ function renderBoard(container) {
                 </button>
             </div>
         </div>
-        <ul class="card-list departures-list" role="list" aria-label="Abfahrten">
-            ${storedDepartures.map((dep, idx) => renderDepartureItem(dep, idx)).join('')}
-        </ul>`;
+        ${listHtml}`;
+
+    // Verkehrsmittel-Umschalter → Tafel mit neuer Auswahl laden
+    attachProductToggle(container, () => loadAndRender(container, false));
 
     // Sortier-Toggle
     container.querySelector('#toggle-sort-actual')
@@ -194,10 +218,9 @@ function renderBoard(container) {
         .addEventListener('click', () => loadAndRender(container, false));
 
     // Tap/Klick auf Abfahrt → Kursnummer erfassen (Phase 7)
-    container.querySelector('.departures-list')
-        .addEventListener('click',   handleDepartureSelect);
-    container.querySelector('.departures-list')
-        .addEventListener('keydown', handleDepartureKeydown);
+    const listEl = container.querySelector('.departures-list');
+    listEl?.addEventListener('click',   handleDepartureSelect);
+    listEl?.addEventListener('keydown', handleDepartureKeydown);
 }
 
 // --- Sortierung -------------------------------------------------------------
@@ -326,7 +349,7 @@ function renderDepartureItem(dep, idx) {
     const courseHtml = confirmSlot + badgeHtml;
 
     const ariaLabel = [
-        `Linie ${dep.line}`,
+        dep.product === 'bus' ? `Bus ${dep.line}` : `Linie ${dep.line}`,
         `nach ${dep.direction}`,
         dep.cancelled ? 'Fahrt ausgefallen' : `ab ${planned}`,
         !dep.cancelled && dep.additionalStop && 'Zusatzhalt wegen Umleitung',
@@ -376,7 +399,7 @@ function renderDepartureItem(dep, idx) {
             aria-label="${escapeHtml(ariaLabel)}"
             ${dep.cancelled ? 'aria-disabled="true"' : ''}>
             <span class="departure-line">
-                ${lineBadgeHtml(dep.line)}
+                ${lineBadgeHtml(dep.line, dep.product)}
             </span>
             <span class="departure-info">
                 <span class="departure-direction">${escapeHtml(dep.direction)}</span>
@@ -421,6 +444,7 @@ function handleDepartureSelect(e) {
         hafasTripId:           dep.hafasTripId,
         serviceNr:             dep.serviceNr,
         line:                  dep.line,
+        product:               dep.product ?? 'tram',
         direction:             dep.direction,
         // Lang-ID des konkreten Bahnsteigs (Heuristik-Lookup gegen route_stops)
         stopId:                dep.stopId ?? currentStopId,

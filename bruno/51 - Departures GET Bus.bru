@@ -1,0 +1,46 @@
+meta {
+  name: Departures GET Bus – nur Busabfahrten
+  type: http
+  seq: 52
+}
+
+get {
+  url: {{baseUrl}}/api/departures?stopId=7300&results=10&maxMinutes=120&products=bus
+  body: none
+  auth: none
+}
+
+params:query {
+  stopId: 7300
+  results: 10
+  maxMinutes: 120
+  products: bus
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+tests {
+  test("alle Abfahrten sind Busse", function () {
+    for (const d of res.body) {
+      expect(d.product).to.equal("bus");
+    }
+  });
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const lines = [...new Set(res.body.map(d => d.line))];
+    console.log("Busabfahrten:", res.body.length, "| Linien:", lines.join(", "));
+  }
+}
+
+docs {
+  Filter products=bus: nur HAFAS-Produktklasse 64 (Bus). Haltestelle 7300
+  (Wilhelm-Külz-Str.) wird nur von Bussen bedient (Linie 52).
+  Nachts kann die Liste leer sein – der Test prüft dann nur das Format.
+
+  products ist kommagetrennt (tram, bus); ohne Parameter gilt tram.
+}

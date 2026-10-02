@@ -1,8 +1,10 @@
 <?php
-// GET /api/departures – Nächste Tramabfahrten an einer Haltestelle,
+// GET /api/departures – Nächste Abfahrten (Tram und/oder Bus) an einer Haltestelle,
 // angereichert mit activeCourseNumber + courseSource aus der eigenen DB
 // und der Kursauskunft von MD-Takt.
-// Parameter: stopId (string, Pflicht), results (int, optional, Standard 20)
+// Parameter: stopId (string, Pflicht), results (int, optional, Standard 20),
+//            maxMinutes (int, optional, Standard 59),
+//            products (string, optional, Standard "tram") – kommagetrennt: tram, bus
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/lib/response.php';
@@ -21,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $stopId     = trim($_GET['stopId'] ?? '');
 $results    = max(1, min(100, (int) ($_GET['results'] ?? 20)));
 $maxMinutes = max(1, min(120, (int) ($_GET['maxMinutes'] ?? 59)));
+$mask       = hafas_product_mask(hafas_parse_products($_GET['products'] ?? null));
 
 if ($stopId === '') {
     json_error('Parameter stopId ist erforderlich');
@@ -28,7 +31,7 @@ if ($stopId === '') {
 
 // HAFAS-Abfahrten laden (nur Abfahrten innerhalb des Zeitfensters)
 try {
-    $departures = hafas_departures($stopId, $results, $maxMinutes);
+    $departures = hafas_departures($stopId, $results, $maxMinutes, $mask);
 } catch (RuntimeException $e) {
     get_logger()->error('departures: HAFAS-Fehler', ['stopId' => $stopId, 'exception' => $e->getMessage()]);
     json_error('HAFAS nicht verfügbar: ' . $e->getMessage(), 500);

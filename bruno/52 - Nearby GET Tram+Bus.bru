@@ -1,0 +1,38 @@
+meta {
+  name: Nearby GET Tram+Bus – Haltestellen beider Verkehrsmittel
+  type: http
+  seq: 53
+}
+
+get {
+  url: {{baseUrl}}/api/nearby?lat={{lat}}&lon={{lon}}&results=20&products=tram,bus
+  body: none
+  auth: none
+}
+
+params:query {
+  lat: {{lat}}
+  lon: {{lon}}
+  results: 20
+  products: tram,bus
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+  res.body[0].id: isDefined
+  res.body[0].name: isDefined
+  res.body[0].distance: isDefined
+}
+
+script:post-response {
+  if (res.status === 200) {
+    console.log("Haltestellen (Tram+Bus):", res.body.map(s => s.name).join(" | "));
+  }
+}
+
+docs {
+  products=tram,bus liefert alle Haltestellen, an denen Straßenbahn
+  (pCls 32) oder Bus (pCls 64) hält – also auch reine Bushaltestellen,
+  die mit dem Standard (nur tram) fehlen.
+}

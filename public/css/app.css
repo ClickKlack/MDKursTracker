@@ -20,6 +20,7 @@
     --color-known-course:  #1b5e20;
     --color-mdtakt-bg:     #c8e6c9;  /* Kurs aus MD-Takt: hellgrün, abgesetzt vom manuellen Vollgrün */
     --color-mdtakt-text:   #1b5e20;
+    --color-bus:           #4b5563;  /* Liniensymbol Bus (einheitlich, keine Linienfarben) */
 
     --header-height:   56px;
     --nav-height:      60px;
@@ -389,6 +390,15 @@ body {
     line-height: 1;
 }
 
+/* Buslinien: einheitlicher Stil statt Linienfarbe, Pillenform zur
+   Unterscheidung von den eckigen Tram-Badges */
+.line-badge--bus {
+    background: var(--color-bus);
+    border-color: var(--color-bus);
+    color: #fff;
+    border-radius: 999px;
+}
+
 /* --- Buttons -------------------------------------------------------------- */
 .btn {
     display: inline-flex;
@@ -648,14 +658,66 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     margin-bottom: 12px;
 }
 
-/* Rechte Gruppe der Kopfzeile: Sortier-Toggle + Refresh */
+/* Rechte Gruppe der Kopfzeile: Tram/Bus, Sortier-Toggle + Refresh.
+   Bricht auf schmalen Displays um, statt die Kopfzeile zu sprengen. */
 .departures-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
     gap: 8px;
+}
+
+/* Verkehrsmittel-Umschalter Tram/Bus (utils/products.js) – Mehrfachauswahl,
+   Buttons nur mit Symbol; kompakt wie .sort-toggle */
+.product-toggle {
+    display: flex;
+    gap: 4px;
+}
+
+.product-toggle .btn-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border-width: 1px;
+    border-radius: 14px;
+}
+
+.product-toggle .btn-toggle svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Hinweis beim Versuch, das letzte aktive Verkehrsmittel abzuwählen */
+@media (prefers-reduced-motion: no-preference) {
+    .product-toggle .btn-toggle.shake {
+        animation: toggle-shake 0.3s ease-in-out;
+    }
+}
+
+@keyframes toggle-shake {
+    0%, 100% { transform: translateX(0);    }
+    25%      { transform: translateX(-3px); }
+    75%      { transform: translateX(3px);  }
+}
+
+/* Haltestellensuche: Zeile mit dem Verkehrsmittel-Umschalter */
+.nearby-products {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.nearby-products[hidden] {
+    display: none;
 }
 
 /* Sortier-Umschalter Ist/Soll – kompakte Variante der .btn-toggle-Pills

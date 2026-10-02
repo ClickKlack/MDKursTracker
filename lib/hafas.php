@@ -5,8 +5,13 @@
 
 require_once __DIR__ . '/hafas_cache.php';
 
-// INSA HAFAS: Straßenbahn-Bitmask – gilt für cls (Produktliste) und pCls (Haltestellen)
+// INSA HAFAS: Produkt-Bitmasken – gelten für cls (Produktliste) und pCls (Haltestellen).
+// SEV-Busse laufen bei INSA unter cls=8 (wie Regionalzüge) und bleiben außen vor.
 const HAFAS_TRAM_MASK = 32;
+const HAFAS_BUS_MASK  = 64;
+
+// Wählbare Verkehrsmittel (Parameter "products" der Endpunkte) → HAFAS-Bitmaske
+const HAFAS_PRODUCTS = ['tram' => HAFAS_TRAM_MASK, 'bus' => HAFAS_BUS_MASK];
 
 /**
  * Gibt die HAFAS-Konfiguration aus config.php zurück (gecacht pro Request).
@@ -24,17 +29,62 @@ function hafas_config(): array
 }
 
 /**
- * Haltestellen in der Nähe eines GPS-Punkts, gefiltert auf Straßenbahn.
+ * Liest den Parameter "products" (kommagetrennt, z.B. "tram,bus") ein.
+ * Unbekannte Werte werden verworfen; ohne gültigen Wert gilt ['tram'].
+ *
+ * @return list<string> Eindeutig, in der Reihenfolge von HAFAS_PRODUCTS
+ */
+function hafas_parse_products(?string $csv): array
+{
+    $wanted = array_map('trim', explode(',', strtolower((string) $csv)));
+    $result = array_values(array_filter(
+        array_keys(HAFAS_PRODUCTS),
+        fn($p) => in_array($p, $wanted, true)
+    ));
+    return $result !== [] ? $result : ['tram'];
+}
+
+/**
+ * Bitmaske zu einer Produktliste aus hafas_parse_products().
+ */
+function hafas_product_mask(array $products): int
+{
+    $mask = 0;
+    foreach ($products as $p) {
+        $mask |= HAFAS_PRODUCTS[$p] ?? 0;
+    }
+    return $mask !== 0 ? $mask : HAFAS_TRAM_MASK;
+}
+
+/**
+ * Verkehrsmittel eines HAFAS-Produkts anhand seiner cls-Bitmaske.
+ */
+function hafas_product_from_cls(int $cls): string
+{
+    return ($cls & HAFAS_BUS_MASK) ? 'bus' : 'tram';
+}
+
+/**
+ * Verkehrsmittel einer Fahrt anhand des ZB#-Felds der jid ("#ZB#Bus   56#").
+ * Ohne ZB#-Feld (altes jid-Format) gilt Straßenbahn.
+ */
+function hafas_product_from_jid(string $jid): string
+{
+    return preg_match('/#ZB#\s*Bus\b/i', $jid) ? 'bus' : 'tram';
+}
+
+/**
+ * Haltestellen in der Nähe eines GPS-Punkts, gefiltert auf die Verkehrsmittel in $mask.
  *
  * @return array<array{id: string, name: string, distance: int}>
  */
-function hafas_nearby(float $lat, float $lon, int $results = 10): array
+function hafas_nearby(float $lat, float $lon, int $results = 10, int $mask = HAFAS_TRAM_MASK): array
 {
     // Cache-Schlüssel: Koordinaten auf 3 Dezimalstellen gerundet (≈ 111 m Raster).
-    // Innerhalb dieses Rasters sind die nächsten Tramhaltestellen identisch.
-    $cacheKey = hafas_cache_key('nearby', round($lat, 3), round($lon, 3), $results);
+    // Innerhalb dieses Rasters sind die nächsten Haltestellen identisch.
+    $cacheKey = hafas_cache_key('nearby', round($lat, 3), round($lon, 3), $results, $mask);
     $cached   = hafas_cache_get($cacheKey);
-    $logParams = ['lat' => round($lat, 3), 'lon' => round($lon, 3), 'results' => $results];
+    $logParams = ['lat' => round($lat, 3), 'lon' => round($lon, 3), 'results' => $results, 'mask' => $mask];
     if ($cached !== null) {
         hafas_log_write([['meth' => 'LocGeoPos']], 200, 0, [], true, $logParams);
         return $cached;
@@ -60,8 +110,8 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
 
     $result = [];
     foreach ($stops as $stop) {
-        // Nur Haltestellen mit Tram-Betrieb: Bit 5 (32) im pCls-Feld
-        if (!(($stop['pCls'] ?? 0) & HAFAS_TRAM_MASK)) {
+        // Nur Haltestellen, an denen eines der gewählten Verkehrsmittel hält (pCls)
+        if (!(($stop['pCls'] ?? 0) & $mask)) {
             continue;
         }
 
@@ -88,18 +138,19 @@ function hafas_nearby(float $lat, float $lon, int $results = 10): array
 }
 
 /**
- * Haltestellen per Name suchen, gefiltert auf Straßenbahn.
+ * Haltestellen per Name suchen, gefiltert auf die Verkehrsmittel in $mask.
  * Nutzt HAFAS LocMatch (Freitextsuche).
  *
  * @param  string $name    Suchbegriff (ggf. bereits mit Stadt-Präfix)
  * @param  int    $results Maximale Trefferanzahl
+ * @param  int    $mask    Produkt-Bitmaske (HAFAS_PRODUCTS)
  * @return array<array{id: string, name: string}>
  */
-function hafas_find_stops(string $name, int $results = 10): array
+function hafas_find_stops(string $name, int $results = 10, int $mask = HAFAS_TRAM_MASK): array
 {
-    $cacheKey  = hafas_cache_key('stopfinder', $name, $results);
+    $cacheKey  = hafas_cache_key('stopfinder', $name, $results, $mask);
     $cached    = hafas_cache_get($cacheKey);
-    $logParams = ['name' => $name, 'results' => $results];
+    $logParams = ['name' => $name, 'results' => $results, 'mask' => $mask];
     if ($cached !== null) {
         hafas_log_write([['meth' => 'LocMatch']], 200, 0, [], true, $logParams);
         return $cached;
@@ -115,14 +166,14 @@ function hafas_find_stops(string $name, int $results = 10): array
                         'name' => $name,
                         'type' => 'S',
                     ],
-                    'maxLoc' => $results * 3, // mehr anfordern, da wir auf Trams filtern
+                    'maxLoc' => $results * 3, // mehr anfordern, da wir nach Verkehrsmittel filtern
                 ],
             ],
         ],
     ], $logParams);
 
     $stops  = $res[0]['res']['match']['locL'] ?? [];
-    $result = hafas_parse_stop_matches($stops, $results);
+    $result = hafas_parse_stop_matches($stops, $results, $mask);
 
     hafas_cache_set($cacheKey, $result, HAFAS_CACHE_TTL_STOPFINDER);
 
@@ -131,18 +182,18 @@ function hafas_find_stops(string $name, int $results = 10): array
 
 /**
  * Filtert und mappt eine rohe HAFAS-locL-Liste auf [{id, name}].
- * Nur Einträge mit gesetztem Tram-Bit (HAFAS_TRAM_MASK) in pCls werden übernommen.
+ * Nur Einträge, deren pCls ein Bit aus $mask enthält, werden übernommen.
  *
  * @internal Ausgelagert für Unit-Tests ohne echten HAFAS-API-Call.
  * @param  array<array{extId: string, name: string, pCls?: int}> $locL
  * @return array<array{id: string, name: string}>
  */
-function hafas_parse_stop_matches(array $locL, int $results): array
+function hafas_parse_stop_matches(array $locL, int $results, int $mask = HAFAS_TRAM_MASK): array
 {
     $result = [];
     foreach ($locL as $stop) {
-        // Nur Haltestellen mit Tram-Betrieb: Bit 5 (32) im pCls-Feld
-        if (!(($stop['pCls'] ?? 0) & HAFAS_TRAM_MASK)) {
+        // Nur Haltestellen, an denen eines der gewählten Verkehrsmittel hält (pCls)
+        if (!(($stop['pCls'] ?? 0) & $mask)) {
             continue;
         }
         $result[] = [
@@ -157,15 +208,16 @@ function hafas_parse_stop_matches(array $locL, int $results): array
 }
 
 /**
- * Nächste Straßenbahn-Abfahrten an einer Haltestelle.
+ * Nächste Abfahrten der gewählten Verkehrsmittel an einer Haltestelle.
  *
  * @param  int $maxMinutes Zeitfenster in Minuten (Standard 59); 0 = kein Limit
+ * @param  int $mask       Produkt-Bitmaske (HAFAS_PRODUCTS)
  * @return array<array{
- *   hafasTripId: string, serviceNr: string, line: string,
+ *   hafasTripId: string, serviceNr: string, line: string, product: string,
  *   direction: string, departurePlanned: string, departureActual: string|null
  * }>
  */
-function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 59): array
+function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 59, int $mask = HAFAS_TRAM_MASK): array
 {
     // Rückblick-Fenster aus Config (Abfahrten die bereits vom System als abgefahren gelten,
     // aber noch sichtbar an der Haltestelle sein können)
@@ -174,9 +226,9 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
 
     // Kurzer Cache (30 s): Echtzeit-Verspätungen sollen zügig aktualisiert werden,
     // aber identische Anfragen im selben Intervall treffen HAFAS nur einmal.
-    $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes, $lookback);
+    $cacheKey = hafas_cache_key('departures', $stopId, $results, $maxMinutes, $lookback, $mask);
     $cached   = hafas_cache_get($cacheKey);
-    $logParams = ['stopId' => $stopId, 'results' => $results, 'maxMinutes' => $maxMinutes];
+    $logParams = ['stopId' => $stopId, 'results' => $results, 'maxMinutes' => $maxMinutes, 'mask' => $mask];
     if ($cached !== null) {
         hafas_log_write([['meth' => 'StationBoard']], 200, 0, [], true, $logParams);
         return $cached;
@@ -186,7 +238,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
     $now   = new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin'));
     $start = $lookback > 0 ? $now->modify("-{$lookback} minutes") : $now;
 
-    // Mehr Fahrten anfordern als benötigt, da wir in PHP auf Trams filtern.
+    // Mehr Fahrten anfordern als benötigt, da wir in PHP nach Verkehrsmittel filtern.
     // dur = Gesamtfenster in Minuten ab Startzeit (Rückblick + Vorausschau).
     $req = [
         'type'   => 'DEP',
@@ -231,8 +283,8 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
             continue;
         }
 
-        // Nur Straßenbahnen: cls-Bitmask (32 = Tram in INSA HAFAS)
-        if (!(($prod['cls'] ?? 0) & HAFAS_TRAM_MASK)) {
+        // Nur die gewählten Verkehrsmittel: cls-Bitmaske (32 = Tram, 64 = Bus)
+        if (!(($prod['cls'] ?? 0) & $mask)) {
             continue;
         }
 
@@ -306,6 +358,7 @@ function hafas_departures(string $stopId, int $results = 20, int $maxMinutes = 5
                 'hafasTripId'      => $jny['jid'],
                 'serviceNr'        => hafas_service_nr($prod, $jny['jid']),
                 'line'             => $lineName,
+                'product'          => hafas_product_from_cls((int) ($prod['cls'] ?? 0)),
                 'originalLine'     => $originalLine,
                 'direction'        => $dirTxt,
                 'cancelled'        => $cancelled,

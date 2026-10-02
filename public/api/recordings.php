@@ -170,6 +170,7 @@ function handle_get_recordings(): never
                  )
                  ELSE t.direction
              END AS direction,
+             t.product,
              t.service_nr,
              t.day_type,
              r.service_date,
@@ -234,6 +235,7 @@ function handle_get_recordings(): never
             'id'                 => (int) $row['id'],
             'recordedAt'         => mysql_to_iso($row['recorded_at']),
             'line'               => $row['line'],
+            'product'            => $row['product'],
             'direction'          => $direction,
             'serviceNr'          => $row['service_nr'],
             'dayType'            => $row['day_type'],
@@ -350,6 +352,9 @@ function handle_post_recording(): never
     $serviceDate = DateTimeImmutable::createFromFormat('Y-m-d', $body['serviceDate']);
     $dayType = getDayType($serviceDate, $pdo);
 
+    // Verkehrsmittel serverseitig aus der jid (ZB#-Feld), nicht vom Client
+    $product = hafas_product_from_jid($body['hafasTripId']);
+
     // Fingerprints berechnen
     $fp = compute_fingerprints($tripStops);
 
@@ -405,11 +410,11 @@ function handle_post_recording(): never
             // Neuen Trip mit Fingerprints anlegen
             $pdo->prepare(
                 'INSERT INTO ' . tbl('trips') . '
-                     (period_id, service_nr, line, day_type, direction,
+                     (period_id, service_nr, line, product, day_type, direction,
                       path_fingerprint, schedule_fingerprint, last_hafas_trip_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
-                $periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction'],
+                $periodId, $body['serviceNr'], $body['line'], $product, $dayType, $body['direction'],
                 $fp['path'], $fp['schedule'], $body['hafasTripId'],
             ]);
             $tripId = (int) $pdo->lastInsertId();
@@ -418,9 +423,9 @@ function handle_post_recording(): never
         // Kein schedule_fingerprint (z.B. alle Zeiten fehlen) → service_nr-Fallback
         $pdo->prepare(
             'INSERT IGNORE INTO ' . tbl('trips') . '
-                 (period_id, service_nr, line, day_type, direction, last_hafas_trip_id)
-             VALUES (?, ?, ?, ?, ?, ?)'
-        )->execute([$periodId, $body['serviceNr'], $body['line'], $dayType, $body['direction'],
+                 (period_id, service_nr, line, product, day_type, direction, last_hafas_trip_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$periodId, $body['serviceNr'], $body['line'], $product, $dayType, $body['direction'],
                     $body['hafasTripId']]);
         $fbStmt = $pdo->prepare(
             'SELECT id FROM ' . tbl('trips') . '

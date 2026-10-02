@@ -79,8 +79,13 @@ die nächst-jüngere nach. `maintenance` ist gesetzt, solange eine Wartung läuf
 
 ### GET `/api/nearby`
 
-Haltestellen in der Nähe eines GPS-Punkts **oder** per Namenssuche, gefiltert auf Straßenbahnen.
+Haltestellen in der Nähe eines GPS-Punkts **oder** per Namenssuche, gefiltert auf die
+gewählten Verkehrsmittel (`products`, Standard Straßenbahn).
 Genau einer der beiden Modi muss angegeben werden.
+
+Gefiltert wird über die HAFAS-Produktklasse `pCls` der Haltestelle: Tram = 32, Bus = 64.
+Eine Haltestelle erscheint, sobald eines der gewählten Verkehrsmittel dort hält.
+SEV-Busse führt INSA unter Klasse 8 (Regionalverkehr); sie sind nicht wählbar.
 
 **Parameter – GPS-Modus:**
 
@@ -89,6 +94,7 @@ Genau einer der beiden Modi muss angegeben werden.
 | `lat` | float | ja (GPS) | Breitengrad |
 | `lon` | float | ja (GPS) | Längengrad |
 | `results` | int | nein | Max. Anzahl Ergebnisse (Standard: 10) |
+| `products` | string | nein | Verkehrsmittel, kommagetrennt: `tram`, `bus` (Standard: `tram`; unbekannte Werte werden ignoriert) |
 
 **Parameter – Namens-Modus:**
 
@@ -96,6 +102,7 @@ Genau einer der beiden Modi muss angegeben werden.
 |---|---|---|---|
 | `name` | string | ja (Name) | Haltestellenname (Kurzform; `stop_name_prefix` wird server-seitig vorangestellt) |
 | `results` | int | nein | Max. Anzahl Ergebnisse (Standard: 10) |
+| `products` | string | nein | wie im GPS-Modus |
 
 **Beispiel-Request GPS:**
 ```
@@ -116,6 +123,7 @@ GET /api/nearby?lat=52.1205&lon=11.6276&results=5
 **Beispiel-Request Name:**
 ```
 GET /api/nearby?name=Hauptbahnhof
+GET /api/nearby?name=Planckstr&products=tram,bus
 ```
 
 **Beispiel-Response Name** (kein `distance`-Feld):
@@ -132,7 +140,7 @@ GET /api/nearby?name=Hauptbahnhof
 
 ### GET `/api/departures`
 
-Nächste Straßenbahn-Abfahrten an einer Haltestelle.
+Nächste Abfahrten der gewählten Verkehrsmittel (Straßenbahn und/oder Bus) an einer Haltestelle.
 
 Die Abfahrten sind aufsteigend nach der **effektiven Abfahrtszeit** sortiert:
 Echtzeit (`departureActual`), falls vorhanden, sonst Soll-Zeit
@@ -144,11 +152,14 @@ planmäßig späteren, aber pünktlichen Fahrt.
 | Name | Typ | Pflicht | Beschreibung |
 |---|---|---|---|
 | `stopId` | string | ja | HAFAS-Haltestellen-ID |
-| `results` | int | nein | Max. Anzahl (Standard: 20) |
+| `results` | int | nein | Max. Anzahl (Standard: 20, 1..100) |
+| `maxMinutes` | int | nein | Zeitfenster in Minuten ab jetzt (Standard: 59, 1..120); zusätzlich zeigt die Tafel bis zu `departures_lookback_minutes` bereits abgefahrene Fahrten |
+| `products` | string | nein | Verkehrsmittel, kommagetrennt: `tram`, `bus` (Standard: `tram`). Gefiltert wird über die HAFAS-Produktklasse `cls` (Tram = 32, Bus = 64) |
 
 **Beispiel-Request:**
 ```
 GET /api/departures?stopId=de:15003:4000
+GET /api/departures?stopId=7300&products=tram,bus
 ```
 
 **Beispiel-Response:**
@@ -158,6 +169,7 @@ GET /api/departures?stopId=de:15003:4000
     "hafasTripId": "2|#VN#1#…#ZI#120882#TA#10#…",
     "serviceNr": "120882_10",
     "line": "2",
+    "product": "tram",
     "direction": "Westerhüsen",
     "cancelled": false,
     "departurePlanned": "2026-04-12T12:48:00Z",
@@ -181,6 +193,7 @@ GET /api/departures?stopId=de:15003:4000
 | `hafasTripId` | string | HAFAS-Journey-ID |
 | `serviceNr` | string | Fahrtennummer (ZI_TA im neuen Format) |
 | `line` | string | Linienbezeichnung (aus jid-ZB#, zuverlässiger als prodL) |
+| `product` | string | Verkehrsmittel: `tram` oder `bus` (aus der HAFAS-Produktklasse) |
 | `direction` | string | Richtungstext (Endhaltestellenname, Marketing-Name) |
 | `cancelled` | bool | `true` = Fahrt (isCncl) oder Halt (dCncl) ist ausgefallen; Erfassung gesperrt |
 | `additionalStop` | bool | `true` = Zusatzhalt (HAFAS `isAdd`): die Linie hält hier nur wegen einer Umleitung, nicht laut Fahrplan. Die Abfahrt ist real und erfassbar |
@@ -363,6 +376,9 @@ GET /api/calendar?date=2026-12-25
 
 Neue Kursnummer-Erfassung speichern. Legt bei Bedarf automatisch eine
 logische Fahrt in `trips` an (INSERT IGNORE) und speichert den Planlaufweg.
+Das Verkehrsmittel der neuen Fahrt (`trips.product`) bestimmt der Server aus
+dem ZB#-Feld der `hafasTripId` (`#ZB#Bus   56#` → `bus`, sonst `tram`), es wird
+nicht vom Client übermittelt.
 
 Der Server lädt den Laufweg selbst über HAFAS und berechnet daraus
 `path_fingerprint` und `schedule_fingerprint`, über die die Fahrt aufgelöst
@@ -477,6 +493,7 @@ die effektive Linie an der Halteposition.
       "id": 142,
       "recordedAt": "2026-03-24T14:33:45Z",
       "line": "6",
+      "product": "tram",
       "direction": "Lübecker Str.",
       "serviceNr": "41058",
       "dayType": "MO-FR",
@@ -506,6 +523,7 @@ die effektive Linie an der Halteposition.
 | `limit` | int | Tatsächlich angewendetes Limit (geclampt) |
 | `offset` | int | Echo des Request-Offsets |
 | `hasMore` | bool | `(offset + items.length) < total` |
+| `items[].product` | string | Verkehrsmittel der Fahrt: `tram` oder `bus` (`trips.product`) |
 | `items[].comment` | string\|null | Kommentar zur Erfassung |
 | `items[].isOwn` | bool | `true` wenn `X-User-Token` mit dem erfassenden User übereinstimmt |
 
@@ -727,6 +745,7 @@ Logische Fahrten einer Periode mit berechneter aktiver Kursnummer.
     "periodId": 2,
     "serviceNr": "41058",
     "line": "6",
+    "product": "tram",
     "dayType": "MO-FR",
     "direction": "Lübecker Str.",
     "activeCourseNumber": "07",

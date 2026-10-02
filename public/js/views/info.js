@@ -38,7 +38,7 @@ function buildHtml(cfg, activeSwVersion) {
                 <h2 class="info-heading">MDKursTracker</h2>
                 <p class="info-text">
                     Eine Progressive Web App zur gemeinschaftlichen Erfassung von
-                    Kursnummern der MVB-Straßenbahnen im marego-Verbund (Magdeburg).
+                    Kursnummern der MVB-Straßenbahnen und -Busse im marego-Verbund (Magdeburg).
                 </p>
                 <p class="info-text">
                     Fahrgäste erfassen über die App, welche Kursnummer eine Bahn trägt.

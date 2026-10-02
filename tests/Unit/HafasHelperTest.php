@@ -195,7 +195,7 @@ class HafasHelperTest extends TestCase
     public function test_parse_stop_matches_filters_non_tram(): void
     {
         $locL = [
-            ['extId' => '800001', 'name' => 'Bahnhof Zoo (Bus)',  'pCls' => 8],  // Bus
+            ['extId' => '800001', 'name' => 'Bahnhof Zoo (SEV)',  'pCls' => 8],  // Regionalzug/SEV
             ['extId' => '900001', 'name' => 'Magdeburg, Hbf',     'pCls' => 32], // Tram
             ['extId' => '800002', 'name' => 'S-Bahnhof Mitte',    'pCls' => 2],  // S-Bahn
         ];
@@ -235,14 +235,100 @@ class HafasHelperTest extends TestCase
         $this->assertSame([], hafas_parse_stop_matches([], 10));
     }
 
-    /** Kombiniertes pCls (Tram + Bus = 40) → Tram-Bit gesetzt, wird übernommen */
+    /** Kombiniertes pCls (Tram + Regionalzug = 40) → Tram-Bit gesetzt, wird übernommen */
     public function test_parse_stop_matches_combined_pcls(): void
     {
         $locL = [
-            ['extId' => '900001', 'name' => 'Tram+Bus-Halt', 'pCls' => 40], // 32 | 8
+            ['extId' => '900001', 'name' => 'Tram+Zug-Halt', 'pCls' => 40], // 32 | 8
         ];
         $result = hafas_parse_stop_matches($locL, 10);
         $this->assertCount(1, $result);
+    }
+
+    /** Bus-Maske (64): nur Haltestellen mit Bus-Bit, reine Tramhalte fallen weg */
+    public function test_parse_stop_matches_bus_mask(): void
+    {
+        $locL = [
+            ['extId' => '900001', 'name' => 'Nur Tram',  'pCls' => 32],
+            ['extId' => '900002', 'name' => 'Nur Bus',   'pCls' => 64],
+            ['extId' => '900003', 'name' => 'Tram+Bus',  'pCls' => 96],
+            ['extId' => '900004', 'name' => 'SEV',       'pCls' => 8],
+        ];
+        $result = hafas_parse_stop_matches($locL, 10, HAFAS_BUS_MASK);
+        $this->assertSame(['900002', '900003'], array_column($result, 'id'));
+    }
+
+    /** Tram+Bus-Maske (96): Tram-, Bus- und gemischte Halte, SEV (8) nie */
+    public function test_parse_stop_matches_tram_and_bus_mask(): void
+    {
+        $locL = [
+            ['extId' => '900001', 'name' => 'Nur Tram',  'pCls' => 32],
+            ['extId' => '900002', 'name' => 'Nur Bus',   'pCls' => 64],
+            ['extId' => '900003', 'name' => 'Tram+Bus',  'pCls' => 96],
+            ['extId' => '900004', 'name' => 'SEV',       'pCls' => 8],
+        ];
+        $mask   = hafas_product_mask(['tram', 'bus']);
+        $result = hafas_parse_stop_matches($locL, 10, $mask);
+        $this->assertSame(['900001', '900002', '900003'], array_column($result, 'id'));
+    }
+
+    // -----------------------------------------------------------------------
+    // Verkehrsmittel: hafas_parse_products, hafas_product_mask,
+    // hafas_product_from_cls, hafas_product_from_jid
+    // -----------------------------------------------------------------------
+
+    public static function parseProductsProvider(): array
+    {
+        return [
+            'null → Standard Tram'          => [null,              ['tram']],
+            'leer → Standard Tram'          => ['',                ['tram']],
+            'nur Bus'                       => ['bus',             ['bus']],
+            'beide'                         => ['tram,bus',        ['tram', 'bus']],
+            'Reihenfolge normalisiert'      => ['bus,tram',        ['tram', 'bus']],
+            'Duplikate entfernt'            => ['bus,bus',         ['bus']],
+            'Leerzeichen/Großschreibung'    => [' Bus , TRAM ',    ['tram', 'bus']],
+            'unbekannte Werte verworfen'    => ['bus,ferry',       ['bus']],
+            'nur Unbekanntes → Tram'        => ['ferry,s-bahn',    ['tram']],
+        ];
+    }
+
+    #[DataProvider('parseProductsProvider')]
+    public function test_hafas_parse_products(?string $csv, array $expected): void
+    {
+        $this->assertSame($expected, hafas_parse_products($csv));
+    }
+
+    public function test_hafas_product_mask(): void
+    {
+        $this->assertSame(32, hafas_product_mask(['tram']));
+        $this->assertSame(64, hafas_product_mask(['bus']));
+        $this->assertSame(96, hafas_product_mask(['tram', 'bus']));
+        // Leere Liste fällt auf Tram zurück, damit nie alles gefiltert wird
+        $this->assertSame(32, hafas_product_mask([]));
+    }
+
+    public function test_hafas_product_from_cls(): void
+    {
+        $this->assertSame('tram', hafas_product_from_cls(32));
+        $this->assertSame('bus',  hafas_product_from_cls(64));
+        $this->assertSame('tram', hafas_product_from_cls(0));
+    }
+
+    public static function productFromJidProvider(): array
+    {
+        return [
+            // Echte jids aus local_scripts/captures
+            'Tram 10'     => ['2|#VN#1#ST#1789731038#PI#0#ZI#143010#TA#0#DA#220926#1S#300752803#1T#1907#LS#300747801#LT#1942#PU#80#RT#3#CA#StN#ZE#10#ZB#Str   10#PC#5#', 'tram'],
+            'Bus 56'      => ['2|#VN#1#ST#1789731038#PI#0#ZI#139479#TA#0#DA#270426#1S#300730201#1T#2105#LS#300731801#LT#2131#PU#80#RT#1#CA#Bus#ZE#56#ZB#Bus   56#PC#6#', 'bus'],
+            'Nachtbus N7' => ['2|#VN#1#ZI#150001#TA#0#DA#220926#CA#Bus#ZE#N7#ZB#Bus   N7#PC#6#', 'bus'],
+            'altes Format'=> ['1|12345|0|80|22092026', 'tram'],
+        ];
+    }
+
+    #[DataProvider('productFromJidProvider')]
+    public function test_hafas_product_from_jid(string $jid, string $expected): void
+    {
+        $this->assertSame($expected, hafas_product_from_jid($jid));
     }
 
     // -----------------------------------------------------------------------

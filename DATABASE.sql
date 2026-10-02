@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS `%%PREFIX%%trips` (
     `period_id`            INT          NOT NULL,
     `service_nr`           VARCHAR(20)  NOT NULL COMMENT 'Zuletzt bekannte HAFAS fahrtNr (mutable)',
     `line`                 VARCHAR(10)  NOT NULL COMMENT 'z.B. 6',
+    `product`              ENUM('tram','bus') NOT NULL DEFAULT 'tram' COMMENT 'Verkehrsmittel der Fahrt',
     `day_type`             ENUM('MO-FR','SA','SO','FT','SF') NOT NULL,
     `direction`            VARCHAR(100) NOT NULL COMMENT 'Zielhaltestellenname',
     `path_fingerprint`     CHAR(64)     NULL     COMMENT 'SHA-256 über geordnete Stop-IDs (auf Haltestellen-Ebene normalisiert) des Laufwegs',

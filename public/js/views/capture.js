@@ -73,7 +73,7 @@ function buildFormHtml(data) {
     return `
         <div class="capture-context card">
             <div class="capture-context-line">
-                ${lineBadgeHtml(data.line)}
+                ${lineBadgeHtml(data.line, data.product)}
                 <span class="capture-direction">${escapeHtml(data.direction)}</span>
             </div>
             <div class="text-small text-muted" style="margin-top:4px">
@@ -401,7 +401,7 @@ async function loadTripRoute(container, data) {
             lineChangeSep = `
             <li class="route-line-change" aria-label="Linie ${escapeHtml(s.line)} ab hier">
                 <span class="route-line-change-label">Linie</span>
-                ${lineBadgeHtml(s.line)}
+                ${lineBadgeHtml(s.line, data.product)}
                 <span class="route-line-change-label">ab hier</span>
             </li>`;
         }

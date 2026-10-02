@@ -384,7 +384,7 @@ function renderRecordingItem(rec, isActivePeriod) {
         : '';
 
     const ariaLabel = [
-        `Linie ${rec.line}`,
+        rec.product === 'bus' ? `Bus ${rec.line}` : `Linie ${rec.line}`,
         `nach ${rec.direction}`,
         `Kurs ${displayCourse}`,
         isManual ? 'manuell übersteuert' : '',
@@ -399,10 +399,11 @@ function renderRecordingItem(rec, isActivePeriod) {
             tabindex="0"
             data-recording-id="${rec.id}"
             data-stop-id="${escapeHtml(rec.stopId)}"
+            data-product="${escapeHtml(rec.product ?? 'tram')}"
             aria-expanded="false"
             aria-label="${escapeHtml(ariaLabel)}">
             <div class="recording-top">
-                <span class="recording-line">${lineBadgeHtml(rec.line)}</span>
+                <span class="recording-line">${lineBadgeHtml(rec.line, rec.product)}</span>
                 <span class="recording-direction">${escapeHtml(rec.direction)}</span>
                 <span class="recording-course">
                     ${ownBadge}
@@ -517,10 +518,10 @@ async function handleRouteToggle(item) {
         return;
     }
 
-    routeEl.innerHTML = renderRouteList(stops);
+    routeEl.innerHTML = renderRouteList(stops, item.dataset.product);
 }
 
-function renderRouteList(stops) {
+function renderRouteList(stops, product = 'tram') {
     const knownLines  = stops.map(s => s.line).filter(l => l != null);
     const hasLineChange = new Set(knownLines).size > 1;
 
@@ -534,7 +535,7 @@ function renderRouteList(stops) {
             lineChangeSep = `
             <li class="route-line-change" aria-label="Linie ${escapeHtml(s.line)} ab hier">
                 <span class="route-line-change-label">Linie</span>
-                ${lineBadgeHtml(s.line)}
+                ${lineBadgeHtml(s.line, product)}
                 <span class="route-line-change-label">ab hier</span>
             </li>`;
         }

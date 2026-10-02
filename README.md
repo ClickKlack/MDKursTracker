@@ -1,7 +1,7 @@
 # MDKursTracker
 
 Progressive Web App zur kollektiven Erfassung von **Kursnummern** für
-Straßenbahnfahrten im Verkehrsverbund **marego** (Magdeburg / MVB).
+Straßenbahn- und Busfahrten im Verkehrsverbund **marego** (Magdeburg / MVB).
 
 ## Überblick
 

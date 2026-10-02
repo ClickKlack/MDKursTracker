@@ -5,6 +5,8 @@
  * Bei HTTP-Fehlern wird ein Error mit der Backend-Fehlermeldung geworfen.
  */
 
+import { productsParam } from './utils/products.js';
+
 // Basis-URL: leer = gleiche Origin (kein CORS-Problem bei lokalem Deployment)
 const BASE_URL = '';
 
@@ -73,37 +75,38 @@ async function apiFetch(url, options = {}) {
 // =============================================================================
 
 /**
- * Haltestellen in der Nähe eines GPS-Punkts abrufen (nur Tram).
+ * Haltestellen in der Nähe eines GPS-Punkts abrufen
+ * (gefiltert auf die gewählten Verkehrsmittel, siehe utils/products.js).
  * @param {number} lat
  * @param {number} lon
  * @param {number} [results=10]
  * @returns {Promise<Array<{id:string, name:string, distance:number}>>}
  */
 export async function getNearby(lat, lon, results = 10) {
-    const params = new URLSearchParams({ lat, lon, results });
+    const params = new URLSearchParams({ lat, lon, results, products: productsParam() });
     return apiFetch(`/api/nearby?${params}`);
 }
 
 /**
- * Haltestellen per Name suchen (nur Tram).
+ * Haltestellen per Name suchen (gefiltert auf die gewählten Verkehrsmittel).
  * Stadtpräfix wird serverseitig automatisch vorangestellt.
  * @param {string} name  Suchbegriff (z.B. "Hauptbahnhof")
  * @param {number} [results=10]
  * @returns {Promise<Array<{id:string, name:string}>>}
  */
 export async function getNearbyByName(name, results = 10) {
-    const params = new URLSearchParams({ name, results });
+    const params = new URLSearchParams({ name, results, products: productsParam() });
     return apiFetch(`/api/nearby?${params}`);
 }
 
 /**
- * Nächste Straßenbahn-Abfahrten an einer Haltestelle.
+ * Nächste Abfahrten der gewählten Verkehrsmittel an einer Haltestelle.
  * @param {string} stopId
  * @param {number} [results=20]
  * @returns {Promise<Array>}
  */
 export async function getDepartures(stopId, results = 20) {
-    const params = new URLSearchParams({ stopId, results });
+    const params = new URLSearchParams({ stopId, results, products: productsParam() });
     return apiFetch(`/api/departures?${params}`);
 }
 

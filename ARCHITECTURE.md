@@ -129,9 +129,17 @@ Bindet `config.php` per absolutem Pfad ein (außerhalb des Webroots).
 Kapselt alle curl-Aufrufe an `insa.hafas.de`. Stellt folgende Funktionen
 bereit:
 
-- `hafas_nearby(float $lat, float $lon): array`
-- `hafas_departures(string $stopId): array`
+- `hafas_nearby(float $lat, float $lon, int $results, int $mask): array`
+- `hafas_find_stops(string $name, int $results, int $mask): array`
+- `hafas_departures(string $stopId, int $results, int $maxMinutes, int $mask): array`
 - `hafas_trip(string $tripId): array`
+
+`$mask` ist die HAFAS-Produkt-Bitmaske der gewählten Verkehrsmittel
+(`HAFAS_PRODUCTS`: Tram = 32, Bus = 64). Die Endpunkte bilden ihren Parameter
+`products` per `hafas_parse_products()` + `hafas_product_mask()` darauf ab;
+Standard ist Straßenbahn. Abfahrten tragen das Feld `product` (`tram`/`bus`),
+neue Fahrten in `trips.product` – serverseitig aus dem ZB#-Feld der jid
+(`hafas_product_from_jid()`).
 
 Gibt normalisierte PHP-Arrays zurück. Fehler der HAFAS-API werden als
 Exception weitergegeben.
@@ -171,7 +179,7 @@ capture.js → api.js
          ▼
 recordings.php
   1. day_type berechnen (lib/calendar.php)
-  2. trips: INSERT IGNORE (period_id, service_nr, line, day_type, direction)
+  2. trips: INSERT IGNORE (period_id, service_nr, line, product, day_type, direction)
   3. trips: SELECT id für FK
   4. stops: INSERT IGNORE (hafas_id, name)
   5. recordings: INSERT

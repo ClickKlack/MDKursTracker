@@ -1,5 +1,6 @@
 <?php
-// GET /api/nearby – Tramhaltestellen in der Nähe eines GPS-Punkts oder per Namenssuche.
+// GET /api/nearby – Haltestellen in der Nähe eines GPS-Punkts oder per Namenssuche,
+// gefiltert auf die gewählten Verkehrsmittel.
 //
 // Parameter (GPS-Modus):
 //   lat     (float, Pflicht)  – Breitengrad
@@ -9,6 +10,9 @@
 // Parameter (Name-Modus):
 //   name    (string, Pflicht) – Suchbegriff (Stadtpräfix wird serverseitig ergänzt)
 //   results (int, optional, Standard 10)
+//
+// Gemeinsam:
+//   products (string, optional, Standard "tram") – kommagetrennt: tram, bus
 //
 // Genau einer der Modi muss angegeben sein.
 
@@ -25,6 +29,7 @@ $results = max(1, min(50, (int) ($_GET['results'] ?? 10)));
 $name    = isset($_GET['name']) ? trim($_GET['name']) : null;
 $lat     = filter_input(INPUT_GET, 'lat', FILTER_VALIDATE_FLOAT);
 $lon     = filter_input(INPUT_GET, 'lon', FILTER_VALIDATE_FLOAT);
+$mask    = hafas_product_mask(hafas_parse_products($_GET['products'] ?? null));
 
 if ($name !== null && $name !== '') {
     // Name-Modus: Suche per HAFAS LocMatch
@@ -34,7 +39,7 @@ if ($name !== null && $name !== '') {
     $query  = $prefix . $name;
 
     try {
-        $stops = hafas_find_stops($query, $results);
+        $stops = hafas_find_stops($query, $results, $mask);
         json_response($stops);
     } catch (RuntimeException $e) {
         get_logger()->error('nearby/name: HAFAS-Fehler', ['exception' => $e->getMessage()]);
@@ -43,7 +48,7 @@ if ($name !== null && $name !== '') {
 } elseif ($lat !== false && $lat !== null && $lon !== false && $lon !== null) {
     // GPS-Modus: Suche per Koordinaten
     try {
-        $stops = hafas_nearby($lat, $lon, $results);
+        $stops = hafas_nearby($lat, $lon, $results, $mask);
         json_response($stops);
     } catch (RuntimeException $e) {
         get_logger()->error('nearby: HAFAS-Fehler', ['exception' => $e->getMessage()]);

@@ -3,6 +3,7 @@
  *
  * Je Linie werden Farbe und Darstellungsvariante konfiguriert.
  * Die Textfarbe (weiß/schwarz) wird bei inline automatisch berechnet.
+ * Buslinien nutzen die Tabelle nie, sondern einheitlich .line-badge--bus.
  *
  * Varianten:
  *   inline  – Hintergrund in Linienfarbe, Schrift weiß oder schwarz (auto)
@@ -30,12 +31,17 @@ const LINE_CONFIG = {
 
 /**
  * HTML-String für einen Linien-Badge.
- * Farbe und Variante werden aus LINE_CONFIG gelesen.
+ * Straßenbahn: Farbe und Variante aus LINE_CONFIG. Bus: einheitlicher Bus-Stil.
  *
- * @param {string} line  Linienbezeichnung (z.B. "6")
+ * @param {string} line              Linienbezeichnung (z.B. "6")
+ * @param {'tram'|'bus'} [product]   Verkehrsmittel (Standard: Straßenbahn)
  * @returns {string}
  */
-export function lineBadgeHtml(line) {
+export function lineBadgeHtml(line, product = 'tram') {
+    if (product === 'bus') {
+        return `<span class="line-badge line-badge--bus">${escHtml(line)}</span>`;
+    }
+
     const cfg = LINE_CONFIG[String(line)];
 
     let style;
