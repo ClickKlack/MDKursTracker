@@ -134,12 +134,13 @@ Jede logische Fahrt gehört zu einem Wochentagstyp:
 | Typ | Regel |
 |---|---|
 | `MO-FR` | Montag–Freitag, kein Feiertag, kein Schulferientag |
-| `SA` | Samstag |
+| `SA` | Samstag, kein Feiertag |
 | `SO` | Sonntag **und gesetzliche Feiertage** (Sachsen-Anhalt) |
 | `SF` | Schulferientag Sachsen-Anhalt (Mo–Fr, kein Feiertag) |
 
 Feiertage werden als `SO` behandelt, da sie nach Sonntagsfahrplan fahren
-und gemeinsam mit Sonntagen ausgewertet werden. Der Typ `FT` existiert noch
+und gemeinsam mit Sonntagen ausgewertet werden – auch wenn sie auf einen
+Samstag fallen (z.B. 03.10.2026, 31.10.2026). Der Typ `FT` existiert noch
 im DB-ENUM (für Altdaten), wird aber nicht mehr neu vergeben.
 
 **Feiertage Sachsen-Anhalt** sind im PHP-Backend fest hinterlegt (inkl.

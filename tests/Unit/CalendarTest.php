@@ -165,11 +165,21 @@ class CalendarTest extends TestCase
         $this->assertSame('SO', getDayType($dt, $this->mockPdoNoHolidays()), $label);
     }
 
-    public function test_holiday_on_saturday_returns_sa(): void
+    public static function holidayOnSaturdayProvider(): array
     {
-        // Reformationstag 2026 fällt auf Samstag → SA hat Vorrang
-        $date = new DateTimeImmutable('2026-10-31');
-        $this->assertSame('SA', getDayType($date, $this->mockPdoNoHolidays()));
+        return [
+            ['2026-10-03', 'Tag der Deutschen Einheit 2026 (Sa)'],
+            ['2026-10-31', 'Reformationstag 2026 (Sa)'],
+            ['2026-12-26', '2. Weihnachtstag 2026 (Sa)'],
+        ];
+    }
+
+    #[DataProvider('holidayOnSaturdayProvider')]
+    public function test_holiday_on_saturday_returns_so(string $date, string $label): void
+    {
+        // Regression: Feiertag geht dem Samstag vor → Sonntagsfahrplan
+        $dt = new DateTimeImmutable($date);
+        $this->assertSame('SO', getDayType($dt, $this->mockPdoNoHolidays()), $label);
     }
 
     public function test_school_holiday_weekday_returns_sf(): void

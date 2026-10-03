@@ -16,12 +16,13 @@ function getDayType(DateTimeInterface $date, PDO $db): string
 {
     $weekday = (int) $date->format('N'); // 1=Mo, 7=So
 
-    // Samstag und Sonntag direkt zurückgeben
-    if ($weekday === 6) return 'SA';
+    // Sonntag und gesetzlicher Feiertag → Sonntagsfahrplan.
+    // Der Feiertag geht dem Samstag vor: Fällt er auf einen Samstag
+    // (z.B. 03.10.2026), fährt die MVB trotzdem nach Sonntagsfahrplan.
     if ($weekday === 7) return 'SO';
-
-    // Gesetzlicher Feiertag → Sonntagsfahrplan
     if (is_public_holiday($date)) return 'SO';
+
+    if ($weekday === 6) return 'SA';
 
     // Schulferientag (Mo–Fr, kein Feiertag)
     if (is_school_holiday($date, $db)) return 'SF';
